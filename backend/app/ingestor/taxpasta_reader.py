@@ -2,7 +2,12 @@ import pandas as pd
 from pathlib import Path
 
 
-def read_taxpasta(file_path: str, classifier: str) -> list[dict]:
+def read_taxpasta(file_path: str, column: str) -> list[dict]:
+    """
+    Reads a single sample's profile from a wide-format TAXPASTA TSV.
+    Extracts the specified column and ignores all others.
+    Taxon name is derived from the last element of the lineage string.
+    """
     path = Path(file_path)
 
     if not path.exists():
@@ -10,27 +15,31 @@ def read_taxpasta(file_path: str, classifier: str) -> list[dict]:
 
     df = pd.read_csv(path, sep="\t")
 
-    expected_columns = {"taxonomy_id", "taxonomy_lvl", "name"}
-    if not expected_columns.issubset(df.columns):
+    required_columns = {"taxonomy_id", "lineage"}
+    if not required_columns.issubset(df.columns):
         raise ValueError(
-            f"Unexpected TAXPASTA format. Expected columns: {expected_columns}. "
+            f"Unexpected TAXPASTA format. Expected columns: {required_columns}. "
             f"Got: {set(df.columns)}"
         )
 
-    abundance_col = [c for c in df.columns if c not in expected_columns]
-    if len(abundance_col) != 1:
+    if column not in df.columns:
+        available = [c for c in df.columns if c not in {"taxonomy_id", "lineage"}]
         raise ValueError(
-            f"Expected exactly one abundance column, found: {abundance_col}"
+            f"Column '{column}' not found in TAXPASTA file. "
+            f"Available sample columns: {available}"
         )
 
+    df["name"] = df["lineage"].apply(
+        lambda x: x.split(";")[-1].strip() if isinstance(x, str) and x else "unclassified"
+    )
+
+    df["taxonomy_id"] = pd.to_numeric(df["taxonomy_id"], errors="coerce").fillna(0).astype(int)
+    df[column] = pd.to_numeric(df[column], errors="coerce").fillna(0)
+
+    df = df[df[column] > 0][["taxonomy_id", "name", column]].copy()
     df = df.rename(columns={
         "taxonomy_id": "taxon_id",
-        "taxonomy_lvl": "rank",
-        abundance_col[0]: "abundance",
+        column: "abundance",
     })
 
-    df["taxon_id"] = pd.to_numeric(df["taxon_id"], errors="coerce").fillna(0).astype(int)
-    df["abundance"] = pd.to_numeric(df["abundance"], errors="coerce").fillna(0.0)
-    df = df[df["abundance"] > 0]
-
-    return df[["taxon_id", "name", "rank", "abundance"]].to_dict("records")
+    return df[["taxon_id", "name", "abundance"]].to_dict("records")
