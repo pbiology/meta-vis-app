@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "meta-vis-app"
 version = "0.1.0"
-description = "Visualisation backend for nf-core/taxprofiler output"
+description = "Visualisation backend meta-vis"
 requires-python = ">=3.11"
 
 dependencies = [
