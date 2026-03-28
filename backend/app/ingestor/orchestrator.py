@@ -22,8 +22,16 @@ async def ingest_run(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     for sample_request in request.samples:
         patient_id = await _upsert_patient(sample_request.patient_id, db)
 
-        profile = read_taxpasta(sample_request.taxpasta_path, classifier="kraken2")
-        qc_stats = read_multiqc(sample_request.multiqc_path, sample_request.sample.sample_id)
+        profile = read_taxpasta(
+            sample_request.taxpasta_path,
+            column=sample_request.taxpasta_column,
+        )
+
+        qc_stats = read_multiqc(
+            sample_request.multiqc_path,
+            sample_request.sample.sample_id,
+        )
+
         pipeline_info = read_pipeline_info(sample_request.pipeline_info_path)
 
         sample_doc = {
@@ -45,8 +53,8 @@ async def ingest_run(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             },
             "profiles": [
                 {
-                    "classifier": "kraken2",
-                    "classifier_db": None,
+                    "classifier": sample_request.classifier,
+                    "classifier_db": sample_request.classifier_db,
                     "profile": profile,
                 }
             ],
