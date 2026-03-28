@@ -29,7 +29,7 @@ async def ingest_run(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
 
         qc_stats = read_multiqc(
             sample_request.multiqc_path,
-            sample_request.sample.sample_id,
+            taxpasta_column=sample_request.taxpasta_column,
         )
 
         pipeline_info = read_pipeline_info(sample_request.pipeline_info_path)
