@@ -1,4 +1,4 @@
-import json
+import yaml
 from pathlib import Path
 
 
@@ -9,21 +9,22 @@ def read_pipeline_info(pipeline_info_path: str) -> dict:
         raise FileNotFoundError(f"pipeline_info directory not found: {pipeline_info_path}")
 
     software_versions = {}
-    versions_file = path / "software_versions.yml"
-    if versions_file.exists():
-        import yaml
+    versions_file = next(path.glob("nf_core_*_software_mqc_versions.yml"), None)
+    if versions_file:
         with open(versions_file) as f:
             software_versions = yaml.safe_load(f) or {}
+    else:
+        raise FileNotFoundError(
+            f"No software versions file found in {pipeline_info_path}. "
+            f"Expected a file matching 'nf_core_*_software_mqc_versions.yml'."
+        )
 
-    pipeline_config = {}
-    for filename in ["params.json", "nextflow_schema.json"]:
-        params_file = path / filename
-        if params_file.exists():
-            with open(params_file) as f:
-                pipeline_config = json.load(f)
-            break
+    workflow_info = software_versions.pop("Workflow", {})
 
     return {
         "software_used": software_versions,
-        "pipeline_configuration": pipeline_config,
+        "pipeline_configuration": {
+            "pipeline": workflow_info.get("nf-core/taxprofiler"),
+            "nextflow": workflow_info.get("Nextflow"),
+        },
     }
