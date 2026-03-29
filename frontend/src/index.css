@@ -7,6 +7,10 @@
     box-sizing: border-box;
   }
 
+  html, body, #root {
+    height: 100%;
+  }
+
   body {
     @apply bg-gray-50 text-gray-900 antialiased;
     font-family: 'DM Sans', system-ui, sans-serif;

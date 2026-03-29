@@ -83,16 +83,41 @@ export default function CaseDetail() {
     s.sample_type === 'negative_ctrl' || s.sample_type === 'positive_ctrl'
   )
 
-  function aggAvg(fn) {
-    const vals = testSamples.map(fn).filter(v => v != null)
-    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null
-  }
-  function aggSum(fn) {
-    const vals = testSamples.map(fn).filter(v => v != null)
-    return vals.length ? vals.reduce((a, b) => a + b, 0) : null
-  }
-
   const reviewed = caseData?.review?.reviewed
+
+    if (kronaOpen && kronaUrl) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex items-center gap-3 px-6 py-4 bg-white border-b border-gray-100 flex-shrink-0">
+          <button
+            onClick={() => navigate('/cases')}
+            className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 transition-colors"
+          >
+            <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">
+              <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Cases
+          </button>
+          <span className="text-gray-200">/</span>
+          <span className="text-xs text-gray-400 font-mono">{caseId}</span>
+          <span className="text-gray-200">/</span>
+          <h1 className="text-sm font-medium text-gray-900 flex-1">Krona</h1>
+          <button
+            onClick={() => setKronaOpen(false)}
+            className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            ← Back to case
+          </button>
+        </div>
+        <iframe
+          src={kronaUrl}
+          title="Krona taxonomic chart"
+          className="flex-1 w-full"
+          sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+        />
+      </div>
+    )
+  }
 
   if (loading) return <div className="flex items-center justify-center h-full text-sm text-gray-400">Loading…</div>
   if (error)   return <div className="flex items-center justify-center h-full text-sm text-red-500">{error}</div>
@@ -128,91 +153,98 @@ export default function CaseDetail() {
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-6">
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 flex flex-col gap-6">
 
-        {/* Case-level QC summary */}
-        <section>
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Case metrics — test samples</p>
-          <div className="grid grid-cols-4 gap-2.5">
-            <MetricCard
-              label="Avg total reads"
-              value={fmt(aggAvg(s => s.taxprofiler?.fastp?.total_reads_before_filtering))}
-              sub="before filtering"
-            />
-            <MetricCard
-              label="Avg passed filter"
-              value={fmt(aggAvg(s => s.taxprofiler?.fastp?.passed_filter_reads))}
-              sub="fastp"
-            />
-            <MetricCard
-              label="Avg host reads"
-              value={fmtPct(aggAvg(s => s.taxprofiler?.bowtie2?.overall_alignment_rate))}
-              sub="bowtie2"
-            />
-            <MetricCard
-              label="Avg unclassified"
-              value={fmtPct(aggAvg(s => s.taxprofiler?.kraken2?.pct_unclassified))}
-              sub="kraken2"
-              warn={(aggAvg(s => s.taxprofiler?.kraken2?.pct_unclassified) ?? 0) > 20}
-            />
-            <MetricCard
-              label="Avg Q30 rate"
-              value={fmtPct(aggAvg(s => s.taxprofiler?.fastp?.q30_rate ? s.taxprofiler.fastp.q30_rate * 100 : null))}
-              sub="fastp"
-            />
-            <MetricCard
-              label="Taxonomy DB"
-              value={caseData?.taxonomy_db ?? '—'}
-              sub="classifier database"
-            />
-            <MetricCard
-              label="Total species"
-              value={fmt(aggSum(s => s.taxprofiler?.kraken2?.num_species))}
-              sub="across test samples"
-            />
-            <MetricCard
-              label="Samples"
-              value={`${testSamples.length} test / ${controls.length} ctrl`}
-              sub={`${samples.length} total`}
-            />
+        {/* Samples table */}
+        <section className="bg-white border border-gray-100 rounded-xl">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">Samples</p>
+            <div className="flex gap-1.5">
+              {FILTERS.map(f => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
+                    filter === f
+                      ? 'bg-gray-900 text-white font-medium'
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
           </div>
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr>
+                {['Sample ID', 'Material', 'Order date', 'Type', 'Unclassified', 'Q30', 'Top taxa'].map(h => (
+                  <th key={h} className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(s => (
+                <tr
+                  key={s._id}
+                  onClick={() => navigate(`/samples/${s._id}`)}
+                  className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                >
+                  <td className="px-4 py-3 font-mono text-xs text-gray-700">{s.sample?.sample_id ?? '—'}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{s.material ?? '—'}</td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{s.order_date ?? '—'}</td>
+                  <td className="px-4 py-3"><Badge type={s.sample_type} /></td>
+                  <td className="px-4 py-3 text-xs text-gray-700">{fmtPct(s.taxprofiler?.kraken2?.pct_unclassified)}</td>
+                  <td className="px-4 py-3 text-xs text-gray-700">
+                    {fmtPct(s.taxprofiler?.fastp?.q30_rate ? s.taxprofiler.fastp.q30_rate * 100 : null)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col gap-0.5">
+                      {(s.top_taxa || []).map((t, i) => (
+                        <span key={i} className="text-xs text-gray-600 italic truncate max-w-48">
+                          <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 flex-shrink-0 ${
+                            t.superkingdom === 'Bacteria'  ? 'bg-blue-400'   :
+                            t.superkingdom === 'Viruses'   ? 'bg-red-400'    :
+                            t.superkingdom === 'Eukaryota' ? 'bg-amber-400'  :
+                            t.superkingdom === 'Archaea'   ? 'bg-purple-400' : 'bg-gray-300'
+                          }`} />
+                          {t.name}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-400">No samples match this filter.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </section>
 
         {/* Krona */}
         {caseData?.has_krona && (
-          <section className="bg-white border border-gray-100 rounded-xl overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+          <section className="bg-white border border-gray-100 rounded-xl">
+            <div className="flex items-center gap-2 px-4 py-3">
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">Krona</p>
-              <button
-                onClick={() => setKronaOpen(o => !o)}
-                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                {kronaOpen ? 'Collapse' : 'Expand'}
-              </button>
+              {kronaError && <span className="text-xs text-red-400">Could not load</span>}
+              {!kronaUrl && !kronaError && <span className="text-xs text-gray-300">Loading…</span>}
+              {kronaUrl && (
+                <div
+                  onClick={() => setKronaOpen(true)}
+                  className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">
+                    <path d="M3 3h4M3 3v4M13 3h-4M13 3v4M3 13h4M3 13v-4M13 13h-4M13 13v-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                  Open full screen
+                </div>
+              )}
             </div>
-            {kronaError && (
-              <p className="text-xs text-red-400 px-4 py-3">Krona file could not be loaded.</p>
-            )}
-            {!kronaUrl && !kronaError && (
-              <div className="flex items-center justify-center h-20 text-sm text-gray-400">Loading Krona…</div>
-            )}
-            {kronaUrl && kronaOpen && (
-              <iframe
-                src={kronaUrl}
-                title="Krona taxonomic chart"
-                className="w-full"
-                style={{ height: '80vh' }}
-                sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-              />
-            )}
-            {kronaUrl && !kronaOpen && (
-              <div
-                onClick={() => setKronaOpen(true)}
-                className="flex items-center justify-center h-12 cursor-pointer text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
-              >
-                Click to expand Krona chart
-              </div>
-            )}
           </section>
         )}
 
@@ -253,63 +285,6 @@ export default function CaseDetail() {
             </table>
           </section>
         )}
-
-        {/* Samples table */}
-        <section className="bg-white border border-gray-100 rounded-xl overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">Samples</p>
-            <div className="flex gap-1.5">
-              {FILTERS.map(f => (
-                <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
-                    filter === f
-                      ? 'bg-gray-900 text-white font-medium'
-                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                  }`}
-                >
-                  {f}
-                </button>
-              ))}
-            </div>
-          </div>
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr>
-                {['Sample ID', 'Material', 'Order date', 'Type', 'Unclassified', 'Species', 'Q30'].map(h => (
-                  <th key={h} className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(s => (
-                <tr
-                  key={s._id}
-                  onClick={() => navigate(`/samples/${s._id}`)}
-                  className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
-                >
-                  <td className="px-4 py-3 font-mono text-xs text-gray-700">{s.sample?.sample_id ?? '—'}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{s.material ?? '—'}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{s.order_date ?? '—'}</td>
-                  <td className="px-4 py-3"><Badge type={s.sample_type} /></td>
-                  <td className="px-4 py-3 text-xs text-gray-700">{fmtPct(s.taxprofiler?.kraken2?.pct_unclassified)}</td>
-                  <td className="px-4 py-3 text-xs text-gray-700">{fmt(s.taxprofiler?.kraken2?.num_species)}</td>
-                  <td className="px-4 py-3 text-xs text-gray-700">
-                    {fmtPct(s.taxprofiler?.fastp?.q30_rate ? s.taxprofiler.fastp.q30_rate * 100 : null)}
-                  </td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-400">No samples match this filter.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </section>
 
       </div>
     </div>

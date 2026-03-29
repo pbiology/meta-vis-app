@@ -29,7 +29,7 @@ export default function Layout() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50">
+     <div className="flex h-full bg-gray-50">
       {/* Sidebar */}
       <div className="w-52 bg-white border-r border-gray-100 flex flex-col flex-shrink-0">
         <div className="px-4 pt-5 pb-6">
