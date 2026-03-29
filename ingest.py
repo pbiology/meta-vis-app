@@ -3,20 +3,21 @@
 Ingest a taxprofiler run into meta-vis-app.
 
 Usage:
-    python ingest.py \\
-        --run-id run_2026_02_23 \\
-        --subject-id S-001 \\
-        --sample-id PE-04-28 \\
-        --sample-type test \\
-        --order-date 2026-02-20 \\
-        --taxpasta /abs/path/to/taxpasta.tsv \\
-        --taxpasta-column "PE-04-28_k2_pluspf.kraken2.kraken2.report" \\
-        --classifier kraken2 \\
-        --classifier-db k2_pluspf \\
-        --multiqc /abs/path/to/multiqc_data.json \\
-        --pipeline-info /abs/path/to/pipeline_info \\
-        --url http://localhost:8000 \\
-        --username admin \\
+    python ingest.py \
+        --run-id run_2026_02_23 \
+        --subject-id S-001 \
+        --sample-id PE-04-28 \
+        --sample-type test \
+        --order-date 2026-02-20 \
+        --taxpasta /abs/path/to/taxpasta.tsv \
+        --taxpasta-column "PE-04-28_k2_pluspf.kraken2.kraken2.report" \
+        --classifier kraken2 \
+        --classifier-db k2_pluspf \
+        --multiqc /abs/path/to/multiqc_data.json \
+        --pipeline-info /abs/path/to/pipeline_info \
+        --nodes-data /abs/path/to/taxonomy/nodes.dmp \
+        --url http://localhost:8000 \
+        --username admin \
         --password yourpassword
 
 For controls, pass --sample-type negative_ctrl or --sample-type positive_ctrl
@@ -61,6 +62,7 @@ def ingest(args):
                 "classifier_db": args.classifier_db,
                 "multiqc_path": args.multiqc,
                 "pipeline_info_path": args.pipeline_info,
+                "nodes_data": args.nodes_data,
                 "krona_path": args.krona,
                 "sample": {
                     "sample_id": args.sample_id,
@@ -93,26 +95,27 @@ def main():
     parser = argparse.ArgumentParser(description="Ingest a taxprofiler sample into meta-vis-app")
 
     # Run
-    parser.add_argument("--run-id",         required=True,  help="Run identifier, e.g. run_2026_02_23")
+    parser.add_argument("--run-id",          required=True,  help="Run identifier, e.g. run_2026_02_23")
 
     # Sample identity
-    parser.add_argument("--subject-id",     default="",     help="Subject identifier, e.g. S-001")
-    parser.add_argument("--sample-id",      required=True,  help="Sample identifier, e.g. PE-04-28")
-    parser.add_argument("--sample-type",    default="test",
+    parser.add_argument("--subject-id",      default="",     help="Subject identifier, e.g. S-001")
+    parser.add_argument("--sample-id",       required=True,  help="Sample identifier, e.g. PE-04-28")
+    parser.add_argument("--sample-type",     default="test",
                         choices=["test", "negative_ctrl", "positive_ctrl"],
                         help="Sample type (default: test)")
-    parser.add_argument("--order-date",     default=None,   help="ISO date when sample was submitted, e.g. 2026-02-20")
-    parser.add_argument("--sample-source",  default=None,   help="Sample source tissue/site")
-    parser.add_argument("--biopsy-id",      default=None,   help="Biopsy identifier")
+    parser.add_argument("--order-date",      default=None,   help="ISO date when sample was submitted, e.g. 2026-02-20")
+    parser.add_argument("--sample-source",   default=None,   help="Sample source tissue/site")
+    parser.add_argument("--biopsy-id",       default=None,   help="Biopsy identifier")
 
     # Pipeline outputs
-    parser.add_argument("--taxpasta",       required=True,  help="Path to TAXPASTA TSV file")
-    parser.add_argument("--taxpasta-column",required=True,  help="Column name in TAXPASTA file for this sample")
-    parser.add_argument("--classifier",     default="kraken2", help="Classifier used (default: kraken2)")
-    parser.add_argument("--classifier-db",  default=None,   help="Classifier database name, e.g. k2_pluspf")
-    parser.add_argument("--multiqc",        required=True,  help="Path to multiqc_data.json")
-    parser.add_argument("--pipeline-info",  required=True,  help="Path to pipeline_info directory")
-    parser.add_argument("--krona",          default=None,   help="Path to Krona HTML file (optional)")
+    parser.add_argument("--taxpasta",        required=True,  help="Path to TAXPASTA TSV file")
+    parser.add_argument("--taxpasta-column", required=True,  help="Column name in TAXPASTA file for this sample")
+    parser.add_argument("--classifier",      default="kraken2", help="Classifier used (default: kraken2)")
+    parser.add_argument("--classifier-db",   default=None,   help="Classifier database name, e.g. k2_pluspf")
+    parser.add_argument("--multiqc",         required=True,  help="Path to multiqc_data.json")
+    parser.add_argument("--pipeline-info",   required=True,  help="Path to pipeline_info directory")
+    parser.add_argument("--nodes-data",      default=None,   help="Absolute path to NCBI taxonomy nodes.dmp (enables superkingdom resolution)")
+    parser.add_argument("--krona",           default=None,   help="Path to Krona HTML file (optional)")
 
     # Server / auth
     parser.add_argument("--url",      default="http://localhost:8000", help="API base URL (default: http://localhost:8000)")
