@@ -25,6 +25,7 @@ backend/test-data
 # Frontend
 frontend/node_modules/
 frontend/dist/
+frontend/package-lock.json
 
 # IDE
 .idea/
