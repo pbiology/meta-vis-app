@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+    font-family: 'DM Sans', system-ui, sans-serif;
+  }
+
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-200 rounded-full;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md
+           bg-gray-900 text-white border border-gray-900
+           hover:bg-gray-700 transition-colors;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md
+           bg-white text-gray-700 border border-gray-200
+           hover:bg-gray-50 transition-colors;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+  .badge-reviewed {
+    @apply bg-green-50 text-green-700;
+  }
+  .badge-pending {
+    @apply bg-amber-50 text-amber-700;
+  }
+  .badge-test {
+    @apply bg-blue-50 text-blue-700;
+  }
+  .badge-ctrl {
+    @apply bg-gray-100 text-gray-600;
+  }
+  .metric-card {
+    @apply bg-gray-50 rounded-lg p-3;
+  }
+  .metric-label {
+    @apply text-xs text-gray-500 mb-1;
+  }
+  .metric-value {
+    @apply text-xl font-medium text-gray-900;
+  }
+  .metric-sub {
+    @apply text-xs text-gray-400 mt-0.5;
+  }
+}
