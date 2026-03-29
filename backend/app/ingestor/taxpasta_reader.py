@@ -5,91 +5,32 @@ from pathlib import Path
 from typing import Optional
 
 
-# ---------------------------------------------------------------------------
-# NCBI taxonomy helpers
-# ---------------------------------------------------------------------------
-
-SUPERKINGDOM_TAXIDS = {2, 2157, 2759, 10239}
-SUPERKINGDOM_NAMES = {
-    2:     "Bacteria",
-    2157:  "Archaea",
-    2759:  "Eukaryota",
-    10239: "Viruses",
-}
-
-
-def load_nodes(nodes_dmp_path: str) -> dict[int, tuple[int, str]]:
+def name_from_lineage(lineage: str) -> str:
     """
-    Parse a nodes.dmp file and return a dict mapping taxon_id -> (parent_id, rank).
-    Only loads taxon_id, parent_id, and rank — fast enough for the full NCBI dump.
+    Extract a display name from a lineage string by taking the last element.
+    e.g. "cellular organisms;Eukaryota;Opisthokonta" -> "Opisthokonta"
+    Empty lineage (unclassified reads) returns "unclassified".
     """
-    nodes: dict[int, tuple[int, str]] = {}
-    path = Path(nodes_dmp_path)
+    if not lineage or pd.isna(lineage):
+        return "unclassified"
+    parts = [p.strip() for p in str(lineage).split(";")]
+    return parts[-1] if parts[-1] else "unclassified"
 
-    if not path.exists():
-        raise FileNotFoundError(f"nodes.dmp not found at: {nodes_dmp_path}")
-
-    with open(path) as fh:
-        for line in fh:
-            parts = line.split("\t|\t")
-            taxon_id  = int(parts[0].strip())
-            parent_id = int(parts[1].strip())
-            rank      = parts[2].strip()
-            nodes[taxon_id] = (parent_id, rank)
-
-    return nodes
-
-
-def resolve_superkingdom(
-    taxon_id: int,
-    nodes: dict[int, tuple[int, str]],
-) -> Optional[str]:
-    """
-    Walk up the taxonomy tree from taxon_id until a superkingdom node is found.
-    Returns the superkingdom name string, or None if not resolvable.
-    """
-    visited: set[int] = set()
-    current = taxon_id
-
-    while current not in visited:
-        if current in SUPERKINGDOM_TAXIDS:
-            return SUPERKINGDOM_NAMES[current]
-
-        if current not in nodes:
-            return None
-
-        parent_id, _ = nodes[current]
-
-        # Root of tree: node is its own parent (taxon_id 1 = root)
-        if parent_id == current:
-            return None
-
-        visited.add(current)
-        current = parent_id
-
-    return None  # cycle guard
-
-
-# ---------------------------------------------------------------------------
-# Main reader
-# ---------------------------------------------------------------------------
 
 def read_taxpasta(
     file_path: str,
     sample_column: str,
-    nodes_data: Optional[str] = None,
+    superkingdom_map: Optional[dict] = None,
 ) -> list[dict]:
     """
     Read a TAXPASTA TSV file and return a list of taxon entry dicts.
 
     Args:
-        file_path:     Absolute path to the TAXPASTA TSV file.
-        sample_column: Column name in the TSV corresponding to this sample's
-                       read counts (e.g. "PE-04-28_k2_pluspf.kraken2.kraken2.report").
-        nodes_data:    Optional absolute path to an NCBI taxonomy nodes.dmp file.
-                       When provided, each entry will include a resolved
-                       'superkingdom' value (Bacteria | Archaea | Eukaryota | Viruses).
-                       When omitted, 'superkingdom' is stored as None.
+        file_path:        Absolute path to the TAXPASTA TSV file.
+        sample_column:    Column name corresponding to this sample's read counts.
+        superkingdom_map: Optional dict of taxon_id -> superkingdom string,
+                          preloaded from the taxonomy_nodes collection.
+                          When omitted, 'superkingdom' is stored as None.
     """
     path = Path(file_path)
 
@@ -98,12 +39,37 @@ def read_taxpasta(
 
     df = pd.read_csv(path, sep="\t")
 
-    expected_columns = {"taxonomy_id", "taxonomy_lvl", "name"}
-    if not expected_columns.issubset(df.columns):
+    if "taxonomy_id" not in df.columns or "lineage" not in df.columns:
         raise ValueError(
-            f"Unexpected TAXPASTA format. Expected columns: {expected_columns}. "
+            f"Unexpected TAXPASTA format. Expected 'taxonomy_id' and 'lineage' columns. "
             f"Got: {set(df.columns)}"
         )
 
     if sample_column not in df.columns:
-        raise Va
+        raise ValueError(
+            f"Sample column '{sample_column}' not found in TAXPASTA file. "
+            f"Available columns: {list(df.columns)}"
+        )
+
+    df = df.rename(columns={
+        "taxonomy_id": "taxon_id",
+        sample_column: "abundance",
+    })
+
+    df["taxon_id"]  = pd.to_numeric(df["taxon_id"],  errors="coerce").fillna(0).astype(int)
+    df["abundance"] = pd.to_numeric(df["abundance"], errors="coerce").fillna(0.0)
+    df = df[df["abundance"] > 0].copy()
+
+    records = []
+    for row in df[["taxon_id", "lineage", "abundance"]].itertuples(index=False):
+        taxon_id = int(row.taxon_id)
+        entry = {
+            "taxon_id":     taxon_id,
+            "name":         name_from_lineage(row.lineage),
+            "rank":         None,
+            "abundance":    float(row.abundance),
+            "superkingdom": superkingdom_map.get(taxon_id) if superkingdom_map else None,
+        }
+        records.append(entry)
+
+    return records
