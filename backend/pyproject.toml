@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "meta-vis-app"
 version = "0.1.0"
-description = "Visualisation backend meta-vis"
+description = "Visualisation backend for nf-core/taxprofiler output"
 requires-python = ">=3.11"
 
 dependencies = [
@@ -17,6 +17,10 @@ dependencies = [
     "pandas>=2.2.0",
     "python-dotenv>=1.0.0",
     "pyyaml>=6.0.0",
+    # Auth
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]

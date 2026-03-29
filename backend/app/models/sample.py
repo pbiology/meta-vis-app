@@ -1,27 +1,33 @@
-from datetime import datetime
-from typing import Optional, Literal
+# app/models/sample.py
+
+from datetime import datetime, date
+from typing import Optional, List
 from pydantic import BaseModel, Field
+from bson import ObjectId
 
 
-# --- Taxonomic profile ---
+# ---------------------------------------------------------------------------
+# Taxonomic profile
+# ---------------------------------------------------------------------------
 
 class TaxonEntry(BaseModel):
     taxon_id: int
     name: str
-    rank: Optional[str] = None
     abundance: float
 
 
 class ClassifierProfile(BaseModel):
-    classifier: Literal["kraken2", "bracken", "metaphlan", "kaiju", "diamond"]
-    classifier_db: Optional[str] = None
-    profile: list[TaxonEntry] = []
+    classifier: str
+    classifier_db: str
+    profile: List[TaxonEntry]
 
 
-# --- QC / pipeline stats ---
+# ---------------------------------------------------------------------------
+# QC blocks
+# ---------------------------------------------------------------------------
 
 class FastQCStats(BaseModel):
-    total_sequences: Optional[float] = None
+    total_sequences: Optional[int] = None
     avg_sequence_length: Optional[float] = None
     pct_gc_forward: Optional[float] = None
     pct_gc_reverse: Optional[float] = None
@@ -57,25 +63,22 @@ class Bowtie2Stats(BaseModel):
     overall_alignment_rate: Optional[float] = None
 
 
-class PipelineConfig(BaseModel):
-    pipeline: Optional[str] = None
-    nextflow: Optional[str] = None
-
-
 class PipelineInfo(BaseModel):
-    software_used: dict[str, dict] = {}
-    pipeline_configuration: Optional[PipelineConfig] = None
+    software_used: Optional[dict] = None
+    pipeline_configuration: Optional[dict] = None
 
 
 class TaxprofilerStats(BaseModel):
+    kraken2: Optional[Kraken2Stats] = None
     fastqc: Optional[FastQCStats] = None
     fastp: Optional[FastpStats] = None
-    kraken2: Optional[Kraken2Stats] = None
     bowtie2: Optional[Bowtie2Stats] = None
     pipeline_info: Optional[PipelineInfo] = None
 
 
-# --- Clinical / sample metadata ---
+# ---------------------------------------------------------------------------
+# Sample metadata
+# ---------------------------------------------------------------------------
 
 class SampleMetadata(BaseModel):
     sample_id: str
@@ -97,33 +100,51 @@ class SequencingMetadata(BaseModel):
     num_reads: Optional[int] = None
 
 
-# --- Top-level sample document ---
+# ---------------------------------------------------------------------------
+# Review subdocument
+# ---------------------------------------------------------------------------
+
+class ReviewStatus(BaseModel):
+    reviewed: bool = False
+    reviewed_by: Optional[str] = None   # username
+    reviewed_at: Optional[datetime] = None
+    notes: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Full sample document (stored in MongoDB)
+# ---------------------------------------------------------------------------
 
 class SampleDocument(BaseModel):
-    id: Optional[str] = Field(None, alias="_id")
-    run_id: str
-    patient_id: str
-    sample_type: Literal["test", "negative_ctrl", "positive_ctrl"]
+    run_id: ObjectId
+    subject_id: ObjectId
+    sample_type: str                        # test | negative_ctrl | positive_ctrl
+    order_date: Optional[date] = None       # when sample was submitted for sequencing
     sample: SampleMetadata
     library_preparation: Optional[LibraryPreparation] = None
     sequencing: Optional[SequencingMetadata] = None
     taxprofiler: Optional[TaxprofilerStats] = None
-    profiles: list[ClassifierProfile] = []
+    profiles: List[ClassifierProfile] = []
     krona_path: Optional[str] = None
-    ingested_at: datetime = Field(default_factory=datetime.utcnow)
+    review: ReviewStatus = ReviewStatus()
+    ingested_at: datetime
 
-    model_config = {"populate_by_name": True}
+    class Config:
+        arbitrary_types_allowed = True
 
 
-# --- Ingest request ---
+# ---------------------------------------------------------------------------
+# Ingest request models
+# ---------------------------------------------------------------------------
 
 class SampleIngestRequest(BaseModel):
-    patient_id: str
-    sample_type: Literal["test", "negative_ctrl", "positive_ctrl"]
+    subject_id: str
+    sample_type: str = "test"               # test | negative_ctrl | positive_ctrl
+    order_date: Optional[date] = None       # ISO date e.g. "2026-03-01"
     taxpasta_path: str
     taxpasta_column: str
-    classifier: Literal["kraken2", "bracken", "metaphlan", "kaiju", "diamond"] = "kraken2"
-    classifier_db: Optional[str] = None
+    classifier: str
+    classifier_db: str
     multiqc_path: str
     pipeline_info_path: str
     krona_path: Optional[str] = None
@@ -134,30 +155,4 @@ class SampleIngestRequest(BaseModel):
 
 class IngestRequest(BaseModel):
     run_id: str
-    samples: list[SampleIngestRequest]
-
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "run_id": "run_2024_03_28",
-                "samples": [
-                    {
-                        "patient_id": "P001",
-                        "sample_type": "test",
-                        "taxpasta_path": "/data/taxprofiler/results/taxpasta/kraken2_k2_pluspf.tsv",
-                        "taxpasta_column": "PE-04-28_k2_pluspf.kraken2.kraken2.report",
-                        "classifier": "kraken2",
-                        "classifier_db": "k2_pluspf",
-                        "multiqc_path": "/data/taxprofiler/results/multiqc/multiqc_data.json",
-                        "pipeline_info_path": "/data/taxprofiler/results/pipeline_info",
-                        "krona_path": "/data/taxprofiler/results/krona/PE-04-28.krona.html",
-                        "sample": {
-                            "sample_id": "PE-04-28",
-                            "sample_source": "cerebrospinal_fluid",
-                            "biopsy_id": "BB22"
-                        }
-                    }
-                ]
-            }
-        }
-    }
+    samples: List[SampleIngestRequest]
