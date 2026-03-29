@@ -119,14 +119,16 @@ class ReviewStatus(BaseModel):
 
 class SampleDocument(BaseModel):
     run_id: ObjectId
-    subject_id: ObjectId
-    sample_type: str                        # test | negative_ctrl | positive_ctrl
+    subject_id: Optional[ObjectId] = None   # null for controls
+    sample_type: str                         # test | positive_ctrl | negative_ctrl
+    material: str                            # DNA | RNA
     order_date: Optional[date] = None
     sample: SampleMetadata
     library_preparation: Optional[LibraryPreparation] = None
     sequencing: Optional[SequencingMetadata] = None
     taxprofiler: Optional[TaxprofilerStats] = None
     profiles: List[ClassifierProfile] = []
+    has_krona: bool = False                  # krona stored at run level
     review: ReviewStatus = ReviewStatus()
     ingested_at: datetime
 
@@ -139,22 +141,21 @@ class SampleDocument(BaseModel):
 # ---------------------------------------------------------------------------
 
 class SampleIngestRequest(BaseModel):
-    subject_id: str
-    sample_type: str = "test"               # test | negative_ctrl | positive_ctrl
+    subject_id: Optional[str] = None        # null for controls
+    sample_id: str                           # e.g. PE-04-28
+    taxpasta_column: str                     # column name in the taxpasta TSV
+    sample_type: str = "test"               # test | positive_ctrl | negative_ctrl
+    material: str = "DNA"                    # DNA | RNA
     order_date: Optional[date] = None
-    taxpasta_path: str
-    taxpasta_column: str
-    classifier: str
-    classifier_db: str
-    multiqc_path: str
-    pipeline_info_path: str
-    krona_path: Optional[str] = None
-    sample: SampleMetadata
     library_preparation: Optional[LibraryPreparation] = None
     sequencing: Optional[SequencingMetadata] = None
 
 
 class IngestRequest(BaseModel):
     run_id: str
-    taxonomy_db: Optional[str] = None       # name of a loaded taxonomy, e.g. "k2_pluspf"
+    taxonomy_db: Optional[str] = None        # name of a loaded taxonomy e.g. "k2_pluspf"
+    taxpasta_path: str                        # shared across all samples in the run
+    multiqc_path: str                         # shared across all samples in the run
+    pipeline_info_path: str                   # shared across all samples in the run
+    krona_path: Optional[str] = None          # one Krona file for the whole run
     samples: List[SampleIngestRequest]

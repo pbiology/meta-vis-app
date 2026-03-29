@@ -63,14 +63,14 @@ export default function SampleDetail() {
         const [s, p] = await Promise.all([getSample(sampleId), getProfile(sampleId)])
         setSample(s)
         setProfile(p)
-        if (s.has_krona) {
-          try {
-            const url = await getKronaUrl(sampleId)
-            setKronaUrl(url)
-          } catch {
-            setKronaError(true)
-          }
+      if (s.has_krona && s.run_id) {
+        try {
+          const url = await getKronaUrl(s.run_id)
+          setKronaUrl(url)
+        } catch {
+          setKronaError(true)
         }
+      }
       } catch {
         setError('Failed to load sample.')
       } finally {
