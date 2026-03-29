@@ -2,29 +2,23 @@
 """
 Ingest a taxprofiler run into meta-vis-app.
 
+One call per run. All samples in the run share the same taxpasta, multiqc,
+pipeline_info, and (optionally) krona files. Each sample is described
+explicitly with its taxpasta column, type, and material.
+
 Usage:
     python ingest.py \
         --run-id run_2026_02_23 \
-        --subject-id S-001 \
-        --sample-id PE-04-28 \
-        --sample-type test \
-        --order-date 2026-02-20 \
-        --taxpasta /abs/path/to/taxpasta.tsv \
-        --taxpasta-column "PE-04-28_k2_pluspf.kraken2.kraken2.report" \
-        --classifier kraken2 \
-        --classifier-db k2_pluspf \
-        --multiqc /abs/path/to/multiqc_data.json \
-        --pipeline-info /abs/path/to/pipeline_info \
         --taxonomy-db k2_pluspf \
-        --url http://localhost:8000 \
-        --username admin \
+        --taxpasta /path/to/kraken2_k2_pluspf.tsv \
+        --multiqc  /path/to/multiqc_data.json \
+        --pipeline-info /path/to/pipeline_info \
+        --krona    /path/to/run.krona.html \
+        --sample subject_id=S-001 sample_id=PE-04-28 column="PE-04-28_k2_pluspf.kraken2.kraken2.report" type=test material=DNA order_date=2026-02-20 \
+        --sample subject_id=S-001 sample_id=PE-04-28-RNA column="PE-04-28-RNA_k2_pluspf.kraken2.kraken2.report" type=test material=RNA order_date=2026-02-20 \
+        --sample sample_id=CTRL-DNA column="CTRL-DNA_k2_pluspf.kraken2.kraken2.report" type=positive_ctrl material=DNA \
+        --sample sample_id=CTRL-RNA column="CTRL-RNA_k2_pluspf.kraken2.kraken2.report" type=positive_ctrl material=RNA \
         --password yourpassword
-
-For controls, pass --sample-type negative_ctrl or --sample-type positive_ctrl
-and omit --subject-id (it will default to empty).
-
-taxonomy-db refers to a taxonomy previously loaded with taxonomy.py.
-Omit it to ingest without superkingdom resolution.
 """
 
 import argparse
@@ -44,32 +38,52 @@ def get_token(base_url: str, username: str, password: str) -> str:
     return resp.json()["access_token"]
 
 
+def parse_sample(raw: str) -> dict:
+    """
+    Parse a --sample argument of the form:
+      key=value key=value ...
+    Recognised keys: subject_id, sample_id, column, type, material, order_date
+    """
+    parts = {}
+    for token in raw.split():
+        if "=" not in token:
+            print(f"Invalid sample token '{token}' — expected key=value")
+            sys.exit(1)
+        k, v = token.split("=", 1)
+        parts[k.strip()] = v.strip()
+
+    required = {"sample_id", "column", "type", "material"}
+    missing = required - parts.keys()
+    if missing:
+        print(f"Sample is missing required keys: {missing}")
+        sys.exit(1)
+
+    return {
+        "subject_id":      parts.get("subject_id"),
+        "sample_id":       parts["sample_id"],
+        "taxpasta_column": parts["column"],
+        "sample_type":     parts["type"],
+        "material":        parts["material"],
+        "order_date":      parts.get("order_date"),
+    }
+
+
 def ingest(args):
     token = get_token(args.url, args.username, args.password)
 
+    samples = [parse_sample(s) for s in args.sample]
+
     payload = {
-        "run_id":      args.run_id,
-        "taxonomy_db": args.taxonomy_db,
-        "samples": [
-            {
-                "subject_id":        args.subject_id or "",
-                "sample_type":       args.sample_type,
-                "order_date":        args.order_date,
-                "taxpasta_path":     args.taxpasta,
-                "taxpasta_column":   args.taxpasta_column,
-                "classifier":        args.classifier,
-                "classifier_db":     args.classifier_db,
-                "multiqc_path":      args.multiqc,
-                "pipeline_info_path": args.pipeline_info,
-                "krona_path":        args.krona,
-                "sample": {
-                    "sample_id":     args.sample_id,
-                    "sample_source": args.sample_source,
-                    "biopsy_id":     args.biopsy_id,
-                },
-            }
-        ],
+        "run_id":            args.run_id,
+        "taxonomy_db":       args.taxonomy_db,
+        "taxpasta_path":     args.taxpasta,
+        "multiqc_path":      args.multiqc,
+        "pipeline_info_path": args.pipeline_info,
+        "krona_path":        args.krona,
+        "samples":           samples,
     }
+
+    print(f"Ingesting {len(samples)} sample(s) for run '{args.run_id}' ...")
 
     resp = requests.post(
         f"{args.url}/api/v1/ingest",
@@ -90,35 +104,39 @@ def ingest(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Ingest a taxprofiler sample into meta-vis-app")
+    parser = argparse.ArgumentParser(
+        description="Ingest a taxprofiler run into meta-vis-app",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
 
-    # Run
-    parser.add_argument("--run-id",          required=True,  help="Run identifier, e.g. run_2026_02_23")
-    parser.add_argument("--taxonomy-db",     default=None,   help="Name of a loaded taxonomy, e.g. k2_pluspf")
+    # Run-level
+    parser.add_argument("--run-id",         required=True,  help="Run identifier, e.g. run_2026_02_23")
+    parser.add_argument("--taxonomy-db",    default=None,   help="Name of a loaded taxonomy, e.g. k2_pluspf")
 
-    # Sample identity
-    parser.add_argument("--subject-id",      default="",     help="Subject identifier, e.g. S-001")
-    parser.add_argument("--sample-id",       required=True,  help="Sample identifier, e.g. PE-04-28")
-    parser.add_argument("--sample-type",     default="test",
-                        choices=["test", "negative_ctrl", "positive_ctrl"],
-                        help="Sample type (default: test)")
-    parser.add_argument("--order-date",      default=None,   help="ISO date, e.g. 2026-02-20")
-    parser.add_argument("--sample-source",   default=None,   help="Sample source tissue/site")
-    parser.add_argument("--biopsy-id",       default=None,   help="Biopsy identifier")
+    # Shared pipeline outputs
+    parser.add_argument("--taxpasta",       required=True,  help="Path to TAXPASTA TSV file (shared across all samples)")
+    parser.add_argument("--multiqc",        required=True,  help="Path to multiqc_data.json (shared across all samples)")
+    parser.add_argument("--pipeline-info",  required=True,  help="Path to pipeline_info directory (shared across all samples)")
+    parser.add_argument("--krona",          default=None,   help="Path to Krona HTML file for the run (optional)")
 
-    # Pipeline outputs
-    parser.add_argument("--taxpasta",        required=True,  help="Path to TAXPASTA TSV file")
-    parser.add_argument("--taxpasta-column", required=True,  help="Column name in TAXPASTA file for this sample")
-    parser.add_argument("--classifier",      default="kraken2", help="Classifier used (default: kraken2)")
-    parser.add_argument("--classifier-db",   default=None,   help="Classifier database name, e.g. k2_pluspf")
-    parser.add_argument("--multiqc",         required=True,  help="Path to multiqc_data.json")
-    parser.add_argument("--pipeline-info",   required=True,  help="Path to pipeline_info directory")
-    parser.add_argument("--krona",           default=None,   help="Path to Krona HTML file (optional)")
+    # Per-sample — repeat --sample for each sample in the run
+    parser.add_argument(
+        "--sample",
+        action="append",
+        required=True,
+        metavar="KEY=VALUE ...",
+        help=(
+            "Sample descriptor as space-separated key=value pairs. "
+            "Required keys: sample_id, column, type, material. "
+            "Optional keys: subject_id, order_date. "
+            "Repeat --sample for each sample in the run."
+        ),
+    )
 
     # Server / auth
-    parser.add_argument("--url",      default="http://localhost:8000", help="API base URL (default: http://localhost:8000)")
-    parser.add_argument("--username", default="admin",  help="Username (default: admin)")
-    parser.add_argument("--password", required=True,    help="Password")
+    parser.add_argument("--url",      default="http://localhost:8000", help="API base URL")
+    parser.add_argument("--username", default="admin")
+    parser.add_argument("--password", required=True)
 
     args = parser.parse_args()
     ingest(args)

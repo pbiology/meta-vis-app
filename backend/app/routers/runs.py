@@ -1,37 +1,41 @@
 # app/routers/runs.py
 
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import HTMLResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from bson import ObjectId
 
 from app.database import get_db
 from app.auth.utils import get_current_user
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 
-CONTROL_TYPES = {"negative_ctrl", "positive_ctrl"}
 
-
-def _str_id(doc: dict) -> dict:
+def _serialise_run(doc: dict) -> dict:
     doc["_id"] = str(doc["_id"])
     if "sample_ids" in doc:
         doc["sample_ids"] = [str(sid) for sid in doc["sample_ids"]]
     return doc
 
 
-@router.get("", summary="List all runs (newest first)")
+def _serialise_sample(doc: dict) -> dict:
+    doc["_id"]    = str(doc["_id"])
+    doc["run_id"] = str(doc["run_id"])
+    if doc.get("subject_id"):
+        doc["subject_id"] = str(doc["subject_id"])
+    return doc
+
+
+@router.get("", summary="List all runs")
 async def list_runs(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    cursor = db["runs"].find(
-        {},
-        {"run_id": 1, "ingested_at": 1, "sample_ids": 1},
-    ).sort("ingested_at", -1)
-    return [_str_id(doc) async for doc in cursor]
+    docs = await db["runs"].find().sort("ingested_at", -1).to_list(length=200)
+    return [_serialise_run(d) for d in docs]
 
 
-@router.get("/{run_id}", summary="Get a single run by run_id string")
+@router.get("/{run_id}", summary="Get a single run")
 async def get_run(
     run_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -40,50 +44,64 @@ async def get_run(
     doc = await db["runs"].find_one({"run_id": run_id})
     if not doc:
         raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
-    return _str_id(doc)
+    return _serialise_run(doc)
 
 
-@router.get("/{run_id}/samples", summary="List sample summaries for a run")
+@router.get("/{run_id}/samples", summary="List samples for a run")
 async def list_samples_for_run(
     run_id: str,
-    type: Optional[str] = Query(
-        default=None,
-        description="Filter: 'test', 'controls' (neg+pos), 'negative_ctrl', 'positive_ctrl'",
-    ),
+    type: str = None,
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    run = await db["runs"].find_one({"run_id": run_id}, {"_id": 1})
+    run = await db["runs"].find_one({"run_id": run_id})
     if not run:
         raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
 
     query: dict = {"run_id": run["_id"]}
     if type == "controls":
-        query["sample_type"] = {"$in": list(CONTROL_TYPES)}
-    elif type is not None:
-        query["sample_type"] = type
+        query["sample_type"] = {"$in": ["positive_ctrl", "negative_ctrl"]}
+    elif type == "test":
+        query["sample_type"] = "test"
 
-    projection = {
-        "sample": 1,
-        "sample_type": 1,
-        "subject_id": 1,
-        "order_date": 1,
-        "ingested_at": 1,
-        "review": 1,
-        "taxprofiler.kraken2": 1,
-        "taxprofiler.fastqc": 1,
-        "taxprofiler.fastp": 1,
-        "taxprofiler.bowtie2": 1,
-    }
+    docs = await db["samples"].find(
+        query,
+        {"profiles": 0},    # exclude heavy profile data from list view
+    ).to_list(length=200)
 
-    cursor = db["samples"].find(query, projection).sort(
-        [("order_date", -1), ("ingested_at", -1)]
-    )
+    return [_serialise_sample(d) for d in docs]
 
-    samples = []
-    async for doc in cursor:
-        doc["_id"] = str(doc["_id"])
-        doc["run_id"] = str(run["_id"])
-        doc["subject_id"] = str(doc["subject_id"])
-        samples.append(doc)
-    return samples
+
+@router.get("/{run_id}/krona", summary="Serve Krona HTML for a run")
+async def get_krona(
+    run_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
+    run = await db["runs"].find_one({"run_id": run_id})
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
+
+    doc = await db["krona_files"].find_one({"run_id": run["_id"]})
+    if not doc:
+        raise HTTPException(status_code=404, detail="No Krona file stored for this run")
+
+    return HTMLResponse(content=doc["html"])
+
+
+@router.get("/oid/{run_object_id}/krona", summary="Serve Krona HTML by run ObjectId")
+async def get_krona_by_oid(
+    run_object_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
+    try:
+        oid = ObjectId(run_object_id)
+    except Exception:
+        raise HTTPException(status_code=422, detail="Invalid run ObjectId")
+
+    doc = await db["krona_files"].find_one({"run_id": oid})
+    if not doc:
+        raise HTTPException(status_code=404, detail="No Krona file stored for this run")
+
+    return HTMLResponse(content=doc["html"])
