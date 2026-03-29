@@ -37,7 +37,7 @@ async def ingest_run(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     for s in request.samples:
         subject_object_id = await _upsert_subject(db, s.subject_id)
 
-        profile = read_taxpasta(s.taxpasta_path, s.taxpasta_column)
+        profile = read_taxpasta(s.taxpasta_path, s.taxpasta_column, nodes_data=s.nodes_data)
         qc = read_multiqc(s.multiqc_path, s.taxpasta_column)
         pipeline_info = read_pipeline_info(s.pipeline_info_path)
 

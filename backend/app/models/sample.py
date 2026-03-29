@@ -2,7 +2,7 @@
 
 from datetime import datetime, date
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from bson import ObjectId
 
 
@@ -13,7 +13,9 @@ from bson import ObjectId
 class TaxonEntry(BaseModel):
     taxon_id: int
     name: str
+    rank: Optional[str] = None
     abundance: float
+    superkingdom: Optional[str] = None  # Bacteria | Archaea | Eukaryota | Viruses
 
 
 class ClassifierProfile(BaseModel):
@@ -147,6 +149,7 @@ class SampleIngestRequest(BaseModel):
     classifier_db: str
     multiqc_path: str
     pipeline_info_path: str
+    nodes_data: Optional[str] = None        # absolute path to NCBI taxonomy nodes.dmp
     krona_path: Optional[str] = None
     sample: SampleMetadata
     library_preparation: Optional[LibraryPreparation] = None
