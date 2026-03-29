@@ -203,14 +203,17 @@ export default function CaseDetail() {
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-0.5">
                       {(s.top_taxa || []).map((t, i) => (
-                        <span key={i} className="text-xs text-gray-600 italic truncate max-w-48">
-                          <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 flex-shrink-0 ${
+                        <span key={i} className="flex items-center gap-1 text-xs">
+                          <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${
                             t.superkingdom === 'Bacteria'  ? 'bg-blue-400'   :
                             t.superkingdom === 'Viruses'   ? 'bg-red-400'    :
                             t.superkingdom === 'Eukaryota' ? 'bg-amber-400'  :
                             t.superkingdom === 'Archaea'   ? 'bg-purple-400' : 'bg-gray-300'
                           }`} />
-                          {t.name}
+                          <span className="text-gray-600 italic truncate max-w-36">{t.name}</span>
+                          {t.pct != null && (
+                            <span className="text-gray-400 flex-shrink-0">{t.pct}%</span>
+                          )}
                         </span>
                       ))}
                     </div>
