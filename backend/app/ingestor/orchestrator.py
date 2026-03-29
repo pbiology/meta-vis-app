@@ -88,12 +88,26 @@ async def ingest_run(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
 
     has_krona = bool(request.krona_path)
 
+    # Guard against duplicate run_id (see TECHNICAL_DEBT.md)
+    existing_run = await db["runs"].find_one({"run_id": request.run_id})
+    if existing_run:
+        raise ValueError(
+            f"Run '{request.run_id}' already exists (ObjectId: {existing_run['_id']}). "
+            f"Delete the existing run first, or use a unique run_id."
+        )
+
     run_doc = {
         "run_id":      request.run_id,
         "ingested_at": now,
         "sample_ids":  [],
         "taxonomy_db": request.taxonomy_db,
         "has_krona":   has_krona,
+        "review": {
+            "reviewed":    False,
+            "reviewed_by": None,
+            "reviewed_at": None,
+            "notes":       None,
+        },
     }
     run_result    = await db["runs"].insert_one(run_doc)
     run_object_id = run_result.inserted_id
@@ -126,7 +140,13 @@ async def ingest_run(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             "sample_type":         s.sample_type,
             "material":            s.material,
             "order_date":          s.order_date.isoformat() if s.order_date else None,
-            "sample":              {"sample_id": s.sample_id},
+            "sample": {
+                "sample_id":   s.sample_id,
+                "material":    s.material,
+                "sample_type": s.sample_type,
+                "subject_id":  s.subject_id,
+                "order_date":  s.order_date.isoformat() if s.order_date else None,
+            },
             "library_preparation": s.library_preparation.model_dump() if s.library_preparation else None,
             "sequencing":          s.sequencing.model_dump() if s.sequencing else None,
             "taxprofiler": {
@@ -166,31 +186,137 @@ async def ingest_run(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     }
 
 
-def extract_sample_qc(qc_data: dict, sample_name: str) -> dict:
+def _base_sample_name(taxpasta_column: str) -> str:
+    """
+    Derive the canonical base sample name from a taxpasta column string.
+
+    taxprofiler appends classifier/db suffixes to column names:
+        PE-04-28_k2_pluspf.kraken2.kraken2.report  ->  PE-04-28
+
+    Strategy: split on '_k2' (Kraken2 suffix) or '.kraken2' first;
+    fall back to the whole string if neither pattern matches.
+    """
+    # Strip the '.kraken2.kraken2.report' (or similar) dot-suffix first
+    name = taxpasta_column.split(".kraken2")[0]  # PE-04-28_k2_pluspf
+    # Strip the '_k2...' classifier+db suffix
+    name = name.split("_k2")[0]                  # PE-04-28
+    return name
+
+
+def extract_sample_qc(qc_data: dict, taxpasta_column: str) -> dict:
     """
     Extract per-sample QC stats from the pre-loaded multiqc data dict.
+
+    taxprofiler uses different key formats in each MultiQC section:
+      multiqc_kraken  : {base}_k2_{db}          e.g. PE-04-28_k2_pluspf
+      multiqc_fastp   : {base}_{lane}            e.g. PE-04-28_1  (aggregated)
+      multiqc_bowtie2 : {base}_{lane}            e.g. PE-04-28_1  (aggregated)
+      multiqc_fastqc  : {base}_{lane}_raw_{1|2}  e.g. PE-04-28_1_raw_1
+
+    All are derived from the taxpasta_column supplied at ingest time.
     """
     stats = {}
+    base = _base_sample_name(taxpasta_column)
 
-    kraken2 = qc_data.get("kraken2", {}).get(sample_name)
+    # --- Kraken2 ---
+    # Key format: {base}_k2_{db}  — reconstruct from the column name directly
+    # The column is e.g. 'PE-04-28_k2_pluspf.kraken2.kraken2.report'
+    # Strip the dot-suffix to get 'PE-04-28_k2_pluspf'
+    kraken_key = taxpasta_column.split(".kraken2")[0]  # PE-04-28_k2_pluspf
+    kraken2 = qc_data.get("kraken2", {}).get(kraken_key)
     if kraken2:
-        stats["kraken2"] = kraken2
-
-    fastqc_fwd = qc_data.get("fastqc", {}).get(f"{sample_name}_1", {})
-    fastqc_rev = qc_data.get("fastqc", {}).get(f"{sample_name}_2", {})
-    if fastqc_fwd or fastqc_rev:
-        stats["fastqc"] = {
-            "mean_phred_score_forward": fastqc_fwd.get("avg_sequence_quality"),
-            "mean_phred_score_reverse": fastqc_rev.get("avg_sequence_quality"),
-            "total_num_reads":          fastqc_fwd.get("total_sequences"),
+        # Flatten the nested rank-dict into plain counts
+        unclassified_reads = sum(kraken2.get("U", {}).values()) if kraken2.get("U") else None
+        total_classified   = sum(kraken2.get("R", {}).values()) if kraken2.get("R") else None
+        num_species        = len(kraken2.get("S", {})) if kraken2.get("S") else None
+        num_genera         = len(kraken2.get("G", {})) if kraken2.get("G") else None
+        total_reads = (unclassified_reads or 0) + (total_classified or 0)
+        pct_unclassified = (
+            round(unclassified_reads / total_reads * 100, 2)
+            if total_reads and unclassified_reads is not None
+            else None
+        )
+        stats["kraken2"] = {
+            "pct_unclassified": pct_unclassified,
+            "unclassified_reads": unclassified_reads,
+            "num_species": num_species,
+            "num_genera": num_genera,
         }
 
-    fastp = qc_data.get("fastp", {}).get(sample_name)
-    if fastp:
-        stats["fastp"] = fastp
+    # --- fastp & bowtie2 (lane-level, aggregated) ---
+    # Keys like PE-04-28_1, PE-04-28_2, ...
+    fastp_all   = qc_data.get("fastp", {})
+    bowtie2_all = qc_data.get("bowtie2", {})
 
-    bowtie2 = qc_data.get("bowtie2", {}).get(sample_name)
-    if bowtie2:
-        stats["bowtie2"] = bowtie2
+    fastp_lanes   = {k: v for k, v in fastp_all.items()   if k.startswith(f"{base}_")}
+    bowtie2_lanes = {k: v for k, v in bowtie2_all.items() if k.startswith(f"{base}_")}
+
+    if fastp_lanes:
+        # Sum read counts across lanes; average rates
+        total_before = sum(v.get("summary", {}).get("before_filtering", {}).get("total_reads", 0)
+                           for v in fastp_lanes.values())
+        total_after  = sum(v.get("summary", {}).get("after_filtering",  {}).get("total_reads", 0)
+                           for v in fastp_lanes.values())
+        passed       = sum(v.get("filtering_result", {}).get("passed_filter_reads", 0)
+                           for v in fastp_lanes.values())
+        low_quality  = sum(v.get("filtering_result", {}).get("low_quality_reads",  0)
+                           for v in fastp_lanes.values())
+        too_short    = sum(v.get("filtering_result", {}).get("too_short_reads",    0)
+                           for v in fastp_lanes.values())
+        n_lanes = len(fastp_lanes)
+        q20_vals = [v.get("summary", {}).get("after_filtering", {}).get("q20_rate")
+                    for v in fastp_lanes.values()]
+        q30_vals = [v.get("summary", {}).get("after_filtering", {}).get("q30_rate")
+                    for v in fastp_lanes.values()]
+        gc_vals  = [v.get("summary", {}).get("after_filtering", {}).get("gc_content")
+                    for v in fastp_lanes.values()]
+        stats["fastp"] = {
+            "total_reads_before_filtering": total_before or None,
+            "total_reads_after_filtering":  total_after  or None,
+            "passed_filter_reads":          passed       or None,
+            "low_quality_reads":            low_quality  or None,
+            "too_short_reads":              too_short    or None,
+            "q20_rate": round(sum(v for v in q20_vals if v) / n_lanes, 4) if any(q20_vals) else None,
+            "q30_rate": round(sum(v for v in q30_vals if v) / n_lanes, 4) if any(q30_vals) else None,
+            "gc_content": round(sum(v for v in gc_vals if v)  / n_lanes, 4) if any(gc_vals)  else None,
+        }
+
+    if bowtie2_lanes:
+        # Sum reads across lanes; average alignment rate
+        total_reads_bt = sum(v.get("total_reads", 0) for v in bowtie2_lanes.values())
+        aligned_one    = sum(v.get("paired_aligned_one",   0) for v in bowtie2_lanes.values())
+        aligned_multi  = sum(v.get("paired_aligned_multi", 0) for v in bowtie2_lanes.values())
+        aligned_none   = sum(v.get("paired_aligned_none",  0) for v in bowtie2_lanes.values())
+        rates = [v.get("overall_alignment_rate") for v in bowtie2_lanes.values()]
+        overall_rate   = round(sum(r for r in rates if r is not None) / len(rates), 2) if any(r is not None for r in rates) else None
+        stats["bowtie2"] = {
+            "total_reads":           total_reads_bt or None,
+            "aligned_exactly_one":   aligned_one    or None,
+            "aligned_multi":         aligned_multi  or None,
+            "aligned_none":          aligned_none   or None,
+            "overall_alignment_rate": overall_rate,
+        }
+
+    # --- FastQC (pre-trimming, per lane, paired) ---
+    # Keys like PE-04-28_1_raw_1, PE-04-28_1_raw_2
+    fastqc_all = qc_data.get("fastqc", {})
+    fastqc_fwd_lanes = {k: v for k, v in fastqc_all.items()
+                        if k.startswith(f"{base}_") and k.endswith("_raw_1")}
+    fastqc_rev_lanes = {k: v for k, v in fastqc_all.items()
+                        if k.startswith(f"{base}_") and k.endswith("_raw_2")}
+
+    if fastqc_fwd_lanes or fastqc_rev_lanes:
+        def _avg(lanes: dict, field: str):
+            vals = [v.get(field) for v in lanes.values() if v.get(field) is not None]
+            return round(sum(vals) / len(vals), 2) if vals else None
+
+        stats["fastqc"] = {
+            "total_sequences":       sum(v.get("total_sequences", 0) for v in fastqc_fwd_lanes.values()) or None,
+            "avg_sequence_length":   _avg(fastqc_fwd_lanes, "avg_sequence_length"),
+            "pct_gc_forward":        _avg(fastqc_fwd_lanes, "percent_gc"),
+            "pct_gc_reverse":        _avg(fastqc_rev_lanes, "percent_gc"),
+            "pct_poor_quality_forward": _avg(fastqc_fwd_lanes, "percent_fails"),
+            "pct_poor_quality_reverse": _avg(fastqc_rev_lanes, "percent_fails"),
+        }
 
     return stats

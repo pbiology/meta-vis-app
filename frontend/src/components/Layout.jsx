@@ -38,6 +38,17 @@ export default function Layout() {
 
         <nav className="flex flex-col gap-0.5 flex-1">
           <NavItem
+            to="/cases"
+            label="Cases"
+            icon={
+              <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+                <rect x="1" y="2" width="14" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
+                <path d="M4 6h8M4 9h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                <path d="M6 2v2M10 2v2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+              </svg>
+            }
+          />
+          <NavItem
             to="/samples"
             label="All samples"
             icon={
@@ -46,16 +57,6 @@ export default function Layout() {
                 <rect x="9" y="1" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
                 <rect x="1" y="9" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
                 <rect x="9" y="9" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
-              </svg>
-            }
-          />
-          <NavItem
-            to="/runs"
-            label="Runs"
-            icon={
-              <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
-                <rect x="1" y="3" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
-                <path d="M5 7h6M5 9.5h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
               </svg>
             }
           />

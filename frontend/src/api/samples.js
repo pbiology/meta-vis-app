@@ -47,8 +47,9 @@ export async function getRunControls(runId) {
   return res.data
 }
 
-export async function getKronaUrl(runObjectId) {
-  const resp = await client.get(`/runs/oid/${runObjectId}/krona`, {
+export async function getKronaUrl(sampleId) {
+  // Krona is stored at run level; the backend resolves run_id from the sample
+  const resp = await client.get(`/samples/${sampleId}/krona`, {
     responseType: 'blob',
   })
   return URL.createObjectURL(resp.data)

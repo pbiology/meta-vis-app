@@ -108,7 +108,7 @@ export default function SampleList() {
           <table className="w-full text-left border-collapse">
             <thead className="sticky top-0 bg-white z-10">
               <tr>
-                {['Sample ID', 'Subject', 'Order date', 'Run', 'Type', 'Unclassified', 'Species', 'Status'].map(h => (
+                {['Sample ID', 'Subject', 'Order date', 'Case', 'Type', 'Unclassified', 'Species', 'Status'].map(h => (
                   <th key={h} className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap">
                     {h}
                   </th>
