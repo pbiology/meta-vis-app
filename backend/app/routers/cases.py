@@ -77,17 +77,26 @@ async def list_samples_for_case(
     HOST_TAXON_IDS = {9606, 1, 0, 131567}
 
     def top_taxa(doc: dict, n: int = 3) -> list:
-        entries = doc.get("profiles", [{}])[0].get("profile", []) if doc.get("profiles") else []
-        filtered = [
-            e for e in entries
+        all_entries = doc.get("profiles", [{}])[0].get("profile", []) if doc.get("profiles") else []
+        host_reads = next((e["abundance"] for e in all_entries if e.get("name") == "Homo sapiens"), 0)
+        unclass_reads = sum(e["abundance"] for e in all_entries if e.get("name") == "unclassified")
+        total_reads = sum(e["abundance"] for e in all_entries)
+        non_host_total = total_reads - host_reads - unclass_reads
+        non_host_entries = [
+            e for e in all_entries
             if e.get("taxon_id") not in HOST_TAXON_IDS
             and e.get("name") != "unclassified"
             and not (e.get("name") or "").startswith("unclassified ")
         ]
-        filtered.sort(key=lambda e: e.get("abundance", 0), reverse=True)
+        non_host_entries.sort(key=lambda e: e.get("abundance", 0), reverse=True)
         return [
-            {"name": e["name"], "superkingdom": e.get("superkingdom"), "abundance": e["abundance"]}
-            for e in filtered[:n]
+            {
+                "name": e["name"],
+                "superkingdom": e.get("superkingdom"),
+                "abundance": e["abundance"],
+                "pct": round(e["abundance"] / non_host_total * 100, 3) if non_host_total else None,
+            }
+            for e in non_host_entries[:n]
         ]
 
     result = []
