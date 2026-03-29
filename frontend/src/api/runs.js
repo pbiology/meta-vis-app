@@ -16,10 +16,13 @@ export async function getRunSamples(runId, type = null) {
   return res.data
 }
 
-export async function getRunKronaUrl(runObjectId) {
-  // run_id here is the MongoDB ObjectId string from the sample document
-  // We need to find the run_id string — use the runs endpoint
-  const resp = await client.get(`/runs-by-oid/${runObjectId}/krona`, {
+export async function reviewCase(runId, notes = null) {
+  const res = await client.patch(`/runs/${runId}/review`, { notes })
+  return res.data
+}
+
+export async function getCaseKronaUrl(runId) {
+  const resp = await client.get(`/runs/${runId}/krona`, {
     responseType: 'blob',
   })
   return URL.createObjectURL(resp.data)

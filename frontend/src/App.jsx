@@ -3,8 +3,8 @@ import { useAuth } from './context/AuthContext'
 import Login from './pages/Login'
 import SampleList from './pages/SampleList'
 import SampleDetail from './pages/SampleDetail'
-import RunList from './pages/RunList'
-import RunDetail from './pages/RunDetail'
+import CaseList from './pages/RunList'
+import CaseDetail from './pages/RunDetail'
 import Layout from './components/Layout'
 
 function ProtectedRoute({ children }) {
@@ -24,11 +24,11 @@ export default function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/samples" replace />} />
+        <Route index element={<Navigate to="/cases" replace />} />
+        <Route path="cases" element={<CaseList />} />
+        <Route path="cases/:runId" element={<CaseDetail />} />
         <Route path="samples" element={<SampleList />} />
         <Route path="samples/:sampleId" element={<SampleDetail />} />
-        <Route path="runs" element={<RunList />} />
-        <Route path="runs/:runId" element={<RunDetail />} />
       </Route>
     </Routes>
   )

@@ -63,14 +63,14 @@ export default function SampleDetail() {
         const [s, p] = await Promise.all([getSample(sampleId), getProfile(sampleId)])
         setSample(s)
         setProfile(p)
-      if (s.has_krona && s.run_id) {
-        try {
-          const url = await getKronaUrl(s.run_id)
-          setKronaUrl(url)
-        } catch {
-          setKronaError(true)
+        if (s.has_krona) {
+          try {
+            const url = await getKronaUrl(sampleId)
+            setKronaUrl(url)
+          } catch {
+            setKronaError(true)
+          }
         }
-      }
       } catch {
         setError('Failed to load sample.')
       } finally {
@@ -161,13 +161,13 @@ export default function SampleDetail() {
       {/* Topbar */}
       <div className="flex items-center gap-3 px-6 py-4 bg-white border-b border-gray-100 flex-shrink-0">
         <button
-          onClick={() => navigate('/samples')}
+          onClick={() => navigate(-1)}
           className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 transition-colors"
         >
           <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">
             <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          All samples
+          Back
         </button>
         <span className="text-gray-200">/</span>
         <h1 className="text-sm font-medium text-gray-900 flex-1 font-mono">

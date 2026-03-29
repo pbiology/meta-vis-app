@@ -27,21 +27,10 @@ with no string manipulation needed.
 - FastQC keys are matched by prefix + `_raw_1` / `_raw_2` suffix
 - fastp and bowtie2 keys are matched by prefix only
 
-## Duplicate run_id on ingest
+## Duplicate run_id on ingest — RESOLVED
 
-**File**: `backend/app/ingestor/orchestrator.py`
+**Fixed**: `backend/app/ingestor/orchestrator.py`
 
-**Problem**: `POST /api/v1/ingest` always inserts a new run document, even if a
-run with the same `run_id` already exists. Calling the endpoint twice with the
-same `run_id` creates two run documents. Samples are linked to the `_id` of the
-most recently created run, making the earlier run a ghost that returns no
-samples.
-
-**Fix**: Before inserting, check if a run with the given `run_id` already
-exists. Either:
-- Reject with `409 Conflict` if the run already exists (safest for production), or
-- Upsert — add new samples to the existing run document instead of creating a
-  new one (better for incremental ingestion workflows).
-
-**Priority**: High — must be resolved before ingesting real data to avoid
-silent data integrity issues.
+Now raises `ValueError` (→ HTTP 422) if a run with the given `run_id` already
+exists, before any documents are inserted. The error message includes the
+existing run's ObjectId for debugging.

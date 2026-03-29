@@ -1,14 +1,21 @@
 # app/routers/runs.py
 
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
+from pydantic import BaseModel
+from typing import Optional
 
 from app.database import get_db
 from app.auth.utils import get_current_user
 
 router = APIRouter(prefix="/runs", tags=["runs"])
+
+
+class ReviewPayload(BaseModel):
+    notes: Optional[str] = None
 
 
 def _serialise_run(doc: dict) -> dict:
@@ -87,6 +94,29 @@ async def get_krona(
         raise HTTPException(status_code=404, detail="No Krona file stored for this run")
 
     return HTMLResponse(content=doc["html"])
+
+
+@router.patch("/{run_id}/review", summary="Mark a case as reviewed by the current user")
+async def review_run(
+    run_id: str,
+    payload: ReviewPayload,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    result = await db["runs"].update_one(
+        {"run_id": run_id},
+        {
+            "$set": {
+                "review.reviewed":    True,
+                "review.reviewed_by": current_user["username"],
+                "review.reviewed_at": datetime.now(timezone.utc),
+                "review.notes":       payload.notes,
+            }
+        },
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
+    return {"run_id": run_id, "reviewed": True, "reviewed_by": current_user["username"]}
 
 
 @router.get("/oid/{run_object_id}/krona", summary="Serve Krona HTML by run ObjectId")
