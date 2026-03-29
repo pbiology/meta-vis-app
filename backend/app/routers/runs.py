@@ -1,4 +1,4 @@
-# app/routers/runs.py
+# app/routers/cases.py
 
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
@@ -11,14 +11,14 @@ from typing import Optional
 from app.database import get_db
 from app.auth.utils import get_current_user
 
-router = APIRouter(prefix="/runs", tags=["runs"])
+router = APIRouter(prefix="/cases", tags=["cases"])
 
 
 class ReviewPayload(BaseModel):
     notes: Optional[str] = None
 
 
-def _serialise_run(doc: dict) -> dict:
+def _serialise_case(doc: dict) -> dict:
     doc["_id"] = str(doc["_id"])
     if "sample_ids" in doc:
         doc["sample_ids"] = [str(sid) for sid in doc["sample_ids"]]
@@ -33,39 +33,39 @@ def _serialise_sample(doc: dict) -> dict:
     return doc
 
 
-@router.get("", summary="List all runs")
-async def list_runs(
+@router.get("", summary="List all cases")
+async def list_cases(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
     docs = await db["runs"].find().sort("ingested_at", -1).to_list(length=200)
-    return [_serialise_run(d) for d in docs]
+    return [_serialise_case(d) for d in docs]
 
 
-@router.get("/{run_id}", summary="Get a single run")
-async def get_run(
-    run_id: str,
+@router.get("/{case_id}", summary="Get a single case")
+async def get_case(
+    case_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    doc = await db["runs"].find_one({"run_id": run_id})
+    doc = await db["runs"].find_one({"run_id": case_id})
     if not doc:
-        raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
-    return _serialise_run(doc)
+        raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
+    return _serialise_case(doc)
 
 
-@router.get("/{run_id}/samples", summary="List samples for a run")
-async def list_samples_for_run(
-    run_id: str,
+@router.get("/{case_id}/samples", summary="List samples for a case")
+async def list_samples_for_case(
+    case_id: str,
     type: str = None,
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    run = await db["runs"].find_one({"run_id": run_id})
-    if not run:
-        raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
+    case = await db["runs"].find_one({"run_id": case_id})
+    if not case:
+        raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
 
-    query: dict = {"run_id": run["_id"]}
+    query: dict = {"run_id": case["_id"]}
     if type == "controls":
         query["sample_type"] = {"$in": ["positive_ctrl", "negative_ctrl"]}
     elif type == "test":
@@ -79,32 +79,32 @@ async def list_samples_for_run(
     return [_serialise_sample(d) for d in docs]
 
 
-@router.get("/{run_id}/krona", summary="Serve Krona HTML for a run")
+@router.get("/{case_id}/krona", summary="Serve Krona HTML for a case")
 async def get_krona(
-    run_id: str,
+    case_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    run = await db["runs"].find_one({"run_id": run_id})
-    if not run:
-        raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
+    case = await db["runs"].find_one({"run_id": case_id})
+    if not case:
+        raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
 
-    doc = await db["krona_files"].find_one({"run_id": run["_id"]})
+    doc = await db["krona_files"].find_one({"run_id": case["_id"]})
     if not doc:
-        raise HTTPException(status_code=404, detail="No Krona file stored for this run")
+        raise HTTPException(status_code=404, detail="No Krona file stored for this case")
 
     return HTMLResponse(content=doc["html"])
 
 
-@router.patch("/{run_id}/review", summary="Mark a case as reviewed by the current user")
-async def review_run(
-    run_id: str,
+@router.patch("/{case_id}/review", summary="Mark a case as reviewed by the current user")
+async def review_case(
+    case_id: str,
     payload: ReviewPayload,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
     result = await db["runs"].update_one(
-        {"run_id": run_id},
+        {"run_id": case_id},
         {
             "$set": {
                 "review.reviewed":    True,
@@ -115,23 +115,23 @@ async def review_run(
         },
     )
     if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
-    return {"run_id": run_id, "reviewed": True, "reviewed_by": current_user["username"]}
+        raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
+    return {"case_id": case_id, "reviewed": True, "reviewed_by": current_user["username"]}
 
 
-@router.get("/oid/{run_object_id}/krona", summary="Serve Krona HTML by run ObjectId")
+@router.get("/oid/{case_object_id}/krona", summary="Serve Krona HTML by case ObjectId")
 async def get_krona_by_oid(
-    run_object_id: str,
+    case_object_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
     try:
-        oid = ObjectId(run_object_id)
+        oid = ObjectId(case_object_id)
     except Exception:
-        raise HTTPException(status_code=422, detail="Invalid run ObjectId")
+        raise HTTPException(status_code=422, detail="Invalid case ObjectId")
 
     doc = await db["krona_files"].find_one({"run_id": oid})
     if not doc:
-        raise HTTPException(status_code=404, detail="No Krona file stored for this run")
+        raise HTTPException(status_code=404, detail="No Krona file stored for this case")
 
     return HTMLResponse(content=doc["html"])

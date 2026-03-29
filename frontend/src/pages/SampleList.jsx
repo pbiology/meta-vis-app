@@ -45,7 +45,7 @@ export default function SampleList() {
       list = list.filter(s =>
         s.sample?.sample_id?.toLowerCase().includes(q) ||
         s.subject_id?.toLowerCase().includes(q) ||
-        s.run_id_str?.toLowerCase().includes(q)
+        s.case_id?.toLowerCase().includes(q)
       )
     }
 
@@ -134,7 +134,7 @@ export default function SampleList() {
                       {s.order_date ?? '—'}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-400 font-mono">
-                      {s.run_id_str ?? '—'}
+                      {s.case_id ?? '—'}
                     </td>
                     <td className="px-4 py-3">
                       <Badge type={s.sample_type} />

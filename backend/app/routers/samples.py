@@ -89,19 +89,19 @@ async def review_sample(
     return {"sample_id": sample_id, "reviewed": True, "reviewed_by": current_user["username"]}
 
 
-@router.get("/{sample_id}/krona", summary="Serve Krona HTML for the run this sample belongs to")
+@router.get("/{sample_id}/krona", summary="Serve Krona HTML for the case this sample belongs to")
 async def get_krona(
     sample_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
     from fastapi.responses import HTMLResponse
-    # Krona is stored at run level, not per-sample — resolve via sample's run_id
+    # Krona is stored at case level, not per-sample — resolve via sample's run_id
     sample = await db["samples"].find_one({"_id": _oid(sample_id)}, {"run_id": 1, "has_krona": 1})
     if not sample:
         raise HTTPException(status_code=404, detail=f"Sample '{sample_id}' not found")
     if not sample.get("has_krona"):
-        raise HTTPException(status_code=404, detail="No Krona file associated with this sample's run")
+        raise HTTPException(status_code=404, detail="No Krona file associated with this sample's case")
     doc = await db["krona_files"].find_one({"run_id": sample["run_id"]})
     if not doc:
         raise HTTPException(status_code=404, detail="Krona file not found in database")

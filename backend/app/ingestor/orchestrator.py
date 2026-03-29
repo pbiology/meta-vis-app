@@ -1,4 +1,6 @@
 # app/ingestor/orchestrator.py
+# Note: MongoDB collection is still named 'runs' — changing the collection name
+# would require a migration. The application-level term is 'case'.
 
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,12 +27,12 @@ async def _upsert_subject(db: AsyncIOMotorDatabase, subject_id: str) -> ObjectId
 
 async def _store_krona(
     db: AsyncIOMotorDatabase,
-    run_id: ObjectId,
+    case_object_id: ObjectId,
     krona_path: str,
 ) -> None:
     """
     Read Krona HTML from disk at ingest time and store in MongoDB.
-    Linked to the run, not individual samples.
+    Linked to the case, not individual samples.
     Filesystem is only accessed here — never at query time.
     """
     path = Path(krona_path)
@@ -38,9 +40,9 @@ async def _store_krona(
         raise FileNotFoundError(f"Krona file not found: {krona_path}")
     html = path.read_text(encoding="utf-8")
     await db["krona_files"].find_one_and_replace(
-        {"run_id": run_id},
+        {"run_id": case_object_id},
         {
-            "run_id":    run_id,
+            "run_id":    case_object_id,
             "html":      html,
             "stored_at": datetime.now(timezone.utc),
         },
@@ -76,27 +78,27 @@ async def _load_superkingdom_map(
     return {n["taxon_id"]: n["superkingdom"] for n in nodes}
 
 
-async def ingest_run(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
+async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     now = datetime.now(timezone.utc)
 
-    # Load superkingdom map once for the entire run
+    # Load superkingdom map once for the entire case
     superkingdom_map = await _load_superkingdom_map(db, request.taxonomy_db)
 
-    # Read pipeline outputs once — shared across all samples in the run
+    # Read pipeline outputs once — shared across all samples in the case
     pipeline_info = read_pipeline_info(request.pipeline_info_path)
     qc_data       = read_multiqc(request.multiqc_path)
 
     has_krona = bool(request.krona_path)
 
-    # Guard against duplicate run_id (see TECHNICAL_DEBT.md)
-    existing_run = await db["runs"].find_one({"run_id": request.run_id})
-    if existing_run:
+    # Guard against duplicate case ID (see TECHNICAL_DEBT.md)
+    existing_case = await db["runs"].find_one({"run_id": request.run_id})
+    if existing_case:
         raise ValueError(
-            f"Run '{request.run_id}' already exists (ObjectId: {existing_run['_id']}). "
-            f"Delete the existing run first, or use a unique run_id."
+            f"Case '{request.run_id}' already exists (ObjectId: {existing_case['_id']}). "
+            f"Delete the existing case first, or use a unique run_id."
         )
 
-    run_doc = {
+    case_doc = {
         "run_id":      request.run_id,
         "ingested_at": now,
         "sample_ids":  [],
@@ -109,12 +111,12 @@ async def ingest_run(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             "notes":       None,
         },
     }
-    run_result    = await db["runs"].insert_one(run_doc)
-    run_object_id = run_result.inserted_id
+    case_result    = await db["runs"].insert_one(case_doc)
+    case_object_id = case_result.inserted_id
 
-    # Store Krona HTML in DB if provided — once per run
+    # Store Krona HTML in DB if provided — once per case
     if request.krona_path:
-        await _store_krona(db, run_object_id, request.krona_path)
+        await _store_krona(db, case_object_id, request.krona_path)
 
     sample_ids = []
 
@@ -174,13 +176,13 @@ async def ingest_run(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
         sample_ids.append(sample_result.inserted_id)
 
     await db["runs"].update_one(
-        {"_id": run_object_id},
+        {"_id": case_object_id},
         {"$set": {"sample_ids": sample_ids}},
     )
 
     return {
-        "run_id":           request.run_id,
-        "run_object_id":    str(run_object_id),
+        "case_id":          request.run_id,
+        "case_object_id":   str(case_object_id),
         "samples_ingested": len(sample_ids),
         "sample_ids":       [str(sid) for sid in sample_ids],
     }

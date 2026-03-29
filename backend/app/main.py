@@ -8,7 +8,7 @@ from pathlib import Path
 
 from app.database import connect_db, close_db
 from app.config import settings
-from app.routers import auth, ingest, runs, samples, subjects, taxonomy
+from app.routers import auth, ingest, cases, samples, subjects, taxonomy
 
 
 @asynccontextmanager
@@ -34,7 +34,7 @@ app.add_middleware(
 
 # API routers
 app.include_router(auth.router,     prefix="/api/v1")
-app.include_router(runs.router,     prefix="/api/v1")
+app.include_router(cases.router,    prefix="/api/v1")
 app.include_router(samples.router,  prefix="/api/v1")
 app.include_router(subjects.router, prefix="/api/v1")
 app.include_router(ingest.router,   prefix="/api/v1")

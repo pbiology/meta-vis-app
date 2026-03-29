@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getRuns, getRunSamples } from '../api/runs'
+import { getCases, getCaseSamples } from '../api/runs'
 import Badge from '../components/Badge'
 
 function fmt(n) {
@@ -27,12 +27,12 @@ export default function CaseList() {
   useEffect(() => {
     async function load() {
       try {
-        const runsData = await getRuns()
+        const casesData = await getCases()
         const enriched = await Promise.all(
-          runsData.map(async run => {
-            const samples = await getRunSamples(run.run_id)
+          casesData.map(async c => {
+            const samples = await getCaseSamples(c.run_id)
             const testSamples = samples.filter(s => s.sample_type === 'test')
-            return { ...run, samples, testSamples, date: earliestOrderDate(samples) }
+            return { ...c, samples, testSamples, date: earliestOrderDate(samples) }
           })
         )
         setCases(enriched)
@@ -98,7 +98,7 @@ export default function CaseList() {
                     onClick={() => navigate(`/cases/${c.run_id}`)}
                     className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
                   >
-                    <td className="px-4 py-3 font-mono text-xs text-gray-700">{c.run_id}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-700">{c.run_id}</td> {/* run_id is the case identifier in the DB */}
                     <td className="px-4 py-3 text-xs text-gray-500">{c.date ?? '—'}</td>
                     <td className="px-4 py-3 text-xs text-gray-500">
                       {c.testSamples.length} test{c.testSamples.length !== 1 ? 's' : ''}

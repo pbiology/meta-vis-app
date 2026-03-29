@@ -26,7 +26,7 @@ export default function App() {
       >
         <Route index element={<Navigate to="/cases" replace />} />
         <Route path="cases" element={<CaseList />} />
-        <Route path="cases/:runId" element={<CaseDetail />} />
+        <Route path="cases/:caseId" element={<CaseDetail />} />
         <Route path="samples" element={<SampleList />} />
         <Route path="samples/:sampleId" element={<SampleDetail />} />
       </Route>

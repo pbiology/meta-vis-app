@@ -3,7 +3,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.database import get_db
 from app.models.sample import IngestRequest
-from app.ingestor.orchestrator import ingest_run
+from app.ingestor.orchestrator import ingest_case
 
 router = APIRouter()
 
@@ -14,7 +14,7 @@ async def ingest(
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     try:
-        result = await ingest_run(request, db)
+        result = await ingest_case(request, db)
         return result
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
