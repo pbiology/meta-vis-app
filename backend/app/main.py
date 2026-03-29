@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.database import connect_db, close_db
-from app.routers import ingest, runs, samples, krona
+from app.routers import ingest, runs, samples
 
 
 @asynccontextmanager
@@ -18,10 +18,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.include_router(ingest.router, prefix="/api/v1", tags=["ingest"])
-app.include_router(runs.router, prefix="/api/v1", tags=["runs"])
-app.include_router(samples.router, prefix="/api/v1", tags=["samples"])
-app.include_router(krona.router, prefix="/api/v1", tags=["krona"])
+app.include_router(ingest.router, prefix="/api/v1")
+app.include_router(runs.router, prefix="/api/v1")
+app.include_router(samples.router, prefix="/api/v1")
 
 
 @app.get("/health")
