@@ -1,90 +1,86 @@
-from datetime import datetime
-from motor.motor_asyncio import AsyncIOMotorDatabase
-from bson import ObjectId
+# app/ingestor/orchestrator.py
 
+from datetime import datetime, timezone
+from bson import ObjectId
+from motor.motor_asyncio import AsyncIOMotorDatabase
+
+from app.models.sample import IngestRequest
 from app.ingestor.taxpasta_reader import read_taxpasta
 from app.ingestor.multiqc_reader import read_multiqc
 from app.ingestor.pipeline_info_reader import read_pipeline_info
-from app.models.sample import IngestRequest
+
+
+async def _upsert_subject(db: AsyncIOMotorDatabase, subject_id: str) -> ObjectId:
+    result = await db["subjects"].find_one({"subject_id": subject_id})
+    if result:
+        return result["_id"]
+    insert = await db["subjects"].insert_one({
+        "subject_id": subject_id,
+        "created_at": datetime.now(timezone.utc),
+    })
+    return insert.inserted_id
 
 
 async def ingest_run(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
+    now = datetime.now(timezone.utc)
+
     run_doc = {
         "run_id": request.run_id,
-        "ingested_at": datetime.utcnow(),
+        "ingested_at": now,
         "sample_ids": [],
     }
-    run_result = await db.runs.insert_one(run_doc)
+    run_result = await db["runs"].insert_one(run_doc)
     run_object_id = run_result.inserted_id
 
-    inserted_sample_ids = []
+    sample_ids = []
 
-    for sample_request in request.samples:
-        patient_id = await _upsert_patient(sample_request.patient_id, db)
+    for s in request.samples:
+        subject_object_id = await _upsert_subject(db, s.subject_id)
 
-        profile = read_taxpasta(
-            sample_request.taxpasta_path,
-            column=sample_request.taxpasta_column,
-        )
-
-        qc_stats = read_multiqc(
-            sample_request.multiqc_path,
-            taxpasta_column=sample_request.taxpasta_column,
-        )
-
-        pipeline_info = read_pipeline_info(sample_request.pipeline_info_path)
+        profile = read_taxpasta(s.taxpasta_path, s.taxpasta_column)
+        qc = read_multiqc(s.multiqc_path, s.taxpasta_column)
+        pipeline_info = read_pipeline_info(s.pipeline_info_path)
 
         sample_doc = {
             "run_id": run_object_id,
-            "patient_id": patient_id,
-            "sample_type": sample_request.sample_type,
-            "sample": sample_request.sample.model_dump(),
-            "library_preparation": (
-                sample_request.library_preparation.model_dump()
-                if sample_request.library_preparation else None
-            ),
-            "sequencing": (
-                sample_request.sequencing.model_dump()
-                if sample_request.sequencing else None
-            ),
+            "subject_id": subject_object_id,
+            "sample_type": s.sample_type,
+            "order_date": s.order_date.isoformat() if s.order_date else None,
+            "sample": s.sample.model_dump(),
+            "library_preparation": s.library_preparation.model_dump() if s.library_preparation else None,
+            "sequencing": s.sequencing.model_dump() if s.sequencing else None,
             "taxprofiler": {
-                **qc_stats,
+                **qc,
                 "pipeline_info": pipeline_info,
             },
             "profiles": [
                 {
-                    "classifier": sample_request.classifier,
-                    "classifier_db": sample_request.classifier_db,
+                    "classifier": s.classifier,
+                    "classifier_db": s.classifier_db,
                     "profile": profile,
                 }
             ],
-            "krona_path": sample_request.krona_path,
-            "ingested_at": datetime.utcnow(),
+            "krona_path": s.krona_path,
+            "review": {
+                "reviewed": False,
+                "reviewed_by": None,
+                "reviewed_at": None,
+                "notes": None,
+            },
+            "ingested_at": now,
         }
 
-        sample_result = await db.samples.insert_one(sample_doc)
-        inserted_sample_ids.append(sample_result.inserted_id)
+        sample_result = await db["samples"].insert_one(sample_doc)
+        sample_ids.append(sample_result.inserted_id)
 
-    await db.runs.update_one(
+    await db["runs"].update_one(
         {"_id": run_object_id},
-        {"$set": {"sample_ids": inserted_sample_ids}},
+        {"$set": {"sample_ids": sample_ids}},
     )
 
     return {
         "run_id": request.run_id,
         "run_object_id": str(run_object_id),
-        "samples_ingested": len(inserted_sample_ids),
-        "sample_ids": [str(sid) for sid in inserted_sample_ids],
+        "samples_ingested": len(sample_ids),
+        "sample_ids": [str(sid) for sid in sample_ids],
     }
-
-
-async def _upsert_patient(patient_id: str, db: AsyncIOMotorDatabase) -> ObjectId:
-    existing = await db.patients.find_one({"patient_id": patient_id})
-    if existing:
-        return existing["_id"]
-
-    result = await db.patients.insert_one({
-        "patient_id": patient_id,
-        "created_at": datetime.utcnow(),
-    })
-    return result.inserted_id

@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     static_files_root: str
     app_env: str = "development"
     log_level: str = "info"
+    jwt_secret: str = "change-me-in-production"
 
     model_config = SettingsConfigDict(
         env_file=".env",
