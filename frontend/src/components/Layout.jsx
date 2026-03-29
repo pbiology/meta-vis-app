@@ -49,6 +49,16 @@ export default function Layout() {
               </svg>
             }
           />
+          <NavItem
+            to="/runs"
+            label="Runs"
+            icon={
+              <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+                <rect x="1" y="3" width="14" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
+                <path d="M5 7h6M5 9.5h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+              </svg>
+            }
+          />
         </nav>
 
         <div className="px-4 py-4 border-t border-gray-100">
