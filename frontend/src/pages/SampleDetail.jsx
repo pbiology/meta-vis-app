@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getSample, getProfile, reviewSample, getRunControls } from '../api/samples'
+import { getSample, getProfile, reviewSample } from '../api/samples'
 import Badge from '../components/Badge'
 import MetricCard from '../components/MetricCard'
 
@@ -26,6 +26,27 @@ function AbundanceBar({ value, max }) {
   )
 }
 
+const KINGDOM_BADGE = {
+  Bacteria:  { bg: 'bg-blue-50',   text: 'text-blue-700' },
+  Viruses:   { bg: 'bg-red-50',    text: 'text-red-700'  },
+  Eukaryota: { bg: 'bg-amber-50',  text: 'text-amber-700'},
+  Archaea:   { bg: 'bg-purple-50', text: 'text-purple-700'},
+}
+
+function KingdomBadge({ kingdom }) {
+  const style = KINGDOM_BADGE[kingdom]
+  if (!style) return (
+    <span className="inline-block text-xs px-1.5 py-0.5 rounded bg-gray-50 text-gray-400">
+      {kingdom ?? 'Unknown'}
+    </span>
+  )
+  return (
+    <span className={`inline-block text-xs px-1.5 py-0.5 rounded ${style.bg} ${style.text}`}>
+      {kingdom}
+    </span>
+  )
+}
+
 export default function SampleDetail() {
   const { sampleId } = useParams()
   const navigate = useNavigate()
@@ -36,18 +57,19 @@ export default function SampleDetail() {
   const [reviewing, setReviewing] = useState(false)
   const [error, setError] = useState(null)
 
+  // Taxonomy table state
+  const [taxSearch, setTaxSearch] = useState('')
+  const [taxKingdom, setTaxKingdom] = useState('')
+  const [taxSort, setTaxSort] = useState({ col: 'abundance', dir: -1 })
+  const [taxPage, setTaxPage] = useState(0)
+  const TAX_PER_PAGE = 50
+
   useEffect(() => {
     async function load() {
       try {
         const [s, p] = await Promise.all([getSample(sampleId), getProfile(sampleId)])
         setSample(s)
         setProfile(p)
-        // Fetch controls for this run
-        if (s.run_id_str || s.run_id) {
-          // run_id_str might not be set here — we need to find run_id string
-          // The sample's run_id is an ObjectId string; fetch controls via run_id_str if available
-          // We'll store it from the full sample document indirectly
-        }
       } catch {
         setError('Failed to load sample.')
       } finally {
@@ -56,14 +78,6 @@ export default function SampleDetail() {
     }
     load()
   }, [sampleId])
-
-  // Fetch controls once we have run info
-  useEffect(() => {
-    if (!sample) return
-    // The sample detail endpoint doesn't include run_id_str, so we skip controls
-    // if we don't have it. This is improved once runs endpoint is cross-referenced.
-    // For now, controls can be loaded if the sample list page passed state.
-  }, [sample])
 
   async function handleReview() {
     setReviewing(true)
@@ -87,19 +101,65 @@ export default function SampleDetail() {
     <div className="flex items-center justify-center h-full text-sm text-red-500">{error}</div>
   )
 
-  const qc = sample?.taxprofiler
-  const k2 = qc?.kraken2
-  const fp = qc?.fastp
-  const fq = qc?.fastqc
-  const bt = qc?.bowtie2
+  const qc       = sample?.taxprofiler
+  const k2       = qc?.kraken2
+  const fp       = qc?.fastp
+  const bt       = qc?.bowtie2
   const reviewed = sample?.review?.reviewed
 
-  // Top organisms from first profile
-  const topOrganisms = profile?.profiles?.[0]?.profile
-    ?.slice()
-    .sort((a, b) => b.abundance - a.abundance)
-    .slice(0, 10) ?? []
-  const maxAbundance = topOrganisms[0]?.abundance ?? 1
+  // Full profile from first classifier
+  const allEntries = profile?.profiles?.[0]?.profile ?? []
+
+  // Host reads for non-host % calculation
+  const hostReads      = allEntries.find(t => t.name === 'Homo sapiens')?.abundance ?? 0
+  const unclassReads   = allEntries.filter(t => t.name === 'unclassified').reduce((a, t) => a + t.abundance, 0)
+  const totalReads     = allEntries.reduce((a, t) => a + t.abundance, 0)
+  const nonHostTotal   = totalReads - hostReads - unclassReads
+
+  // Filter out host + unclassified for the table
+  const HOST_IDS = new Set([9606, 1, 0, 131567])
+  const tableEntries = allEntries.filter(t =>
+    !HOST_IDS.has(t.taxon_id) &&
+    t.name !== 'unclassified' &&
+    !t.name?.startsWith('unclassified ')
+  )
+
+  // Apply search + kingdom filter
+  const filtered = tableEntries.filter(t => {
+    if (taxSearch && !t.name?.toLowerCase().includes(taxSearch.toLowerCase())) return false
+    if (taxKingdom && t.superkingdom !== taxKingdom) return false
+    return true
+  })
+
+  // Sort
+  const sorted = [...filtered].sort((a, b) => {
+    if (taxSort.col === 'name')        return taxSort.dir * a.name.localeCompare(b.name)
+    if (taxSort.col === 'superkingdom') return taxSort.dir * (a.superkingdom ?? '').localeCompare(b.superkingdom ?? '')
+    return taxSort.dir * (a.abundance - b.abundance)
+  })
+
+  const totalPages  = Math.ceil(sorted.length / TAX_PER_PAGE)
+  const pageEntries = sorted.slice(taxPage * TAX_PER_PAGE, (taxPage + 1) * TAX_PER_PAGE)
+  const maxAbundance = tableEntries[0] ? Math.max(...tableEntries.map(t => t.abundance)) : 1
+
+  function toggleSort(col) {
+    setTaxSort(prev => prev.col === col
+      ? { col, dir: prev.dir * -1 }
+      : { col, dir: col === 'name' || col === 'superkingdom' ? 1 : -1 }
+    )
+    setTaxPage(0)
+  }
+
+  function sortArrow(col) {
+    if (taxSort.col !== col) return null
+    return taxSort.dir === 1 ? ' ↑' : ' ↓'
+  }
+
+  // Stats
+  const kingdoms = ['Bacteria', 'Viruses', 'Eukaryota', 'Archaea']
+  const kingdomCounts = Object.fromEntries(
+    kingdoms.map(k => [k, tableEntries.filter(t => t.superkingdom === k).length])
+  )
 
   return (
     <div className="flex flex-col h-full">
@@ -143,97 +203,168 @@ export default function SampleDetail() {
         <section>
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">QC metrics</p>
           <div className="grid grid-cols-4 gap-2.5">
-            <MetricCard label="Total reads" value={fp ? fmt(fp.total_reads_before_filtering) : '—'} sub="before filtering" />
-            <MetricCard label="Passed filter" value={fp ? fmt(fp.passed_filter_reads) : '—'} sub={fp ? `${fmtPct((fp.passed_filter_reads / fp.total_reads_before_filtering) * 100)} of raw` : ''} />
-            <MetricCard label="Host removed" value={bt ? fmtPct(bt.overall_alignment_rate) : '—'} sub="bowtie2 alignment" />
-            <MetricCard label="Unclassified" value={fmtPct(k2?.pct_unclassified)} sub={k2 ? `${fmt(k2.unclassified_reads)} reads` : ''} warn={(k2?.pct_unclassified ?? 0) > 20} />
-            <MetricCard label="Q20 rate" value={fmtPct(fp?.q20_rate ? fp.q20_rate * 100 : null)} sub="fastp" />
-            <MetricCard label="Q30 rate" value={fmtPct(fp?.q30_rate ? fp.q30_rate * 100 : null)} sub="fastp" />
-            <MetricCard label="Species" value={fmt(k2?.num_species)} sub="kraken2" />
-            <MetricCard label="Genera" value={fmt(k2?.num_genera)} sub="kraken2" />
+            <MetricCard label="Total reads"    value={fp ? fmt(fp.total_reads_before_filtering) : '—'} sub="before filtering" />
+            <MetricCard label="Passed filter"  value={fp ? fmt(fp.passed_filter_reads) : '—'} sub={fp ? `${fmtPct((fp.passed_filter_reads / fp.total_reads_before_filtering) * 100)} of raw` : ''} />
+            <MetricCard label="Host removed"   value={bt ? fmtPct(bt.overall_alignment_rate) : '—'} sub="bowtie2 alignment" />
+            <MetricCard label="Unclassified"   value={fmtPct(k2?.pct_unclassified)} sub={k2 ? `${fmt(k2.unclassified_reads)} reads` : ''} warn={(k2?.pct_unclassified ?? 0) > 20} />
+            <MetricCard label="Q20 rate"       value={fmtPct(fp?.q20_rate ? fp.q20_rate * 100 : null)} sub="fastp" />
+            <MetricCard label="Q30 rate"       value={fmtPct(fp?.q30_rate ? fp.q30_rate * 100 : null)} sub="fastp" />
+            <MetricCard label="Species"        value={fmt(k2?.num_species)} sub="kraken2" />
+            <MetricCard label="Genera"         value={fmt(k2?.num_genera)} sub="kraken2" />
           </div>
         </section>
 
-        {/* Taxonomy + controls side by side */}
-        <div className="grid grid-cols-2 gap-4">
-
-          {/* Top organisms */}
+        {/* Controls placeholder */}
+        {controls.length === 0 && (
           <section className="bg-white border border-gray-100 rounded-xl p-4">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">
-              Top organisms
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Controls comparison</p>
+            <p className="text-xs text-gray-300">Navigate to this sample from a run to load controls context.</p>
+          </section>
+        )}
+
+        {/* Taxonomy table */}
+        <section className="bg-white border border-gray-100 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">
+              Taxonomy
               {profile?.profiles?.[0] && (
                 <span className="ml-2 normal-case font-normal text-gray-300">
                   {profile.profiles[0].classifier} · {profile.profiles[0].classifier_db}
                 </span>
               )}
             </p>
-            {topOrganisms.length === 0 ? (
-              <p className="text-xs text-gray-400">No profile data available.</p>
-            ) : (
-              <table className="w-full">
-                <thead>
-                  <tr>
-                    <th className="text-left text-xs font-medium text-gray-400 pb-2">Taxon</th>
-                    <th className="text-right text-xs font-medium text-gray-400 pb-2 pr-2">Reads</th>
-                    <th className="text-left text-xs font-medium text-gray-400 pb-2 pl-2">Abundance</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {topOrganisms.map((t, i) => (
-                    <tr key={i} className="border-t border-gray-50">
-                      <td className="py-2 text-xs text-gray-700 pr-3 italic">{t.name}</td>
-                      <td className="py-2 text-xs text-gray-500 text-right pr-2">{fmt(t.abundance)}</td>
-                      <td className="py-2 pl-2">
-                        <AbundanceBar value={t.abundance} max={maxAbundance} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </section>
+            {/* Kingdom counts */}
+            {kingdoms.map(k => kingdomCounts[k] > 0 && (
+              <KingdomBadge key={k} kingdom={k} />
+            ))}
+          </div>
 
-          {/* Controls comparison */}
-          <section className="bg-white border border-gray-100 rounded-xl p-4">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Controls comparison</p>
-            {controls.length === 0 ? (
-              <div className="text-xs text-gray-400 space-y-1">
-                <p>Controls are fetched from the same run.</p>
-                <p className="text-gray-300">Navigate to this sample from the sample list to load run context, or view the run directly.</p>
-              </div>
-            ) : (
-              <table className="w-full">
+          {/* Stats row */}
+          <div className="grid grid-cols-4 gap-2 mb-3">
+            <div className="bg-gray-50 rounded-lg px-3 py-2">
+              <p className="text-xs text-gray-400 mb-0.5">Total classified</p>
+              <p className="text-sm font-medium text-gray-700">{fmt(totalReads - unclassReads)}</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg px-3 py-2">
+              <p className="text-xs text-gray-400 mb-0.5">Non-host reads</p>
+              <p className="text-sm font-medium text-gray-700">{fmt(nonHostTotal)}</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg px-3 py-2">
+              <p className="text-xs text-gray-400 mb-0.5">Organisms shown</p>
+              <p className="text-sm font-medium text-gray-700">{fmt(filtered.length)}</p>
+            </div>
+            <div className="bg-gray-50 rounded-lg px-3 py-2">
+              <p className="text-xs text-gray-400 mb-0.5">Page</p>
+              <p className="text-sm font-medium text-gray-700">{taxPage + 1} / {Math.max(1, totalPages)}</p>
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div className="flex gap-2 mb-3">
+            <input
+              type="text"
+              placeholder="Search organism…"
+              value={taxSearch}
+              onChange={e => { setTaxSearch(e.target.value); setTaxPage(0) }}
+              className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-blue-300"
+            />
+            <select
+              value={taxKingdom}
+              onChange={e => { setTaxKingdom(e.target.value); setTaxPage(0) }}
+              className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-blue-300 bg-white"
+            >
+              <option value="">All kingdoms</option>
+              <option value="Bacteria">Bacteria</option>
+              <option value="Viruses">Viruses</option>
+              <option value="Eukaryota">Eukaryota</option>
+              <option value="Archaea">Archaea</option>
+            </select>
+          </div>
+
+          {/* Table */}
+          {pageEntries.length === 0 ? (
+            <p className="text-xs text-gray-400 py-4 text-center">No organisms match your filters.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left" style={{ tableLayout: 'fixed' }}>
+                <colgroup>
+                  <col style={{ width: '44%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '28%' }} />
+                </colgroup>
                 <thead>
                   <tr>
-                    <th className="text-left text-xs font-medium text-gray-400 pb-2">Metric</th>
-                    {controls.map(c => (
-                      <th key={c._id} className="text-right text-xs font-medium text-gray-400 pb-2">
-                        {c.sample?.sample_id}
+                    {[
+                      { label: 'Organism',   col: 'name'        },
+                      { label: 'Kingdom',    col: 'superkingdom'},
+                      { label: 'Reads',      col: 'abundance'   },
+                      { label: '% non-host', col: null          },
+                    ].map(({ label, col }) => (
+                      <th
+                        key={label}
+                        onClick={col ? () => toggleSort(col) : undefined}
+                        className={`pb-2 text-xs font-medium text-gray-400 border-b border-gray-100 ${col ? 'cursor-pointer hover:text-gray-600 select-none' : ''}`}
+                      >
+                        {label}{col ? sortArrow(col) : ''}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {[
-                    { label: 'Unclassified %', fn: s => fmtPct(s.taxprofiler?.kraken2?.pct_unclassified) },
-                    { label: 'Species', fn: s => fmt(s.taxprofiler?.kraken2?.num_species) },
-                    { label: 'Q30 rate', fn: s => fmtPct(s.taxprofiler?.fastp?.q30_rate ? s.taxprofiler.fastp.q30_rate * 100 : null) },
-                  ].map(row => (
-                    <tr key={row.label} className="border-t border-gray-50">
-                      <td className="py-2 text-xs text-gray-500">{row.label}</td>
-                      {controls.map(c => (
-                        <td key={c._id} className="py-2 text-xs text-gray-700 text-right">
-                          {row.fn(c)}
+                  {pageEntries.map((t, i) => {
+                    const pct = nonHostTotal > 0 ? (t.abundance / nonHostTotal) * 100 : 0
+                    const pctStr = pct < 0.001 ? '<0.001%' : `${pct.toFixed(3)}%`
+                    return (
+                      <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
+                        <td className="py-2 pr-3 text-xs text-gray-700 italic truncate">{t.name}</td>
+                        <td className="py-2 pr-3">
+                          <KingdomBadge kingdom={t.superkingdom} />
                         </td>
-                      ))}
-                    </tr>
-                  ))}
+                        <td className="py-2 pr-3 text-xs text-gray-500 tabular-nums">{fmt(t.abundance)}</td>
+                        <td className="py-2">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 bg-gray-100 rounded-full h-1.5 min-w-0">
+                              <div
+                                className="bg-blue-400 h-1.5 rounded-full"
+                                style={{ width: `${Math.min(100, (t.abundance / maxAbundance) * 100).toFixed(1)}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-gray-400 tabular-nums flex-shrink-0 w-16 text-right">{pctStr}</span>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
-            )}
-          </section>
+            </div>
+          )}
 
-        </div>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2 mt-3 text-xs text-gray-400">
+              <button
+                onClick={() => setTaxPage(p => Math.max(0, p - 1))}
+                disabled={taxPage === 0}
+                className="px-2 py-1 border border-gray-200 rounded disabled:opacity-40 hover:bg-gray-50"
+              >
+                ← Prev
+              </button>
+              <span>
+                {taxPage * TAX_PER_PAGE + 1}–{Math.min((taxPage + 1) * TAX_PER_PAGE, sorted.length)} of {sorted.length}
+              </span>
+              <button
+                onClick={() => setTaxPage(p => Math.min(totalPages - 1, p + 1))}
+                disabled={taxPage >= totalPages - 1}
+                className="px-2 py-1 border border-gray-200 rounded disabled:opacity-40 hover:bg-gray-50"
+              >
+                Next →
+              </button>
+            </div>
+          )}
+        </section>
+
       </div>
     </div>
   )
