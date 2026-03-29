@@ -72,12 +72,30 @@ async def list_samples_for_case(
     elif type == "test":
         query["sample_type"] = "test"
 
-    docs = await db["samples"].find(
-        query,
-        {"profiles": 0},    # exclude heavy profile data from list view
-    ).to_list(length=200)
+    docs = await db["samples"].find(query).to_list(length=200)
 
-    return [_serialise_sample(d) for d in docs]
+    HOST_TAXON_IDS = {9606, 1, 0, 131567}
+
+    def top_taxa(doc: dict, n: int = 3) -> list:
+        entries = doc.get("profiles", [{}])[0].get("profile", []) if doc.get("profiles") else []
+        filtered = [
+            e for e in entries
+            if e.get("taxon_id") not in HOST_TAXON_IDS
+            and e.get("name") != "unclassified"
+            and not (e.get("name") or "").startswith("unclassified ")
+        ]
+        filtered.sort(key=lambda e: e.get("abundance", 0), reverse=True)
+        return [
+            {"name": e["name"], "superkingdom": e.get("superkingdom"), "abundance": e["abundance"]}
+            for e in filtered[:n]
+        ]
+
+    result = []
+    for doc in docs:
+        doc["top_taxa"] = top_taxa(doc)
+        doc.pop("profiles", None)
+        result.append(_serialise_sample(doc))
+    return result
 
 
 @router.get("/{case_id}/krona", summary="Serve Krona HTML for a case")
