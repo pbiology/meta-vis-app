@@ -1,23 +1,23 @@
 #!/usr/bin/env python
 """
-Ingest a taxprofiler run into meta-vis-app.
+Ingest a taxprofiler case into meta-vis-app.
 
-One call per run. All samples in the run share the same taxpasta, multiqc,
+One call per case. All samples in the case share the same taxpasta, multiqc,
 pipeline_info, and (optionally) krona files. Each sample is described
 explicitly with its taxpasta column, type, and material.
 
 Usage:
     python ingest.py \
-        --run-id run_2026_02_23 \
+        --case-id case_2026_02_23 \
         --taxonomy-db k2_pluspf \
         --taxpasta /path/to/kraken2_k2_pluspf.tsv \
         --multiqc  /path/to/multiqc_data.json \
         --pipeline-info /path/to/pipeline_info \
-        --krona    /path/to/run.krona.html \
-        --sample subject_id=S-001 sample_id=PE-04-28 column="PE-04-28_k2_pluspf.kraken2.kraken2.report" type=test material=DNA order_date=2026-02-20 \
-        --sample subject_id=S-001 sample_id=PE-04-28-RNA column="PE-04-28-RNA_k2_pluspf.kraken2.kraken2.report" type=test material=RNA order_date=2026-02-20 \
-        --sample sample_id=CTRL-DNA column="CTRL-DNA_k2_pluspf.kraken2.kraken2.report" type=positive_ctrl material=DNA \
-        --sample sample_id=CTRL-RNA column="CTRL-RNA_k2_pluspf.kraken2.kraken2.report" type=positive_ctrl material=RNA \
+        --krona    /path/to/kraken2_k2_pluspf.html \
+        --sample "subject_id=S-001 sample_id=PE-04-28 column=PE-04-28_k2_pluspf.kraken2.kraken2.report type=test material=DNA order_date=2026-02-20" \
+        --sample "subject_id=S-001 sample_id=EN-30-35 column=EN-30-35_k2_pluspf.kraken2.kraken2.report type=test material=RNA order_date=2026-02-20" \
+        --sample "sample_id=H2-17-32 column=H2-17-32_k2_pluspf.kraken2.kraken2.report type=positive_ctrl material=DNA" \
+        --sample "sample_id=VZ-20-28 column=VZ-20-28_k2_pluspf.kraken2.kraken2.report type=positive_ctrl material=RNA" \
         --password yourpassword
 """
 
@@ -74,16 +74,16 @@ def ingest(args):
     samples = [parse_sample(s) for s in args.sample]
 
     payload = {
-        "run_id":            args.run_id,
-        "taxonomy_db":       args.taxonomy_db,
-        "taxpasta_path":     args.taxpasta,
-        "multiqc_path":      args.multiqc,
+        "case_id":            args.case_id,
+        "taxonomy_db":        args.taxonomy_db,
+        "taxpasta_path":      args.taxpasta,
+        "multiqc_path":       args.multiqc,
         "pipeline_info_path": args.pipeline_info,
-        "krona_path":        args.krona,
-        "samples":           samples,
+        "krona_path":         args.krona,
+        "samples":            samples,
     }
 
-    print(f"Ingesting {len(samples)} sample(s) for run '{args.run_id}' ...")
+    print(f"Ingesting {len(samples)} sample(s) for case '{args.case_id}' ...")
 
     resp = requests.post(
         f"{args.url}/api/v1/ingest",
@@ -93,11 +93,11 @@ def ingest(args):
 
     if resp.status_code == 200:
         result = resp.json()
-        print(f"✓ Ingested run '{result['run_id']}'")
-        print(f"  Run ObjectId : {result['run_object_id']}")
-        print(f"  Samples      : {result['samples_ingested']}")
+        print(f"✓ Ingested case '{result['case_id']}'")
+        print(f"  Case ObjectId : {result['case_object_id']}")
+        print(f"  Samples       : {result['samples_ingested']}")
         for sid in result["sample_ids"]:
-            print(f"  Sample ID    : {sid}")
+            print(f"  Sample ID     : {sid}")
     else:
         print(f"Ingest failed ({resp.status_code}): {resp.text}")
         sys.exit(1)
@@ -105,21 +105,21 @@ def ingest(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Ingest a taxprofiler run into meta-vis-app",
+        description="Ingest a taxprofiler case into meta-vis-app",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    # Run-level
-    parser.add_argument("--run-id",         required=True,  help="Run identifier, e.g. run_2026_02_23")
+    # Case-level
+    parser.add_argument("--case-id",        required=True,  help="Case identifier, e.g. case_2026_02_23")
     parser.add_argument("--taxonomy-db",    default=None,   help="Name of a loaded taxonomy, e.g. k2_pluspf")
 
     # Shared pipeline outputs
     parser.add_argument("--taxpasta",       required=True,  help="Path to TAXPASTA TSV file (shared across all samples)")
     parser.add_argument("--multiqc",        required=True,  help="Path to multiqc_data.json (shared across all samples)")
     parser.add_argument("--pipeline-info",  required=True,  help="Path to pipeline_info directory (shared across all samples)")
-    parser.add_argument("--krona",          default=None,   help="Path to Krona HTML file for the run (optional)")
+    parser.add_argument("--krona",          default=None,   help="Path to Krona HTML file for the case (optional)")
 
-    # Per-sample — repeat --sample for each sample in the run
+    # Per-sample — repeat --sample for each sample in the case
     parser.add_argument(
         "--sample",
         action="append",
@@ -129,7 +129,7 @@ def main():
             "Sample descriptor as space-separated key=value pairs. "
             "Required keys: sample_id, column, type, material. "
             "Optional keys: subject_id, order_date. "
-            "Repeat --sample for each sample in the run."
+            "Repeat --sample for each sample in the case."
         ),
     )
 

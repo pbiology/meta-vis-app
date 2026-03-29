@@ -22,6 +22,7 @@ def _serialise_case(doc: dict) -> dict:
     doc["_id"] = str(doc["_id"])
     if "sample_ids" in doc:
         doc["sample_ids"] = [str(sid) for sid in doc["sample_ids"]]
+    # case_id is already a plain string — no conversion needed
     return doc
 
 
@@ -48,7 +49,7 @@ async def get_case(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    doc = await db["cases"].find_one({"run_id": case_id})
+    doc = await db["cases"].find_one({"case_id": case_id})
     if not doc:
         raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
     return _serialise_case(doc)
@@ -61,7 +62,7 @@ async def list_samples_for_case(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    case = await db["cases"].find_one({"run_id": case_id})
+    case = await db["cases"].find_one({"case_id": case_id})
     if not case:
         raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
 
@@ -85,7 +86,7 @@ async def get_krona(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    case = await db["cases"].find_one({"run_id": case_id})
+    case = await db["cases"].find_one({"case_id": case_id})
     if not case:
         raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
 
@@ -104,7 +105,7 @@ async def review_case(
     current_user: dict = Depends(get_current_user),
 ):
     result = await db["cases"].update_one(
-        {"run_id": case_id},
+        {"case_id": case_id},
         {
             "$set": {
                 "review.reviewed":    True,

@@ -24,7 +24,7 @@ All paths must be **absolute**. Run from the repo root.
 
 ```bash
 python ingest.py \
-  --run-id <run_id> \
+  --case-id <case_id> \
   --taxonomy-db <db_name> \
   --taxpasta  /abs/path/to/kraken2_<db>.tsv \
   --multiqc   /abs/path/to/multiqc_data.json \
@@ -60,7 +60,7 @@ The `column` value is the full taxprofiler-suffixed header from the TSV:
 
 ```bash
 python ingest.py \
-  --run-id run_2026_02_23_large \
+  --case-id run_2026_02_23_large \
   --taxonomy-db k2_pluspf \
   --taxpasta      /Users/anderslind/repos/meta-vis-app/backend/test-data/outTestLarge/taxpasta/kraken2_k2_pluspf.tsv \
   --multiqc       /Users/anderslind/repos/meta-vis-app/backend/test-data/outTestLarge/multiqc/multiqc_data/multiqc_data.json \

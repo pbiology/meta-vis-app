@@ -118,7 +118,7 @@ class ReviewStatus(BaseModel):
 # ---------------------------------------------------------------------------
 
 class SampleDocument(BaseModel):
-    run_id: ObjectId
+    case_id: ObjectId
     subject_id: Optional[ObjectId] = None   # null for controls
     sample_type: str                         # test | positive_ctrl | negative_ctrl
     material: str                            # DNA | RNA
@@ -128,7 +128,7 @@ class SampleDocument(BaseModel):
     sequencing: Optional[SequencingMetadata] = None
     taxprofiler: Optional[TaxprofilerStats] = None
     profiles: List[ClassifierProfile] = []
-    has_krona: bool = False                  # krona stored at run level
+    has_krona: bool = False                  # krona stored at case level
     review: ReviewStatus = ReviewStatus()
     ingested_at: datetime
 
@@ -152,10 +152,10 @@ class SampleIngestRequest(BaseModel):
 
 
 class IngestRequest(BaseModel):
-    run_id: str
+    case_id: str
     taxonomy_db: Optional[str] = None        # name of a loaded taxonomy e.g. "k2_pluspf"
-    taxpasta_path: str                        # shared across all samples in the run
-    multiqc_path: str                         # shared across all samples in the run
-    pipeline_info_path: str                   # shared across all samples in the run
-    krona_path: Optional[str] = None          # one Krona file for the whole run
+    taxpasta_path: str                        # shared across all samples in the case
+    multiqc_path: str                         # shared across all samples in the case
+    pipeline_info_path: str                   # shared across all samples in the case
+    krona_path: Optional[str] = None          # one Krona file for the whole case
     samples: List[SampleIngestRequest]
