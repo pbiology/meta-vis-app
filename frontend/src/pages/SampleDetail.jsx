@@ -4,7 +4,6 @@ import { getSample, getProfile, reviewSample, getKronaUrl } from '../api/samples
 import Badge from '../components/Badge'
 import MetricCard from '../components/MetricCard'
 
-
 function fmt(n, decimals = 0) {
   if (n === undefined || n === null) return '—'
   return typeof n === 'number' ? n.toLocaleString(undefined, { maximumFractionDigits: decimals }) : n
@@ -15,23 +14,11 @@ function fmtPct(n) {
   return `${n.toFixed(1)}%`
 }
 
-function AbundanceBar({ value, max }) {
-  const pct = max > 0 ? (value / max) * 100 : 0
-  return (
-    <div className="flex items-center gap-2">
-      <div className="w-20 bg-gray-100 rounded-full h-1.5 flex-shrink-0">
-        <div className="bg-blue-400 h-1.5 rounded-full" style={{ width: `${pct}%` }} />
-      </div>
-      <span className="text-xs text-gray-500">{fmt(value)}</span>
-    </div>
-  )
-}
-
 const KINGDOM_BADGE = {
-  Bacteria:  { bg: 'bg-blue-50',   text: 'text-blue-700' },
-  Viruses:   { bg: 'bg-red-50',    text: 'text-red-700'  },
-  Eukaryota: { bg: 'bg-amber-50',  text: 'text-amber-700'},
-  Archaea:   { bg: 'bg-purple-50', text: 'text-purple-700'},
+  Bacteria:  { bg: 'bg-blue-50',   text: 'text-blue-700'   },
+  Viruses:   { bg: 'bg-red-50',    text: 'text-red-700'    },
+  Eukaryota: { bg: 'bg-amber-50',  text: 'text-amber-700'  },
+  Archaea:   { bg: 'bg-purple-50', text: 'text-purple-700' },
 }
 
 function KingdomBadge({ kingdom }) {
@@ -51,20 +38,23 @@ function KingdomBadge({ kingdom }) {
 export default function SampleDetail() {
   const { sampleId } = useParams()
   const navigate = useNavigate()
-  const [sample, setSample] = useState(null)
-  const [profile, setProfile] = useState(null)
-  const [controls, setControls] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [reviewing, setReviewing] = useState(false)
-  const [error, setError] = useState(null)
-  const [kronaUrl, setKronaUrl]   = useState(null)
+
+  const [sample,     setSample]     = useState(null)
+  const [profile,    setProfile]    = useState(null)
+  const [controls,   setControls]   = useState([])
+  const [loading,    setLoading]    = useState(true)
+  const [reviewing,  setReviewing]  = useState(false)
+  const [error,      setError]      = useState(null)
+
+  // Krona
+  const [kronaUrl,   setKronaUrl]   = useState(null)
   const [kronaError, setKronaError] = useState(false)
 
-  // Taxonomy table state
-  const [taxSearch, setTaxSearch] = useState('')
+  // Taxonomy table
+  const [taxSearch,  setTaxSearch]  = useState('')
   const [taxKingdom, setTaxKingdom] = useState('')
-  const [taxSort, setTaxSort] = useState({ col: 'abundance', dir: -1 })
-  const [taxPage, setTaxPage] = useState(0)
+  const [taxSort,    setTaxSort]    = useState({ col: 'abundance', dir: -1 })
+  const [taxPage,    setTaxPage]    = useState(0)
   const TAX_PER_PAGE = 50
 
   useEffect(() => {
@@ -73,8 +63,7 @@ export default function SampleDetail() {
         const [s, p] = await Promise.all([getSample(sampleId), getProfile(sampleId)])
         setSample(s)
         setProfile(p)
-        // Fetch Krona if available
-        if (s.krona_path) {
+        if (s.has_krona) {
           try {
             const url = await getKronaUrl(sampleId)
             setKronaUrl(url)
@@ -119,40 +108,34 @@ export default function SampleDetail() {
   const bt       = qc?.bowtie2
   const reviewed = sample?.review?.reviewed
 
-  // Full profile from first classifier
-  const allEntries = profile?.profiles?.[0]?.profile ?? []
+  const allEntries   = profile?.profiles?.[0]?.profile ?? []
+  const hostReads    = allEntries.find(t => t.name === 'Homo sapiens')?.abundance ?? 0
+  const unclassReads = allEntries.filter(t => t.name === 'unclassified').reduce((a, t) => a + t.abundance, 0)
+  const totalReads   = allEntries.reduce((a, t) => a + t.abundance, 0)
+  const nonHostTotal = totalReads - hostReads - unclassReads
 
-  // Host reads for non-host % calculation
-  const hostReads      = allEntries.find(t => t.name === 'Homo sapiens')?.abundance ?? 0
-  const unclassReads   = allEntries.filter(t => t.name === 'unclassified').reduce((a, t) => a + t.abundance, 0)
-  const totalReads     = allEntries.reduce((a, t) => a + t.abundance, 0)
-  const nonHostTotal   = totalReads - hostReads - unclassReads
-
-  // Filter out host + unclassified for the table
-  const HOST_IDS = new Set([9606, 1, 0, 131567])
+  const HOST_IDS   = new Set([9606, 1, 0, 131567])
   const tableEntries = allEntries.filter(t =>
     !HOST_IDS.has(t.taxon_id) &&
     t.name !== 'unclassified' &&
     !t.name?.startsWith('unclassified ')
   )
 
-  // Apply search + kingdom filter
   const filtered = tableEntries.filter(t => {
-    if (taxSearch && !t.name?.toLowerCase().includes(taxSearch.toLowerCase())) return false
+    if (taxSearch  && !t.name?.toLowerCase().includes(taxSearch.toLowerCase())) return false
     if (taxKingdom && t.superkingdom !== taxKingdom) return false
     return true
   })
 
-  // Sort
   const sorted = [...filtered].sort((a, b) => {
-    if (taxSort.col === 'name')        return taxSort.dir * a.name.localeCompare(b.name)
+    if (taxSort.col === 'name')         return taxSort.dir * a.name.localeCompare(b.name)
     if (taxSort.col === 'superkingdom') return taxSort.dir * (a.superkingdom ?? '').localeCompare(b.superkingdom ?? '')
     return taxSort.dir * (a.abundance - b.abundance)
   })
 
-  const totalPages  = Math.ceil(sorted.length / TAX_PER_PAGE)
-  const pageEntries = sorted.slice(taxPage * TAX_PER_PAGE, (taxPage + 1) * TAX_PER_PAGE)
-  const maxAbundance = tableEntries[0] ? Math.max(...tableEntries.map(t => t.abundance)) : 1
+  const totalPages   = Math.ceil(sorted.length / TAX_PER_PAGE)
+  const pageEntries  = sorted.slice(taxPage * TAX_PER_PAGE, (taxPage + 1) * TAX_PER_PAGE)
+  const maxAbundance = tableEntries.length > 0 ? Math.max(...tableEntries.map(t => t.abundance)) : 1
 
   function toggleSort(col) {
     setTaxSort(prev => prev.col === col
@@ -167,7 +150,6 @@ export default function SampleDetail() {
     return taxSort.dir === 1 ? ' ↑' : ' ↓'
   }
 
-  // Stats
   const kingdoms = ['Bacteria', 'Viruses', 'Eukaryota', 'Archaea']
   const kingdomCounts = Object.fromEntries(
     kingdoms.map(k => [k, tableEntries.filter(t => t.superkingdom === k).length])
@@ -175,6 +157,7 @@ export default function SampleDetail() {
 
   return (
     <div className="flex flex-col h-full">
+
       {/* Topbar */}
       <div className="flex items-center gap-3 px-6 py-4 bg-white border-b border-gray-100 flex-shrink-0">
         <button
@@ -215,14 +198,14 @@ export default function SampleDetail() {
         <section>
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">QC metrics</p>
           <div className="grid grid-cols-4 gap-2.5">
-            <MetricCard label="Total reads"    value={fp ? fmt(fp.total_reads_before_filtering) : '—'} sub="before filtering" />
-            <MetricCard label="Passed filter"  value={fp ? fmt(fp.passed_filter_reads) : '—'} sub={fp ? `${fmtPct((fp.passed_filter_reads / fp.total_reads_before_filtering) * 100)} of raw` : ''} />
-            <MetricCard label="Host removed"   value={bt ? fmtPct(bt.overall_alignment_rate) : '—'} sub="bowtie2 alignment" />
-            <MetricCard label="Unclassified"   value={fmtPct(k2?.pct_unclassified)} sub={k2 ? `${fmt(k2.unclassified_reads)} reads` : ''} warn={(k2?.pct_unclassified ?? 0) > 20} />
-            <MetricCard label="Q20 rate"       value={fmtPct(fp?.q20_rate ? fp.q20_rate * 100 : null)} sub="fastp" />
-            <MetricCard label="Q30 rate"       value={fmtPct(fp?.q30_rate ? fp.q30_rate * 100 : null)} sub="fastp" />
-            <MetricCard label="Species"        value={fmt(k2?.num_species)} sub="kraken2" />
-            <MetricCard label="Genera"         value={fmt(k2?.num_genera)} sub="kraken2" />
+            <MetricCard label="Total reads"   value={fp ? fmt(fp.total_reads_before_filtering) : '—'} sub="before filtering" />
+            <MetricCard label="Passed filter" value={fp ? fmt(fp.passed_filter_reads) : '—'} sub={fp ? `${fmtPct((fp.passed_filter_reads / fp.total_reads_before_filtering) * 100)} of raw` : ''} />
+            <MetricCard label="Host removed"  value={bt ? fmtPct(bt.overall_alignment_rate) : '—'} sub="bowtie2 alignment" />
+            <MetricCard label="Unclassified"  value={fmtPct(k2?.pct_unclassified)} sub={k2 ? `${fmt(k2.unclassified_reads)} reads` : ''} warn={(k2?.pct_unclassified ?? 0) > 20} />
+            <MetricCard label="Q20 rate"      value={fmtPct(fp?.q20_rate ? fp.q20_rate * 100 : null)} sub="fastp" />
+            <MetricCard label="Q30 rate"      value={fmtPct(fp?.q30_rate ? fp.q30_rate * 100 : null)} sub="fastp" />
+            <MetricCard label="Species"       value={fmt(k2?.num_species)} sub="kraken2" />
+            <MetricCard label="Genera"        value={fmt(k2?.num_genera)} sub="kraken2" />
           </div>
         </section>
 
@@ -234,28 +217,26 @@ export default function SampleDetail() {
           </section>
         )}
 
-        {/* Krona plot */}
-        {sample?.krona_path && (
+        {/* Krona */}
+        {sample?.has_krona && (
           <section className="bg-white border border-gray-100 rounded-xl p-4">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">
-              Krona
-            </p>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Krona</p>
             {kronaError && (
               <p className="text-xs text-red-400">Krona file could not be loaded.</p>
-            )}
-            {kronaUrl && !kronaError && (
-              <iframe
-                src={kronaUrl}
-                title="Krona taxonomic chart"
-                className="w-full rounded-lg border border-gray-100"
-                style={{ height: '600px' }}
-                sandbox="allow-scripts allow-same-origin"
-              />
             )}
             {!kronaUrl && !kronaError && (
               <div className="flex items-center justify-center h-40 text-sm text-gray-400">
                 Loading Krona…
               </div>
+            )}
+            {kronaUrl && (
+              <iframe
+                src={kronaUrl}
+                title="Krona taxonomic chart"
+                className="w-full rounded-lg border border-gray-100"
+                style={{ height: '85vh' }}
+                sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+              />
             )}
           </section>
         )}
@@ -271,7 +252,6 @@ export default function SampleDetail() {
                 </span>
               )}
             </p>
-            {/* Kingdom counts */}
             {kingdoms.map(k => kingdomCounts[k] > 0 && (
               <KingdomBadge key={k} kingdom={k} />
             ))}
@@ -297,7 +277,7 @@ export default function SampleDetail() {
             </div>
           </div>
 
-          {/* Controls */}
+          {/* Filters */}
           <div className="flex gap-2 mb-3">
             <input
               type="text"
@@ -334,10 +314,10 @@ export default function SampleDetail() {
                 <thead>
                   <tr>
                     {[
-                      { label: 'Organism',   col: 'name'        },
-                      { label: 'Kingdom',    col: 'superkingdom'},
-                      { label: 'Reads',      col: 'abundance'   },
-                      { label: '% non-host', col: null          },
+                      { label: 'Organism',   col: 'name'         },
+                      { label: 'Kingdom',    col: 'superkingdom' },
+                      { label: 'Reads',      col: 'abundance'    },
+                      { label: '% non-host', col: null           },
                     ].map(({ label, col }) => (
                       <th
                         key={label}
@@ -351,7 +331,7 @@ export default function SampleDetail() {
                 </thead>
                 <tbody>
                   {pageEntries.map((t, i) => {
-                    const pct = nonHostTotal > 0 ? (t.abundance / nonHostTotal) * 100 : 0
+                    const pct    = nonHostTotal > 0 ? (t.abundance / nonHostTotal) * 100 : 0
                     const pctStr = pct < 0.001 ? '<0.001%' : `${pct.toFixed(3)}%`
                     return (
                       <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
