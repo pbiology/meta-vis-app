@@ -108,7 +108,7 @@ class SequencingMetadata(BaseModel):
 
 class ReviewStatus(BaseModel):
     reviewed: bool = False
-    reviewed_by: Optional[str] = None   # username
+    reviewed_by: Optional[str] = None
     reviewed_at: Optional[datetime] = None
     notes: Optional[str] = None
 
@@ -121,7 +121,7 @@ class SampleDocument(BaseModel):
     run_id: ObjectId
     subject_id: ObjectId
     sample_type: str                        # test | negative_ctrl | positive_ctrl
-    order_date: Optional[date] = None       # when sample was submitted for sequencing
+    order_date: Optional[date] = None
     sample: SampleMetadata
     library_preparation: Optional[LibraryPreparation] = None
     sequencing: Optional[SequencingMetadata] = None
@@ -142,14 +142,13 @@ class SampleDocument(BaseModel):
 class SampleIngestRequest(BaseModel):
     subject_id: str
     sample_type: str = "test"               # test | negative_ctrl | positive_ctrl
-    order_date: Optional[date] = None       # ISO date e.g. "2026-03-01"
+    order_date: Optional[date] = None
     taxpasta_path: str
     taxpasta_column: str
     classifier: str
     classifier_db: str
     multiqc_path: str
     pipeline_info_path: str
-    nodes_data: Optional[str] = None        # absolute path to NCBI taxonomy nodes.dmp
     krona_path: Optional[str] = None
     sample: SampleMetadata
     library_preparation: Optional[LibraryPreparation] = None
@@ -158,4 +157,5 @@ class SampleIngestRequest(BaseModel):
 
 class IngestRequest(BaseModel):
     run_id: str
+    taxonomy_db: Optional[str] = None       # name of a loaded taxonomy, e.g. "k2_pluspf"
     samples: List[SampleIngestRequest]

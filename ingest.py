@@ -15,7 +15,7 @@ Usage:
         --classifier-db k2_pluspf \
         --multiqc /abs/path/to/multiqc_data.json \
         --pipeline-info /abs/path/to/pipeline_info \
-        --nodes-data /abs/path/to/taxonomy/nodes.dmp \
+        --taxonomy-db k2_pluspf \
         --url http://localhost:8000 \
         --username admin \
         --password yourpassword
@@ -23,10 +23,8 @@ Usage:
 For controls, pass --sample-type negative_ctrl or --sample-type positive_ctrl
 and omit --subject-id (it will default to empty).
 
-To ingest multiple samples in one run, call this script once per sample.
-The script is idempotent for runs: if the run_id already exists in the DB
-the ingest endpoint will create a second run document. Re-ingest after
-dropping the collections if you need a clean slate.
+taxonomy-db refers to a taxonomy previously loaded with taxonomy.py.
+Omit it to ingest without superkingdom resolution.
 """
 
 import argparse
@@ -50,24 +48,24 @@ def ingest(args):
     token = get_token(args.url, args.username, args.password)
 
     payload = {
-        "run_id": args.run_id,
+        "run_id":      args.run_id,
+        "taxonomy_db": args.taxonomy_db,
         "samples": [
             {
-                "subject_id": args.subject_id or "",
-                "sample_type": args.sample_type,
-                "order_date": args.order_date,
-                "taxpasta_path": args.taxpasta,
-                "taxpasta_column": args.taxpasta_column,
-                "classifier": args.classifier,
-                "classifier_db": args.classifier_db,
-                "multiqc_path": args.multiqc,
+                "subject_id":        args.subject_id or "",
+                "sample_type":       args.sample_type,
+                "order_date":        args.order_date,
+                "taxpasta_path":     args.taxpasta,
+                "taxpasta_column":   args.taxpasta_column,
+                "classifier":        args.classifier,
+                "classifier_db":     args.classifier_db,
+                "multiqc_path":      args.multiqc,
                 "pipeline_info_path": args.pipeline_info,
-                "nodes_data": args.nodes_data,
-                "krona_path": args.krona,
+                "krona_path":        args.krona,
                 "sample": {
-                    "sample_id": args.sample_id,
+                    "sample_id":     args.sample_id,
                     "sample_source": args.sample_source,
-                    "biopsy_id": args.biopsy_id,
+                    "biopsy_id":     args.biopsy_id,
                 },
             }
         ],
@@ -96,6 +94,7 @@ def main():
 
     # Run
     parser.add_argument("--run-id",          required=True,  help="Run identifier, e.g. run_2026_02_23")
+    parser.add_argument("--taxonomy-db",     default=None,   help="Name of a loaded taxonomy, e.g. k2_pluspf")
 
     # Sample identity
     parser.add_argument("--subject-id",      default="",     help="Subject identifier, e.g. S-001")
@@ -103,7 +102,7 @@ def main():
     parser.add_argument("--sample-type",     default="test",
                         choices=["test", "negative_ctrl", "positive_ctrl"],
                         help="Sample type (default: test)")
-    parser.add_argument("--order-date",      default=None,   help="ISO date when sample was submitted, e.g. 2026-02-20")
+    parser.add_argument("--order-date",      default=None,   help="ISO date, e.g. 2026-02-20")
     parser.add_argument("--sample-source",   default=None,   help="Sample source tissue/site")
     parser.add_argument("--biopsy-id",       default=None,   help="Biopsy identifier")
 
@@ -114,7 +113,6 @@ def main():
     parser.add_argument("--classifier-db",   default=None,   help="Classifier database name, e.g. k2_pluspf")
     parser.add_argument("--multiqc",         required=True,  help="Path to multiqc_data.json")
     parser.add_argument("--pipeline-info",   required=True,  help="Path to pipeline_info directory")
-    parser.add_argument("--nodes-data",      default=None,   help="Absolute path to NCBI taxonomy nodes.dmp (enables superkingdom resolution)")
     parser.add_argument("--krona",           default=None,   help="Path to Krona HTML file (optional)")
 
     # Server / auth
