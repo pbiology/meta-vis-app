@@ -46,3 +46,10 @@ export async function getRunControls(runId) {
   })
   return res.data
 }
+
+export async function getKronaUrl(sampleId) {
+  const resp = await client.get(`/api/v1/samples/${sampleId}/krona`, {
+    responseType: 'blob',
+  })
+  return URL.createObjectURL(resp.data)
+}

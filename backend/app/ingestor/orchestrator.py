@@ -1,6 +1,7 @@
 # app/ingestor/orchestrator.py
 
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -20,6 +21,30 @@ async def _upsert_subject(db: AsyncIOMotorDatabase, subject_id: str) -> ObjectId
         "created_at": datetime.now(timezone.utc),
     })
     return insert.inserted_id
+
+
+async def _store_krona(
+    db: AsyncIOMotorDatabase,
+    sample_id: ObjectId,
+    krona_path: str,
+) -> None:
+    """
+    Read Krona HTML from disk at ingest time and store in MongoDB.
+    The filesystem is only accessed here — never at query time.
+    """
+    path = Path(krona_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Krona file not found: {krona_path}")
+    html = path.read_text(encoding="utf-8")
+    await db["krona_files"].find_one_and_replace(
+        {"sample_id": sample_id},
+        {
+            "sample_id": sample_id,
+            "html":       html,
+            "stored_at":  datetime.now(timezone.utc),
+        },
+        upsert=True,
+    )
 
 
 async def _load_superkingdom_map(
@@ -60,7 +85,7 @@ async def ingest_run(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
         "run_id":      request.run_id,
         "ingested_at": now,
         "sample_ids":  [],
-        "taxonomy_db": request.taxonomy_db,  # record which taxonomy was used
+        "taxonomy_db": request.taxonomy_db,
     }
     run_result = await db["runs"].insert_one(run_doc)
     run_object_id = run_result.inserted_id
@@ -70,18 +95,18 @@ async def ingest_run(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     for s in request.samples:
         subject_object_id = await _upsert_subject(db, s.subject_id)
 
-        profile      = read_taxpasta(s.taxpasta_path, s.taxpasta_column, superkingdom_map=superkingdom_map)
-        qc           = read_multiqc(s.multiqc_path, s.taxpasta_column)
+        profile       = read_taxpasta(s.taxpasta_path, s.taxpasta_column, superkingdom_map=superkingdom_map)
+        qc            = read_multiqc(s.multiqc_path, s.taxpasta_column)
         pipeline_info = read_pipeline_info(s.pipeline_info_path)
 
         sample_doc = {
-            "run_id":             run_object_id,
-            "subject_id":         subject_object_id,
-            "sample_type":        s.sample_type,
-            "order_date":         s.order_date.isoformat() if s.order_date else None,
-            "sample":             s.sample.model_dump(),
+            "run_id":              run_object_id,
+            "subject_id":          subject_object_id,
+            "sample_type":         s.sample_type,
+            "order_date":          s.order_date.isoformat() if s.order_date else None,
+            "sample":              s.sample.model_dump(),
             "library_preparation": s.library_preparation.model_dump() if s.library_preparation else None,
-            "sequencing":         s.sequencing.model_dump() if s.sequencing else None,
+            "sequencing":          s.sequencing.model_dump() if s.sequencing else None,
             "taxprofiler": {
                 **qc,
                 "pipeline_info": pipeline_info,
@@ -93,7 +118,7 @@ async def ingest_run(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
                     "profile":       profile,
                 }
             ],
-            "krona_path": s.krona_path,
+            "has_krona":  bool(s.krona_path),  # lightweight flag for the frontend
             "review": {
                 "reviewed":    False,
                 "reviewed_by": None,
@@ -105,6 +130,10 @@ async def ingest_run(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
 
         sample_result = await db["samples"].insert_one(sample_doc)
         sample_ids.append(sample_result.inserted_id)
+
+        # Store Krona HTML in DB if path was provided
+        if s.krona_path:
+            await _store_krona(db, sample_result.inserted_id, s.krona_path)
 
     await db["runs"].update_one(
         {"_id": run_object_id},

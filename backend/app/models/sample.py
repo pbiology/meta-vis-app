@@ -127,7 +127,6 @@ class SampleDocument(BaseModel):
     sequencing: Optional[SequencingMetadata] = None
     taxprofiler: Optional[TaxprofilerStats] = None
     profiles: List[ClassifierProfile] = []
-    krona_path: Optional[str] = None
     review: ReviewStatus = ReviewStatus()
     ingested_at: datetime
 

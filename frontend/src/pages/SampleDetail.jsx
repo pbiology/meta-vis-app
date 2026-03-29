@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getSample, getProfile, reviewSample } from '../api/samples'
+import { getSample, getProfile, reviewSample, getKronaUrl } from '../api/samples'
 import Badge from '../components/Badge'
 import MetricCard from '../components/MetricCard'
+
 
 function fmt(n, decimals = 0) {
   if (n === undefined || n === null) return '—'
@@ -56,6 +57,8 @@ export default function SampleDetail() {
   const [loading, setLoading] = useState(true)
   const [reviewing, setReviewing] = useState(false)
   const [error, setError] = useState(null)
+  const [kronaUrl, setKronaUrl]   = useState(null)
+  const [kronaError, setKronaError] = useState(false)
 
   // Taxonomy table state
   const [taxSearch, setTaxSearch] = useState('')
@@ -70,6 +73,15 @@ export default function SampleDetail() {
         const [s, p] = await Promise.all([getSample(sampleId), getProfile(sampleId)])
         setSample(s)
         setProfile(p)
+        // Fetch Krona if available
+        if (s.krona_path) {
+          try {
+            const url = await getKronaUrl(sampleId)
+            setKronaUrl(url)
+          } catch {
+            setKronaError(true)
+          }
+        }
       } catch {
         setError('Failed to load sample.')
       } finally {
@@ -219,6 +231,32 @@ export default function SampleDetail() {
           <section className="bg-white border border-gray-100 rounded-xl p-4">
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Controls comparison</p>
             <p className="text-xs text-gray-300">Navigate to this sample from a run to load controls context.</p>
+          </section>
+        )}
+
+        {/* Krona plot */}
+        {sample?.krona_path && (
+          <section className="bg-white border border-gray-100 rounded-xl p-4">
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">
+              Krona
+            </p>
+            {kronaError && (
+              <p className="text-xs text-red-400">Krona file could not be loaded.</p>
+            )}
+            {kronaUrl && !kronaError && (
+              <iframe
+                src={kronaUrl}
+                title="Krona taxonomic chart"
+                className="w-full rounded-lg border border-gray-100"
+                style={{ height: '600px' }}
+                sandbox="allow-scripts allow-same-origin"
+              />
+            )}
+            {!kronaUrl && !kronaError && (
+              <div className="flex items-center justify-center h-40 text-sm text-gray-400">
+                Loading Krona…
+              </div>
+            )}
           </section>
         )}
 
