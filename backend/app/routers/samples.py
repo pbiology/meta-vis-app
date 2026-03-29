@@ -95,12 +95,8 @@ async def get_krona(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    doc = await db["samples"].find_one({"_id": _oid(sample_id)}, {"krona_path": 1})
+    doc = await db["krona_files"].find_one({"sample_id": _oid(sample_id)})
     if not doc:
-        raise HTTPException(status_code=404, detail=f"Sample '{sample_id}' not found")
-    path = doc.get("krona_path")
-    if not path:
-        raise HTTPException(status_code=404, detail="No Krona file associated with this sample")
-    if not os.path.isfile(path):
-        raise HTTPException(status_code=404, detail=f"Krona file not found on disk: {path}")
-    return FileResponse(path, media_type="text/html")
+        raise HTTPException(status_code=404, detail="No Krona file stored for this sample")
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(content=doc["html"])
