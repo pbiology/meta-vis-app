@@ -8,9 +8,9 @@ export async function getSamples() {
   const allSamples = []
   await Promise.all(
     cases.map(async (c) => {
-      const samplesRes = await client.get(`/cases/${c.run_id}/samples`)
+      const samplesRes = await client.get(`/cases/${c.case_id}/samples`)
       samplesRes.data.forEach((s) => {
-        allSamples.push({ ...s, case_id: c.run_id })
+        allSamples.push({ ...s, case_id: c.case_id })
       })
     })
   )

@@ -89,15 +89,15 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     has_krona = bool(request.krona_path)
 
     # Guard against duplicate case ID (see TECHNICAL_DEBT.md)
-    existing_case = await db["cases"].find_one({"run_id": request.run_id})
+    existing_case = await db["cases"].find_one({"case_id": request.case_id})
     if existing_case:
         raise ValueError(
-            f"Case '{request.run_id}' already exists (ObjectId: {existing_case['_id']}). "
-            f"Delete the existing case first, or use a unique run_id."
+            f"Case '{request.case_id}' already exists (ObjectId: {existing_case['_id']}). "
+            f"Delete the existing case first, or use a unique case_id."
         )
 
     case_doc = {
-        "run_id":      request.run_id,
+        "case_id":     request.case_id,
         "ingested_at": now,
         "sample_ids":  [],
         "taxonomy_db": request.taxonomy_db,
@@ -179,7 +179,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     )
 
     return {
-        "case_id":          request.run_id,
+        "case_id":          request.case_id,
         "case_object_id":   str(case_object_id),
         "samples_ingested": len(sample_ids),
         "sample_ids":       [str(sid) for sid in sample_ids],

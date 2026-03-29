@@ -30,7 +30,7 @@ export default function CaseList() {
         const casesData = await getCases()
         const enriched = await Promise.all(
           casesData.map(async c => {
-            const samples = await getCaseSamples(c.run_id)
+            const samples = await getCaseSamples(c.case_id)
             const testSamples = samples.filter(s => s.sample_type === 'test')
             return { ...c, samples, testSamples, date: earliestOrderDate(samples) }
           })
@@ -94,10 +94,10 @@ export default function CaseList() {
                 return (
                   <tr
                     key={c._id}
-                    onClick={() => navigate(`/cases/${c.run_id}`)}
+                    onClick={() => navigate(`/cases/${c.case_id}`)}
                     className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
                   >
-                    <td className="px-4 py-3 font-mono text-xs text-gray-700">{c.run_id}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-700">{c.case_id}</td>
                     <td className="px-4 py-3 text-xs text-gray-500">{c.date ?? '—'}</td>
                     <td className="px-4 py-3 text-xs text-gray-500">
                       {c.testSamples.length} test{c.testSamples.length !== 1 ? 's' : ''}
