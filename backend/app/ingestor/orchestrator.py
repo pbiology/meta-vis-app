@@ -1,6 +1,4 @@
 # app/ingestor/orchestrator.py
-# Note: MongoDB collection is still named 'runs' — changing the collection name
-# would require a migration. The application-level term is 'case'.
 
 from datetime import datetime, timezone
 from pathlib import Path
@@ -40,9 +38,9 @@ async def _store_krona(
         raise FileNotFoundError(f"Krona file not found: {krona_path}")
     html = path.read_text(encoding="utf-8")
     await db["krona_files"].find_one_and_replace(
-        {"run_id": case_object_id},
+        {"case_id": case_object_id},
         {
-            "run_id":    case_object_id,
+            "case_id":   case_object_id,
             "html":      html,
             "stored_at": datetime.now(timezone.utc),
         },
@@ -91,7 +89,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     has_krona = bool(request.krona_path)
 
     # Guard against duplicate case ID (see TECHNICAL_DEBT.md)
-    existing_case = await db["runs"].find_one({"run_id": request.run_id})
+    existing_case = await db["cases"].find_one({"run_id": request.run_id})
     if existing_case:
         raise ValueError(
             f"Case '{request.run_id}' already exists (ObjectId: {existing_case['_id']}). "
@@ -111,7 +109,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             "notes":       None,
         },
     }
-    case_result    = await db["runs"].insert_one(case_doc)
+    case_result    = await db["cases"].insert_one(case_doc)
     case_object_id = case_result.inserted_id
 
     # Store Krona HTML in DB if provided — once per case
@@ -137,7 +135,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
         sample_qc = extract_sample_qc(qc_data, s.taxpasta_column)
 
         sample_doc = {
-            "run_id":              run_object_id,
+            "case_id":             case_object_id,
             "subject_id":          subject_object_id,
             "sample_type":         s.sample_type,
             "material":            s.material,
@@ -175,7 +173,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
         sample_result = await db["samples"].insert_one(sample_doc)
         sample_ids.append(sample_result.inserted_id)
 
-    await db["runs"].update_one(
+    await db["cases"].update_one(
         {"_id": case_object_id},
         {"$set": {"sample_ids": sample_ids}},
     )

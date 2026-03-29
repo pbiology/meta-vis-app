@@ -40,15 +40,7 @@ export async function reviewSample(sampleId, notes = null) {
   return res.data
 }
 
-export async function getRunControls(runId) {
-  const res = await client.get(`/runs/${runId}/samples`, {
-    params: { type: 'controls' },
-  })
-  return res.data
-}
-
 export async function getKronaUrl(sampleId) {
-  // Krona is stored at run level; the backend resolves run_id from the sample
   const resp = await client.get(`/samples/${sampleId}/krona`, {
     responseType: 'blob',
   })

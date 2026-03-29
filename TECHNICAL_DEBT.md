@@ -27,10 +27,10 @@ with no string manipulation needed.
 - FastQC keys are matched by prefix + `_raw_1` / `_raw_2` suffix
 - fastp and bowtie2 keys are matched by prefix only
 
-## Duplicate run_id on ingest — RESOLVED
+## Duplicate case ID on ingest — RESOLVED
 
 **Fixed**: `backend/app/ingestor/orchestrator.py`
 
-Now raises `ValueError` (→ HTTP 422) if a run with the given `run_id` already
-exists, before any documents are inserted. The error message includes the
-existing run's ObjectId for debugging.
+Now raises `ValueError` (→ HTTP 422) if a case with the given `run_id` already
+exists in the `cases` collection, before any documents are inserted. The error
+message includes the existing case's ObjectId for debugging.

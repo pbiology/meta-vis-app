@@ -1,17 +1,3 @@
-from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel, Field
-from bson import ObjectId
-
-
-class CaseDocument(BaseModel):
-    id: Optional[str] = Field(None, alias="_id")
-    run_id: str                               # MongoDB field name kept as run_id (storage key)
-    ingested_at: datetime = Field(default_factory=datetime.utcnow)
-    sample_ids: list[str] = []
-
-    model_config = {"populate_by_name": True}
-
-
-class CaseCreate(BaseModel):
-    run_id: str
+# MOVED — this file has been renamed to app/models/case.py
+# This stub exists so git history stays intact. Do not import from here.
+from app.models.case import CaseDocument, CaseCreate  # noqa: F401
