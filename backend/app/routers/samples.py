@@ -28,8 +28,8 @@ def _oid(sample_id: str) -> ObjectId:
 
 def _serialise(doc: dict) -> dict:
     doc["_id"] = str(doc["_id"])
-    if "run_id" in doc:
-        doc["run_id"] = str(doc["run_id"])
+    if "case_id" in doc:
+        doc["case_id"] = str(doc["case_id"])
     if "subject_id" in doc:
         doc["subject_id"] = str(doc["subject_id"])
     return doc
@@ -96,13 +96,13 @@ async def get_krona(
     _user: dict = Depends(get_current_user),
 ):
     from fastapi.responses import HTMLResponse
-    # Krona is stored at case level, not per-sample — resolve via sample's run_id
-    sample = await db["samples"].find_one({"_id": _oid(sample_id)}, {"run_id": 1, "has_krona": 1})
+    # Krona is stored at case level, not per-sample — resolve via sample's case_id
+    sample = await db["samples"].find_one({"_id": _oid(sample_id)}, {"case_id": 1, "has_krona": 1})
     if not sample:
         raise HTTPException(status_code=404, detail=f"Sample '{sample_id}' not found")
     if not sample.get("has_krona"):
         raise HTTPException(status_code=404, detail="No Krona file associated with this sample's case")
-    doc = await db["krona_files"].find_one({"run_id": sample["run_id"]})
+    doc = await db["krona_files"].find_one({"case_id": sample["case_id"]})
     if not doc:
         raise HTTPException(status_code=404, detail="Krona file not found in database")
     return HTMLResponse(content=doc["html"])

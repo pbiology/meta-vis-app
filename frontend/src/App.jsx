@@ -3,8 +3,8 @@ import { useAuth } from './context/AuthContext'
 import Login from './pages/Login'
 import SampleList from './pages/SampleList'
 import SampleDetail from './pages/SampleDetail'
-import CaseList from './pages/RunList'
-import CaseDetail from './pages/RunDetail'
+import CaseList from './pages/CaseList'
+import CaseDetail from './pages/CaseDetail'
 import Layout from './components/Layout'
 
 function ProtectedRoute({ children }) {
