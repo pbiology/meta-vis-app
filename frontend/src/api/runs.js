@@ -1,28 +1,28 @@
 import client from './client'
 
-export async function getRuns() {
-  const res = await client.get('/runs')
+export async function getCases() {
+  const res = await client.get('/cases')
   return res.data
 }
 
-export async function getRun(runId) {
-  const res = await client.get(`/runs/${runId}`)
+export async function getCase(caseId) {
+  const res = await client.get(`/cases/${caseId}`)
   return res.data
 }
 
-export async function getRunSamples(runId, type = null) {
+export async function getCaseSamples(caseId, type = null) {
   const params = type ? { type } : {}
-  const res = await client.get(`/runs/${runId}/samples`, { params })
+  const res = await client.get(`/cases/${caseId}/samples`, { params })
   return res.data
 }
 
-export async function reviewCase(runId, notes = null) {
-  const res = await client.patch(`/runs/${runId}/review`, { notes })
+export async function reviewCase(caseId, notes = null) {
+  const res = await client.patch(`/cases/${caseId}/review`, { notes })
   return res.data
 }
 
-export async function getCaseKronaUrl(runId) {
-  const resp = await client.get(`/runs/${runId}/krona`, {
+export async function getCaseKronaUrl(caseId) {
+  const resp = await client.get(`/cases/${caseId}/krona`, {
     responseType: 'blob',
   })
   return URL.createObjectURL(resp.data)

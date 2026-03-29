@@ -1,16 +1,16 @@
 import client from './client'
 
 export async function getSamples() {
-  // Fetch all runs first, then samples for each run
-  const runsRes = await client.get('/runs')
-  const runs = runsRes.data
+  // Fetch all cases first, then samples for each case
+  const casesRes = await client.get('/cases')
+  const cases = casesRes.data
 
   const allSamples = []
   await Promise.all(
-    runs.map(async (run) => {
-      const samplesRes = await client.get(`/runs/${run.run_id}/samples`)
+    cases.map(async (c) => {
+      const samplesRes = await client.get(`/cases/${c.run_id}/samples`)
       samplesRes.data.forEach((s) => {
-        allSamples.push({ ...s, run_id_str: run.run_id })
+        allSamples.push({ ...s, case_id: c.run_id })
       })
     })
   )

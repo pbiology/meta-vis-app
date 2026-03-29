@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getRun, getRunSamples, reviewCase, getCaseKronaUrl } from '../api/runs'
+import { getCase, getCaseSamples, reviewCase, getCaseKronaUrl } from '../api/runs'
 import Badge from '../components/Badge'
 import MetricCard from '../components/MetricCard'
 
@@ -17,10 +17,10 @@ function fmtPct(n) {
 const FILTERS = ['All', 'Test', 'Controls']
 
 export default function CaseDetail() {
-  const { runId } = useParams()
+  const { caseId } = useParams()
   const navigate = useNavigate()
 
-  const [run,       setRun]       = useState(null)
+  const [caseData,  setCaseData]  = useState(null)
   const [samples,   setSamples]   = useState([])
   const [loading,   setLoading]   = useState(true)
   const [error,     setError]     = useState(null)
@@ -35,15 +35,15 @@ export default function CaseDetail() {
   useEffect(() => {
     async function load() {
       try {
-        const [runData, samplesData] = await Promise.all([
-          getRun(runId),
-          getRunSamples(runId),
+        const [fetchedCase, samplesData] = await Promise.all([
+          getCase(caseId),
+          getCaseSamples(caseId),
         ])
-        setRun(runData)
+        setCaseData(fetchedCase)
         setSamples(samplesData)
-        if (runData.has_krona) {
+        if (fetchedCase.has_krona) {
           try {
-            const url = await getCaseKronaUrl(runId)
+            const url = await getCaseKronaUrl(caseId)
             setKronaUrl(url)
           } catch {
             setKronaError(true)
@@ -56,13 +56,13 @@ export default function CaseDetail() {
       }
     }
     load()
-  }, [runId])
+  }, [caseId])
 
   async function handleReview() {
     setReviewing(true)
     try {
-      await reviewCase(runId)
-      setRun(prev => ({ ...prev, review: { ...prev.review, reviewed: true } }))
+      await reviewCase(caseId)
+      setCaseData(prev => ({ ...prev, review: { ...prev.review, reviewed: true } }))
     } catch {
       alert('Failed to mark as reviewed.')
     } finally {
@@ -93,7 +93,7 @@ export default function CaseDetail() {
     return vals.length ? vals.reduce((a, b) => a + b, 0) : null
   }
 
-  const reviewed = run?.review?.reviewed
+  const reviewed = caseData?.review?.reviewed
 
   if (loading) return <div className="flex items-center justify-center h-full text-sm text-gray-400">Loading…</div>
   if (error)   return <div className="flex items-center justify-center h-full text-sm text-red-500">{error}</div>
@@ -113,7 +113,7 @@ export default function CaseDetail() {
           Cases
         </button>
         <span className="text-gray-200">/</span>
-        <h1 className="text-sm font-medium text-gray-900 font-mono flex-1">{runId}</h1>
+        <h1 className="text-sm font-medium text-gray-900 font-mono flex-1">{caseId}</h1>
         <Badge type={reviewed ? 'reviewed' : 'pending'} />
         {!reviewed && (
           <button
@@ -125,7 +125,7 @@ export default function CaseDetail() {
           </button>
         )}
         {reviewed && (
-          <span className="text-xs text-gray-400">Reviewed by {run.review.reviewed_by}</span>
+          <span className="text-xs text-gray-400">Reviewed by {caseData.review.reviewed_by}</span>
         )}
       </div>
 
@@ -163,7 +163,7 @@ export default function CaseDetail() {
             />
             <MetricCard
               label="Taxonomy DB"
-              value={run?.taxonomy_db ?? '—'}
+              value={caseData?.taxonomy_db ?? '—'}
               sub="classifier database"
             />
             <MetricCard
@@ -180,7 +180,7 @@ export default function CaseDetail() {
         </section>
 
         {/* Krona */}
-        {run?.has_krona && (
+        {caseData?.has_krona && (
           <section className="bg-white border border-gray-100 rounded-xl overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">Krona</p>
