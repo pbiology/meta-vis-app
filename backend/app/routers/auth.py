@@ -23,7 +23,11 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     token = create_access_token(subject=user["username"])
-    return {"access_token": token, "token_type": "bearer"}
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "role": (user.get("role") or "reader").lower(),
+    }
 
 
 @router.get("/me", summary="Return the current authenticated user")

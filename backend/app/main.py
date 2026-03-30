@@ -8,7 +8,7 @@ from pathlib import Path
 
 from app.database import connect_db, close_db
 from app.config import settings
-from app.routers import auth, ingest, cases, samples, subjects, taxonomy
+from app.routers import auth, ingest, cases, samples, subjects, taxonomy, users
 
 
 @asynccontextmanager
@@ -39,6 +39,7 @@ app.include_router(samples.router,  prefix="/api/v1")
 app.include_router(subjects.router, prefix="/api/v1")
 app.include_router(ingest.router,   prefix="/api/v1")
 app.include_router(taxonomy.router, prefix="/api/v1")
+app.include_router(users.router,    prefix="/api/v1")
 
 # Serve Krona static files if the root is configured
 if settings.static_files_root:

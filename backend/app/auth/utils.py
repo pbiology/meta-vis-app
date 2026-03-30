@@ -1,21 +1,15 @@
 # app/auth/utils.py
-#
-# Keycloak migration path:
-#   1. Set OIDC_ISSUER in .env to your Keycloak realm URL
-#   2. Set OIDC_AUDIENCE to your client ID
-#   3. Replace _verify_local_token() with python-jose JWKS validation
-#   4. Remove the /auth/login endpoint and point the frontend at Keycloak's
-#      authorization endpoint directly.
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.config import settings
+from app.database import get_db
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -32,7 +26,6 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_access_token(subject: str, expires_minutes: int = 60 * 8) -> str:
-    """Create a signed JWT. Subject is the username."""
     expire = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
     payload = {"sub": subject, "exp": expire, "iss": "meta-vis-app"}
     return jwt.encode(payload, settings.jwt_secret, algorithm=ALGORITHM)
@@ -49,7 +42,20 @@ def decode_token(token: str) -> dict:
         )
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
-    """FastAPI dependency — inject into any protected endpoint."""
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+) -> dict:
     payload = decode_token(token)
-    return {"username": payload["sub"]}
+    user = await db["users"].find_one({"username": payload["sub"]}, {"role": 1})
+    role = (user.get("role") or "reader").lower() if user else "reader"
+    return {"username": payload["sub"], "role": role}
+
+
+def require_role(*roles: str):
+    """Dependency factory — raises 403 if the user's role is not in the allowed set."""
+    async def _check(current_user: dict = Depends(get_current_user)):
+        if current_user["role"] not in [r.lower() for r in roles]:
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        return current_user
+    return _check

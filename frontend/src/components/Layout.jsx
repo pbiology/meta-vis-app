@@ -20,7 +20,7 @@ function NavItem({ to, icon, label }) {
 }
 
 export default function Layout() {
-  const { user, logout } = useAuth()
+  const { user, role, logout } = useAuth()
   const navigate = useNavigate()
 
   function handleLogout() {
@@ -60,6 +60,20 @@ export default function Layout() {
               </svg>
             }
           />
+          {role === 'admin' && (
+            <NavItem
+              to="/admin"
+              label="Admin"
+              icon={
+                <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.3"/>
+                  <path d="M3 13c0-2.761 2.239-5 5-5s5 2.239 5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                  <circle cx="13" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.2"/>
+                  <path d="M13 6v1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                </svg>
+              }
+            />
+          )}
         </nav>
 
         <div className="px-4 py-4 border-t border-gray-100">
