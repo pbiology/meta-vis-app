@@ -10,7 +10,7 @@ export async function getSamples() {
     cases.map(async (c) => {
       const samplesRes = await client.get(`/cases/${c.case_id}/samples`)
       samplesRes.data.forEach((s) => {
-        allSamples.push({ ...s, case_id: c.case_id })
+        allSamples.push({ ...s, case_id: c.case_id, case_review: c.review })
       })
     })
   )

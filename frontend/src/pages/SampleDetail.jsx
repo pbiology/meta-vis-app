@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getSample, getProfile, reviewSample, getKronaUrl } from '../api/samples'
+import { getSample, getProfile, getKronaUrl } from '../api/samples'
 import Badge from '../components/Badge'
 import MetricCard from '../components/MetricCard'
 
@@ -43,7 +43,6 @@ export default function SampleDetail() {
   const [profile,    setProfile]    = useState(null)
   const [controls,   setControls]   = useState([])
   const [loading,    setLoading]    = useState(true)
-  const [reviewing,  setReviewing]  = useState(false)
   const [error,      setError]      = useState(null)
 
   // Krona
@@ -80,21 +79,6 @@ export default function SampleDetail() {
     load()
   }, [sampleId])
 
-  async function handleReview() {
-    setReviewing(true)
-    try {
-      await reviewSample(sampleId)
-      setSample(prev => ({
-        ...prev,
-        review: { ...prev.review, reviewed: true },
-      }))
-    } catch {
-      alert('Failed to mark as reviewed.')
-    } finally {
-      setReviewing(false)
-    }
-  }
-
   if (loading) return (
     <div className="flex items-center justify-center h-full text-sm text-gray-400">Loading…</div>
   )
@@ -106,7 +90,6 @@ export default function SampleDetail() {
   const k2       = qc?.kraken2
   const fp       = qc?.fastp
   const bt       = qc?.bowtie2
-  const reviewed = sample?.review?.reviewed
 
   const allEntries   = profile?.profiles?.[0]?.profile ?? []
   const hostReads    = allEntries.find(t => t.name === 'Homo sapiens')?.abundance ?? 0
@@ -174,21 +157,6 @@ export default function SampleDetail() {
           {sample?.sample?.sample_id ?? sampleId}
         </h1>
         <Badge type={sample?.sample_type} />
-        <Badge type={reviewed ? 'reviewed' : 'pending'} />
-        {!reviewed && (
-          <button
-            onClick={handleReview}
-            disabled={reviewing}
-            className="btn-primary disabled:opacity-50"
-          >
-            {reviewing ? 'Saving…' : 'Mark as reviewed'}
-          </button>
-        )}
-        {reviewed && (
-          <span className="text-xs text-gray-400">
-            Reviewed by {sample.review.reviewed_by}
-          </span>
-        )}
       </div>
 
       {/* Body */}

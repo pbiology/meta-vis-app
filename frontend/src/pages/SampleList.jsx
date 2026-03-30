@@ -33,8 +33,8 @@ export default function SampleList() {
   const filtered = useMemo(() => {
     let list = samples
 
-    if (filter === 'Pending')  list = list.filter(s => !s.review?.reviewed)
-    if (filter === 'Reviewed') list = list.filter(s => s.review?.reviewed)
+    if (filter === 'Pending')  list = list.filter(s => !s.case_review?.reviewed)
+    if (filter === 'Reviewed') list = list.filter(s =>  s.case_review?.reviewed)
     if (filter === 'Test')     list = list.filter(s => s.sample_type === 'test')
     if (filter === 'Controls') list = list.filter(s =>
       s.sample_type === 'negative_ctrl' || s.sample_type === 'positive_ctrl'
@@ -108,7 +108,7 @@ export default function SampleList() {
           <table className="w-full text-left border-collapse">
             <thead className="sticky top-0 bg-white z-10">
               <tr>
-                {['Sample ID', 'Subject', 'Order date', 'Case', 'Type', 'Unclassified', 'Species', 'Status'].map(h => (
+                {['Sample ID', 'Subject', 'Order date', 'Case', 'Type', 'Unclassified', 'Species', 'Case status'].map(h => (
                   <th key={h} className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap">
                     {h}
                   </th>
@@ -117,7 +117,7 @@ export default function SampleList() {
             </thead>
             <tbody>
               {filtered.map(s => {
-                const reviewed = s.review?.reviewed
+                const reviewed = s.case_review?.reviewed
                 return (
                   <tr
                     key={s._id}
