@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.database import get_db
-from app.auth.utils import get_current_user
+from app.auth.utils import get_current_user, require_role
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 
@@ -129,7 +129,7 @@ async def review_case(
     case_id: str,
     payload: ReviewPayload,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_role("writer", "admin")),
 ):
     result = await db["cases"].update_one(
         {"case_id": case_id},
@@ -151,7 +151,7 @@ async def review_case(
 async def unreview_case(
     case_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_role("writer", "admin")),
 ):
     result = await db["cases"].update_one(
         {"case_id": case_id},

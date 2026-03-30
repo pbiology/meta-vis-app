@@ -17,7 +17,7 @@ export default function Login() {
     setLoading(true)
     try {
       const data = await loginApi(username, password)
-      login(data.access_token, username)
+      login(data.access_token, username, data.role || 'reader')
       navigate('/')
     } catch (err) {
       setError(

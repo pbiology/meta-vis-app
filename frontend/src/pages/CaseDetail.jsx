@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getCase, getCaseSamples, reviewCase, unreviewCase, getCaseKronaUrl } from '../api/cases'
 import Badge from '../components/Badge'
+import { useAuth } from '../context/AuthContext'
 
 function fmt(n) {
   if (n === undefined || n === null) return '—'
@@ -105,6 +106,7 @@ async function handleReview() {
     s.sample_type === 'negative_ctrl' || s.sample_type === 'positive_ctrl'
   )
 
+  const { role } = useAuth()
   const reviewed = caseData?.review?.reviewed
 
   if (loading) return <div className="flex items-center justify-center h-full text-sm text-gray-400">Loading…</div>
@@ -127,7 +129,7 @@ async function handleReview() {
         <span className="text-gray-200">/</span>
         <h1 className="text-sm font-medium text-gray-900 font-mono flex-1">{caseId}</h1>
         <Badge type={reviewed ? 'reviewed' : 'pending'} />
-        {!reviewed && (
+        {!reviewed && role !== 'reader' && (
           <button
             onClick={handleReview}
             disabled={reviewing}
