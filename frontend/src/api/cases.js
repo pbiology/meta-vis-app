@@ -23,6 +23,11 @@ export async function reviewCase(caseId, notes = null) {
   return res.data
 }
 
+export async function unreviewCase(caseId) {
+  const res = await client.delete(`/cases/${caseId}/review`)
+  return res.data
+}
+
 export async function getCaseKronaUrl(caseId) {
   const resp = await client.get(`/cases/${caseId}/krona`, {
     responseType: 'blob',

@@ -3,16 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { getCases, getCaseSamples } from '../api/cases'
 import Badge from '../components/Badge'
 
-function fmt(n) {
-  if (n === undefined || n === null) return '—'
-  return n.toLocaleString()
-}
-
-function fmtPct(n) {
-  if (n === undefined || n === null) return '—'
-  return `${n.toFixed(1)}%`
-}
-
 function earliestOrderDate(samples) {
   const dates = samples.map(s => s.order_date).filter(Boolean).sort()
   return dates.length > 0 ? dates[0] : null
@@ -71,7 +61,7 @@ export default function CaseList() {
           <table className="w-full text-left border-collapse">
             <thead className="sticky top-0 bg-white z-10">
               <tr>
-                {['Case ID', 'Date', 'Samples', 'Unclassified', 'Species', 'Status'].map(h => (
+                {['Case name', 'Date', 'Samples', 'Sample names', 'Status', 'Reviewed by'].map(h => (
                   <th key={h} className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap">
                     {h}
                   </th>
@@ -80,16 +70,7 @@ export default function CaseList() {
             </thead>
             <tbody>
               {cases.map(c => {
-                const k2vals = c.testSamples
-                  .map(s => s.taxprofiler?.kraken2?.pct_unclassified)
-                  .filter(v => v != null)
-                const avgUnclassified = k2vals.length
-                  ? k2vals.reduce((a, b) => a + b, 0) / k2vals.length
-                  : null
-                const totalSpecies = c.testSamples
-                  .map(s => s.taxprofiler?.kraken2?.num_species)
-                  .filter(v => v != null)
-                  .reduce((a, b) => a + b, 0) || null
+                const sampleNames = c.testSamples.map(s => s.sample?.sample_id).filter(Boolean)
 
                 return (
                   <tr
@@ -98,17 +79,26 @@ export default function CaseList() {
                     className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
                   >
                     <td className="px-4 py-3 font-mono text-xs text-gray-700">{c.case_id}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{c.date ?? '—'}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500">
+                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{c.date ?? '—'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
                       {c.testSamples.length} test{c.testSamples.length !== 1 ? 's' : ''}
                       {c.samples.length > c.testSamples.length && (
                         <span className="text-gray-300 ml-1">+{c.samples.length - c.testSamples.length} ctrl</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-700">{fmtPct(avgUnclassified)}</td>
-                    <td className="px-4 py-3 text-xs text-gray-700">{fmt(totalSpecies)}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600" style={{ maxWidth: '220px' }}>
+                      <span
+                        className="block truncate"
+                        title={sampleNames.join(', ')}
+                      >
+                        {sampleNames.join(', ') || '—'}
+                      </span>
+                    </td>
                     <td className="px-4 py-3">
                       <Badge type={c.review?.reviewed ? 'reviewed' : 'pending'} />
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-400">
+                      {c.review?.reviewed_by ?? '—'}
                     </td>
                   </tr>
                 )
