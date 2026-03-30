@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     log_level: str = "info"
     jwt_secret: str = "change-me-in-production"
+    controls_taxa_path: str = "controls_taxa.json"
 
     model_config = SettingsConfigDict(
         env_file=".env",
