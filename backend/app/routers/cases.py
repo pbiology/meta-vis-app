@@ -8,8 +8,20 @@ from bson import ObjectId
 from pydantic import BaseModel
 from typing import Optional
 
+import json
+from pathlib import Path
+
 from app.database import get_db
 from app.auth.utils import get_current_user, require_role
+from app.config import settings
+
+
+def _load_controls_taxa() -> dict:
+    path = Path(settings.controls_taxa_path)
+    if path.exists():
+        with open(path) as f:
+            return json.load(f)
+    return {}
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 
@@ -75,13 +87,20 @@ async def list_samples_for_case(
     docs = await db["samples"].find(query).to_list(length=200)
 
     HOST_TAXON_IDS = {9606, 1, 0, 131567}
+    controls_taxa = _load_controls_taxa()
+    spike_in_ids = set(controls_taxa.get("spike_in", []))
 
-    def top_taxa(doc: dict, n: int = 3) -> list:
-        all_entries = doc.get("profiles", [{}])[0].get("profile", []) if doc.get("profiles") else []
+    def non_host_total_for(all_entries: list) -> int:
         host_reads = next((e["abundance"] for e in all_entries if e.get("name") == "Homo sapiens"), 0)
         unclass_reads = sum(e["abundance"] for e in all_entries if e.get("name") == "unclassified")
         total_reads = sum(e["abundance"] for e in all_entries)
-        non_host_total = total_reads - host_reads - unclass_reads
+        return total_reads - host_reads - unclass_reads
+
+    def top_taxa(doc: dict, n: int = 3) -> list:
+        all_entries = doc.get("profiles", [{}])[0].get("profile", []) if doc.get("profiles") else []
+        non_host_total = non_host_total_for(all_entries)
+        all_entries = doc.get("profiles", [{}])[0].get("profile", []) if doc.get("profiles") else []
+        non_host_total = non_host_total_for(all_entries)
         non_host_entries = [
             e for e in all_entries
             if e.get("taxon_id") not in HOST_TAXON_IDS
@@ -99,9 +118,27 @@ async def list_samples_for_case(
             for e in non_host_entries[:n]
         ]
 
+    def spike_in_taxa(doc: dict) -> list:
+        if not spike_in_ids:
+            return []
+        all_entries = doc.get("profiles", [{}])[0].get("profile", []) if doc.get("profiles") else []
+        non_host_total = non_host_total_for(all_entries)
+        hits = [
+            {
+                "name": e["name"],
+                "taxon_id": e["taxon_id"],
+                "abundance": e["abundance"],
+                "pct": round(e["abundance"] / non_host_total * 100, 3) if non_host_total else None,
+            }
+            for e in all_entries
+            if e.get("taxon_id") in spike_in_ids
+        ]
+        return hits
+
     result = []
     for doc in docs:
         doc["top_taxa"] = top_taxa(doc)
+        doc["spike_in_taxa"] = spike_in_taxa(doc)
         doc.pop("profiles", None)
         result.append(_serialise_sample(doc))
     return result

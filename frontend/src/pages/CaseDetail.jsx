@@ -182,7 +182,7 @@ export default function CaseDetail() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr>
-                {['Sample ID', 'Material', 'Order date', 'Type', 'Unclassified', 'Q30', 'Top taxa'].map(h => (
+                {['Sample ID', 'Material', 'Order date', 'Type', 'Unclassified', 'Q30', 'Positive control', 'Top taxa'].map(h => (
                   <th key={h} className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap">
                     {h}
                   </th>
@@ -201,8 +201,24 @@ export default function CaseDetail() {
                   <td className="px-4 py-3 text-xs text-gray-500">{s.order_date ?? '—'}</td>
                   <td className="px-4 py-3"><Badge type={s.sample_type} /></td>
                   <td className="px-4 py-3 text-xs text-gray-700">{fmtPct(s.taxprofiler?.kraken2?.pct_unclassified)}</td>
-                  <td className="px-4 py-3 text-xs text-gray-700">
+                 <td className="px-4 py-3 text-xs text-gray-700">
                     {fmtPct(s.taxprofiler?.fastp?.q30_rate ? s.taxprofiler.fastp.q30_rate * 100 : null)}
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {s.spike_in_taxa && s.spike_in_taxa.length > 0 ? (
+                      <div className="flex flex-col gap-0.5">
+                        {s.spike_in_taxa.map((t, i) => (
+                          <span key={i} className="text-gray-600 italic">
+                            {t.name}
+                            {t.pct != null && (
+                            <span className="not-italic text-gray-400 ml-1">{t.pct}% ({t.abundance.toLocaleString()})</span>
+                          )}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-gray-300">Non detected</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-0.5">
@@ -226,7 +242,7 @@ export default function CaseDetail() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-400">No samples match this filter.</td>
+                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-400">No samples match this filter.</td>
                 </tr>
               )}
             </tbody>
