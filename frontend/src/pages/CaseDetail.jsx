@@ -30,7 +30,6 @@ export default function CaseDetail() {
   // Krona
   const [kronaUrl,   setKronaUrl]   = useState(null)
   const [kronaError, setKronaError] = useState(false)
-  const [kronaOpen,  setKronaOpen]  = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -84,40 +83,6 @@ export default function CaseDetail() {
   )
 
   const reviewed = caseData?.review?.reviewed
-
-    if (kronaOpen && kronaUrl) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="flex items-center gap-3 px-6 py-4 bg-white border-b border-gray-100 flex-shrink-0">
-          <button
-            onClick={() => navigate('/cases')}
-            className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 transition-colors"
-          >
-            <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">
-              <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            Cases
-          </button>
-          <span className="text-gray-200">/</span>
-          <span className="text-xs text-gray-400 font-mono">{caseId}</span>
-          <span className="text-gray-200">/</span>
-          <h1 className="text-sm font-medium text-gray-900 flex-1">Krona</h1>
-          <button
-            onClick={() => setKronaOpen(false)}
-            className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            ← Back to case
-          </button>
-        </div>
-        <iframe
-          src={kronaUrl}
-          title="Krona taxonomic chart"
-          className="flex-1 w-full"
-          sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-        />
-      </div>
-    )
-  }
 
   if (loading) return <div className="flex items-center justify-center h-full text-sm text-gray-400">Loading…</div>
   if (error)   return <div className="flex items-center justify-center h-full text-sm text-red-500">{error}</div>
@@ -229,25 +194,23 @@ export default function CaseDetail() {
           </table>
         </section>
 
-        {/* Krona */}
+{/* Krona */}
         {caseData?.has_krona && (
-          <section className="bg-white border border-gray-100 rounded-xl">
-            <div className="flex items-center gap-2 px-4 py-3">
-              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">Krona</p>
-              {kronaError && <span className="text-xs text-red-400">Could not load</span>}
-              {!kronaUrl && !kronaError && <span className="text-xs text-gray-300">Loading…</span>}
-              {kronaUrl && (
-                <div
-                  onClick={() => setKronaOpen(true)}
-                  className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">
-                    <path d="M3 3h4M3 3v4M13 3h-4M13 3v4M3 13h4M3 13v-4M13 13h-4M13 13v-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                  Open full screen
-                </div>
-              )}
-            </div>
+          <section className="bg-white border border-gray-100 rounded-xl p-4">
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Krona</p>
+            {kronaError && <p className="text-xs text-red-400">Krona file could not be loaded.</p>}
+            {!kronaUrl && !kronaError && (
+              <div className="flex items-center justify-center h-40 text-sm text-gray-400">Loading Krona…</div>
+            )}
+            {kronaUrl && (
+              <iframe
+                src={kronaUrl}
+                title="Krona taxonomic chart"
+                className="w-full rounded-lg border border-gray-100"
+                style={{ height: '85vh' }}
+                sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+              />
+            )}
           </section>
         )}
 

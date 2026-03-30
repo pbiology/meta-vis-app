@@ -18,7 +18,7 @@ export default function Login() {
     try {
       const data = await loginApi(username, password)
       login(data.access_token, username)
-      navigate('/samples')
+      navigate('/')
     } catch (err) {
       setError(
         err.response?.status === 401
