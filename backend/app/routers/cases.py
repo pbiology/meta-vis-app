@@ -147,6 +147,28 @@ async def review_case(
     return {"case_id": case_id, "reviewed": True, "reviewed_by": current_user["username"]}
 
 
+@router.delete("/{case_id}/review", summary="Remove review from a case")
+async def unreview_case(
+    case_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
+    result = await db["cases"].update_one(
+        {"case_id": case_id},
+        {
+            "$set": {
+                "review.reviewed":    False,
+                "review.reviewed_by": None,
+                "review.reviewed_at": None,
+                "review.notes":       None,
+            }
+        },
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
+    return {"case_id": case_id, "reviewed": False}
+
+
 @router.get("/oid/{case_object_id}/krona", summary="Serve Krona HTML by case ObjectId")
 async def get_krona_by_oid(
     case_object_id: str,

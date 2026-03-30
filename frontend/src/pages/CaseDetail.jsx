@@ -1,8 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getCase, getCaseSamples, reviewCase, getCaseKronaUrl } from '../api/cases'
+import { getCase, getCaseSamples, reviewCase, unreviewCase, getCaseKronaUrl } from '../api/cases'
 import Badge from '../components/Badge'
-import MetricCard from '../components/MetricCard'
 
 function fmt(n) {
   if (n === undefined || n === null) return '—'
@@ -25,7 +24,8 @@ export default function CaseDetail() {
   const [loading,   setLoading]   = useState(true)
   const [error,     setError]     = useState(null)
   const [filter,    setFilter]    = useState('All')
-  const [reviewing, setReviewing] = useState(false)
+  const [reviewing,       setReviewing]       = useState(false)
+  const [unreviewConfirm, setUnreviewConfirm] = useState(false)
 
   // Krona
   const [kronaUrl,   setKronaUrl]   = useState(null)
@@ -57,13 +57,36 @@ export default function CaseDetail() {
     load()
   }, [caseId])
 
-  async function handleReview() {
+async function handleReview() {
     setReviewing(true)
     try {
-      await reviewCase(caseId)
-      setCaseData(prev => ({ ...prev, review: { ...prev.review, reviewed: true } }))
+      const result = await reviewCase(caseId)
+      setCaseData(prev => ({
+        ...prev,
+        review: {
+          ...prev.review,
+          reviewed:    true,
+          reviewed_by: result.reviewed_by,
+        },
+      }))
     } catch {
       alert('Failed to mark as reviewed.')
+    } finally {
+      setReviewing(false)
+    }
+  }
+
+  async function handleUnreview() {
+    setUnreviewConfirm(false)
+    setReviewing(true)
+    try {
+      await unreviewCase(caseId)
+      setCaseData(prev => ({
+        ...prev,
+        review: { reviewed: false, reviewed_by: null, reviewed_at: null, notes: null },
+      }))
+    } catch {
+      alert('Failed to remove review.')
     } finally {
       setReviewing(false)
     }
@@ -113,8 +136,39 @@ export default function CaseDetail() {
             {reviewing ? 'Saving…' : 'Mark case as reviewed'}
           </button>
         )}
-        {reviewed && (
-          <span className="text-xs text-gray-400">Reviewed by {caseData.review.reviewed_by}</span>
+{reviewed && (
+          <>
+            <button
+              onClick={() => setUnreviewConfirm(true)}
+              className="text-xs text-green-600 hover:text-green-800 transition-colors"
+            >
+              ● Reviewed by {caseData.review.reviewed_by}
+            </button>
+            {unreviewConfirm && (
+              <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
+                <div className="bg-white rounded-xl border border-gray-100 shadow-lg p-6 w-80 flex flex-col gap-4">
+                  <p className="text-sm font-medium text-gray-900">Remove review?</p>
+                  <p className="text-xs text-gray-500">
+                    This will remove the review by <span className="font-medium">{caseData.review.reviewed_by}</span> and reset the case to pending. This cannot be undone.
+                  </p>
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={() => setUnreviewConfirm(false)}
+                      className="btn-secondary"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleUnreview}
+                      className="btn-primary"
+                    >
+                      Remove review
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
