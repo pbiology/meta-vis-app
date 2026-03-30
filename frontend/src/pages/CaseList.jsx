@@ -25,7 +25,17 @@ export default function CaseList() {
             return { ...c, samples, testSamples, date: earliestOrderDate(samples) }
           })
         )
-        setCases(enriched)
+        const sorted = enriched.sort((a, b) => {
+          // Pending before reviewed
+          const aReviewed = a.review?.reviewed ? 1 : 0
+          const bReviewed = b.review?.reviewed ? 1 : 0
+          if (aReviewed !== bReviewed) return aReviewed - bReviewed
+          // Then by date descending within each group
+          const aDate = a.date ?? a.ingested_at ?? ''
+          const bDate = b.date ?? b.ingested_at ?? ''
+          return bDate.localeCompare(aDate)
+        })
+        setCases(sorted)
       } catch {
         setError('Failed to load cases.')
       } finally {
