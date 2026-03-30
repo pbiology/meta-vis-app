@@ -60,24 +60,26 @@ export default function Layout() {
               </svg>
             }
           />
-          {role === 'admin' && (
-            <NavItem
-              to="/admin"
-              label="Admin"
-              icon={
-                <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
-                  <circle cx="8" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.3"/>
-                  <path d="M3 13c0-2.761 2.239-5 5-5s5 2.239 5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-                  <circle cx="13" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.2"/>
-                  <path d="M13 6v1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                </svg>
-              }
-            />
-          )}
         </nav>
 
-        <div className="px-4 py-4 border-t border-gray-100">
-          <div className="flex items-center justify-between">
+        <div className="flex flex-col border-t border-gray-100">
+          {role === 'admin' && (
+            <div className="px-2 pt-2">
+              <NavItem
+                to="/admin"
+                label="Admin"
+                icon={
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+                    <circle cx="8" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.3"/>
+                    <path d="M3 13c0-2.761 2.239-5 5-5s5 2.239 5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                    <circle cx="13" cy="4" r="1.5" stroke="currentColor" strokeWidth="1.2"/>
+                    <path d="M13 6v1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                  </svg>
+                }
+              />
+            </div>
+          )}
+          <div className="px-4 py-4 flex items-center justify-between">
             <span className="text-xs text-gray-400">{user}</span>
             <button
               onClick={handleLogout}
