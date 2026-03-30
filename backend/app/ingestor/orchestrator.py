@@ -97,11 +97,12 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
         )
 
     case_doc = {
-        "case_id":     request.case_id,
+        "case_id": request.case_id,
         "ingested_at": now,
-        "sample_ids":  [],
+        "sample_ids": [],
         "taxonomy_db": request.taxonomy_db,
-        "has_krona":   has_krona,
+        "has_krona": has_krona,
+        "pipeline_info": pipeline_info,
         "review": {
             "reviewed":    False,
             "reviewed_by": None,
