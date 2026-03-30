@@ -18,19 +18,19 @@ const FILTERS = ['All', 'Test', 'Controls']
 
 export default function CaseDetail() {
   const { caseId } = useParams()
-  const navigate = useNavigate()
+  const navigate   = useNavigate()
+  const { role }   = useAuth()
 
-  const [caseData,  setCaseData]  = useState(null)
-  const [samples,   setSamples]   = useState([])
-  const [loading,   setLoading]   = useState(true)
-  const [error,     setError]     = useState(null)
-  const [filter,    setFilter]    = useState('All')
+  const [caseData,        setCaseData]        = useState(null)
+  const [samples,         setSamples]         = useState([])
+  const [loading,         setLoading]         = useState(true)
+  const [error,           setError]           = useState(null)
+  const [filter,          setFilter]          = useState('All')
   const [reviewing,       setReviewing]       = useState(false)
   const [unreviewConfirm, setUnreviewConfirm] = useState(false)
-
-  // Krona
-  const [kronaUrl,   setKronaUrl]   = useState(null)
-  const [kronaError, setKronaError] = useState(false)
+  const [kronaUrl,        setKronaUrl]        = useState(null)
+  const [kronaError,      setKronaError]      = useState(false)
+  const [provenanceOpen,  setProvenanceOpen]  = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -58,17 +58,13 @@ export default function CaseDetail() {
     load()
   }, [caseId])
 
-async function handleReview() {
+  async function handleReview() {
     setReviewing(true)
     try {
       const result = await reviewCase(caseId)
       setCaseData(prev => ({
         ...prev,
-        review: {
-          ...prev.review,
-          reviewed:    true,
-          reviewed_by: result.reviewed_by,
-        },
+        review: { ...prev.review, reviewed: true, reviewed_by: result.reviewed_by },
       }))
     } catch {
       alert('Failed to mark as reviewed.')
@@ -106,7 +102,6 @@ async function handleReview() {
     s.sample_type === 'negative_ctrl' || s.sample_type === 'positive_ctrl'
   )
 
-  const { role } = useAuth()
   const reviewed = caseData?.review?.reviewed
 
   if (loading) return <div className="flex items-center justify-center h-full text-sm text-gray-400">Loading…</div>
@@ -138,7 +133,7 @@ async function handleReview() {
             {reviewing ? 'Saving…' : 'Mark case as reviewed'}
           </button>
         )}
-{reviewed && (
+        {reviewed && (
           <>
             <button
               onClick={() => setUnreviewConfirm(true)}
@@ -154,18 +149,8 @@ async function handleReview() {
                     This will remove the review by <span className="font-medium">{caseData.review.reviewed_by}</span> and reset the case to pending. This cannot be undone.
                   </p>
                   <div className="flex gap-2 justify-end">
-                    <button
-                      onClick={() => setUnreviewConfirm(false)}
-                      className="btn-secondary"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleUnreview}
-                      className="btn-primary"
-                    >
-                      Remove review
-                    </button>
+                    <button onClick={() => setUnreviewConfirm(false)} className="btn-secondary">Cancel</button>
+                    <button onClick={handleUnreview} className="btn-primary">Remove review</button>
                   </div>
                 </div>
               </div>
@@ -186,9 +171,7 @@ async function handleReview() {
                   key={f}
                   onClick={() => setFilter(f)}
                   className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
-                    filter === f
-                      ? 'bg-gray-900 text-white font-medium'
-                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    filter === f ? 'bg-gray-900 text-white font-medium' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                   }`}
                 >
                   {f}
@@ -250,7 +233,7 @@ async function handleReview() {
           </table>
         </section>
 
-{/* Krona */}
+        {/* Krona */}
         {caseData?.has_krona && (
           <section className="bg-white border border-gray-100 rounded-xl p-4">
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Krona</p>
@@ -264,7 +247,7 @@ async function handleReview() {
                 title="Krona taxonomic chart"
                 className="w-full rounded-lg border border-gray-100"
                 style={{ height: '85vh' }}
-                sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                sandbox="allow-scripts allow-popups allow-forms"
               />
             )}
           </section>
@@ -307,6 +290,68 @@ async function handleReview() {
             </table>
           </section>
         )}
+
+        {/* Provenance */}
+        {caseData && caseData.pipeline_info ? (
+          <section className="bg-white border border-gray-100 rounded-xl">
+            <button
+              onClick={() => setProvenanceOpen(o => !o)}
+              className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+            >
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">Provenance</p>
+              <svg
+                className={`w-3 h-3 text-gray-300 transition-transform ${provenanceOpen ? 'rotate-180' : ''}`}
+                viewBox="0 0 16 16" fill="none"
+              >
+                <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            {provenanceOpen && (() => {
+              const pipelineConfig = caseData.pipeline_info.pipeline_configuration || {}
+              const toolMap = {}
+              Object.values(caseData.pipeline_info.software_used || {}).forEach(processTools => {
+                Object.entries(processTools).forEach(([name, ver]) => {
+                  toolMap[String(name)] = String(ver)
+                })
+              })
+              const toolRows = Object.entries(toolMap).sort()
+              return (
+                <div className="border-t border-gray-100 px-4 py-3 flex flex-col gap-3">
+                  <div className="flex gap-6">
+                    {pipelineConfig.pipeline && (
+                      <span className="text-xs text-gray-500">
+                        <span className="text-gray-400">nf-core/taxprofiler</span>
+                        <span className="font-mono ml-2 text-gray-700">{String(pipelineConfig.pipeline)}</span>
+                      </span>
+                    )}
+                    {pipelineConfig.nextflow && (
+                      <span className="text-xs text-gray-500">
+                        <span className="text-gray-400">Nextflow</span>
+                        <span className="font-mono ml-2 text-gray-700">{String(pipelineConfig.nextflow)}</span>
+                      </span>
+                    )}
+                  </div>
+                  <table className="w-full">
+                    <thead>
+                      <tr>
+                        <th className="text-left text-xs font-medium text-gray-400 pb-1.5 w-1/2">Tool</th>
+                        <th className="text-left text-xs font-medium text-gray-400 pb-1.5">Version</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {toolRows.map(([name, ver]) => (
+                        <tr key={name} className="border-t border-gray-50">
+                          <td className="py-1 text-xs text-gray-600">{name}</td>
+                          <td className="py-1 font-mono text-xs text-gray-400">{ver}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            })()}
+          </section>
+        ) : null}
 
       </div>
     </div>
