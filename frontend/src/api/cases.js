@@ -28,8 +28,9 @@ export async function unreviewCase(caseId) {
   return res.data
 }
 
-export async function getCaseKronaUrl(caseId) {
+export async function getCaseKronaUrl(caseId, classifier = 'kraken2') {
   const resp = await client.get(`/cases/${caseId}/krona`, {
+    params: { classifier },
     responseType: 'blob',
   })
   return URL.createObjectURL(resp.data)

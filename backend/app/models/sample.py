@@ -140,22 +140,28 @@ class SampleDocument(BaseModel):
 # Ingest request models
 # ---------------------------------------------------------------------------
 
+class ClassifierIngestRequest(BaseModel):
+    name: str                    # e.g. "kraken2" or "centrifuge"
+    db: str                      # e.g. "k2_pluspf" or "p_compressed+h+v"
+    taxpasta: str                # path to taxpasta TSV
+    krona: Optional[str] = None  # path to krona HTML
+
+
 class SampleIngestRequest(BaseModel):
-    subject_id: Optional[str] = None        # null for controls
-    sample_id: str                           # e.g. PE-04-28
-    taxpasta_column: str                     # column name in the taxpasta TSV
-    sample_type: str = "test"               # test | positive_ctrl | negative_ctrl
-    material: str = "DNA"                    # DNA | RNA
+    subject_id: Optional[str] = None
+    sample_id: str
+    sample_type: str = "test"
+    material: str = "DNA"
     order_date: Optional[date] = None
+    columns: dict                # {"kraken2": "PE-04-28_k2_pluspf...", "centrifuge": "PE-04-28_p_compressed+h+v.centrifuge"}
     library_preparation: Optional[LibraryPreparation] = None
     sequencing: Optional[SequencingMetadata] = None
 
 
 class IngestRequest(BaseModel):
     case_id: str
-    taxonomy_db: Optional[str] = None        # name of a loaded taxonomy e.g. "k2_pluspf"
-    taxpasta_path: str                        # shared across all samples in the case
-    multiqc_path: str                         # shared across all samples in the case
-    pipeline_info_path: str                   # shared across all samples in the case
-    krona_path: Optional[str] = None          # one Krona file for the whole case
+    taxonomy_db: Optional[str] = None
+    multiqc_path: str
+    pipeline_info_path: str
+    classifiers: List[ClassifierIngestRequest]
     samples: List[SampleIngestRequest]

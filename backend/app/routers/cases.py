@@ -90,22 +90,19 @@ async def list_samples_for_case(
     controls_taxa = _load_controls_taxa()
     spike_in_ids = set(controls_taxa.get("spike_in", []))
 
-    def non_host_total_for(all_entries: list) -> int:
-        host_reads = next((e["abundance"] for e in all_entries if e.get("name") == "Homo sapiens"), 0)
-        unclass_reads = sum(e["abundance"] for e in all_entries if e.get("name") == "unclassified")
-        total_reads = sum(e["abundance"] for e in all_entries)
+    def _non_host_total(entries: list) -> float:
+        host_reads = next((e["abundance"] for e in entries if e.get("name") == "Homo sapiens"), 0)
+        unclass_reads = sum(e["abundance"] for e in entries if e.get("name") == "unclassified")
+        total_reads = sum(e["abundance"] for e in entries)
         return total_reads - host_reads - unclass_reads
 
-    def top_taxa(doc: dict, n: int = 3) -> list:
-        all_entries = doc.get("profiles", [{}])[0].get("profile", []) if doc.get("profiles") else []
-        non_host_total = non_host_total_for(all_entries)
-        all_entries = doc.get("profiles", [{}])[0].get("profile", []) if doc.get("profiles") else []
-        non_host_total = non_host_total_for(all_entries)
+    def top_taxa_for(entries: list, n: int = 3) -> list:
+        non_host_total = _non_host_total(entries)
         non_host_entries = [
-            e for e in all_entries
+            e for e in entries
             if e.get("taxon_id") not in HOST_TAXON_IDS
-            and e.get("name") != "unclassified"
-            and not (e.get("name") or "").startswith("unclassified ")
+               and e.get("name") != "unclassified"
+               and not (e.get("name") or "").startswith("unclassified ")
         ]
         non_host_entries.sort(key=lambda e: e.get("abundance", 0), reverse=True)
         return [
@@ -118,27 +115,33 @@ async def list_samples_for_case(
             for e in non_host_entries[:n]
         ]
 
-    def spike_in_taxa(doc: dict) -> list:
+    def spike_in_for(entries: list) -> list:
         if not spike_in_ids:
             return []
-        all_entries = doc.get("profiles", [{}])[0].get("profile", []) if doc.get("profiles") else []
-        non_host_total = non_host_total_for(all_entries)
-        hits = [
+        non_host_total = _non_host_total(entries)
+        return [
             {
                 "name": e["name"],
                 "taxon_id": e["taxon_id"],
                 "abundance": e["abundance"],
                 "pct": round(e["abundance"] / non_host_total * 100, 3) if non_host_total else None,
             }
-            for e in all_entries
+            for e in entries
             if e.get("taxon_id") in spike_in_ids
         ]
-        return hits
 
     result = []
     for doc in docs:
-        doc["top_taxa"] = top_taxa(doc)
-        doc["spike_in_taxa"] = spike_in_taxa(doc)
+        profiles = doc.get("profiles", [])
+        top_taxa_by_clf = {}
+        spike_in_by_clf = {}
+        for p in profiles:
+            clf = p.get("classifier", "unknown")
+            entries = p.get("profile", [])
+            top_taxa_by_clf[clf] = top_taxa_for(entries)
+            spike_in_by_clf[clf] = spike_in_for(entries)
+        doc["top_taxa"] = top_taxa_by_clf
+        doc["spike_in_taxa"] = spike_in_by_clf
         doc.pop("profiles", None)
         result.append(_serialise_sample(doc))
     return result
@@ -147,6 +150,7 @@ async def list_samples_for_case(
 @router.get("/{case_id}/krona", summary="Serve Krona HTML for a case")
 async def get_krona(
     case_id: str,
+    classifier: str = "kraken2",
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
@@ -154,9 +158,12 @@ async def get_krona(
     if not case:
         raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
 
-    doc = await db["krona_files"].find_one({"case_id": case["_id"]})
+    doc = await db["krona_files"].find_one({
+        "case_id":    case["_id"],
+        "classifier": classifier,
+    })
     if not doc:
-        raise HTTPException(status_code=404, detail="No Krona file stored for this case")
+        raise HTTPException(status_code=404, detail=f"No Krona file for classifier '{classifier}'")
 
     return HTMLResponse(content=doc["html"])
 

@@ -2,22 +2,15 @@
 """
 Ingest a taxprofiler case into meta-vis-app.
 
-One call per case. All samples in the case share the same taxpasta, multiqc,
-pipeline_info, and (optionally) krona files. Each sample is described
-explicitly with its taxpasta column, type, and material.
-
 Usage:
     python ingest.py \
-        --case-id case_2026_02_23 \
+        --case-id slowtiger \
         --taxonomy-db k2_pluspf \
-        --taxpasta /path/to/kraken2_k2_pluspf.tsv \
         --multiqc  /path/to/multiqc_data.json \
         --pipeline-info /path/to/pipeline_info \
-        --krona    /path/to/kraken2_k2_pluspf.html \
-        --sample "subject_id=S-001 sample_id=PE-04-28 column=PE-04-28_k2_pluspf.kraken2.kraken2.report type=test material=DNA order_date=2026-02-20" \
-        --sample "subject_id=S-001 sample_id=EN-30-35 column=EN-30-35_k2_pluspf.kraken2.kraken2.report type=test material=RNA order_date=2026-02-20" \
-        --sample "sample_id=H2-17-32 column=H2-17-32_k2_pluspf.kraken2.kraken2.report type=positive_ctrl material=DNA" \
-        --sample "sample_id=VZ-20-28 column=VZ-20-28_k2_pluspf.kraken2.kraken2.report type=positive_ctrl material=RNA" \
+        --classifier "kraken2 db=k2_pluspf taxpasta=/path/kraken2.tsv krona=/path/kraken2.html" \
+        --classifier "centrifuge db=p_compressed+h+v taxpasta=/path/centrifuge.tsv krona=/path/centrifuge.html" \
+        --sample "subject_id=S-001 sample_id=PE-04-28 type=test material=DNA order_date=2026-02-20 column_kraken2=PE-04-28_k2_pluspf.kraken2.kraken2.report column_centrifuge=PE-04-28_p_compressed+h+v.centrifuge" \
         --password yourpassword
 """
 
@@ -38,11 +31,44 @@ def get_token(base_url: str, username: str, password: str) -> str:
     return resp.json()["access_token"]
 
 
-def parse_sample(raw: str) -> dict:
+def parse_classifier(raw: str) -> dict:
+    """
+    Parse a --classifier argument of the form:
+      kraken2 db=k2_pluspf taxpasta=/path/to/file.tsv krona=/path/to/file.html
+    First token is the classifier name, rest are key=value pairs.
+    """
+    tokens = raw.split()
+    if not tokens:
+        print("Empty --classifier argument")
+        sys.exit(1)
+    name = tokens[0]
+    parts = {}
+    for token in tokens[1:]:
+        if "=" not in token:
+            print(f"Invalid classifier token '{token}' — expected key=value")
+            sys.exit(1)
+        k, v = token.split("=", 1)
+        parts[k.strip()] = v.strip()
+    required = {"db", "taxpasta"}
+    missing = required - parts.keys()
+    if missing:
+        print(f"Classifier '{name}' is missing required keys: {missing}")
+        sys.exit(1)
+    return {
+        "name":    name,
+        "db":      parts["db"],
+        "taxpasta": parts["taxpasta"],
+        "krona":   parts.get("krona"),
+    }
+
+
+def parse_sample(raw: str, classifier_names: list) -> dict:
     """
     Parse a --sample argument of the form:
       key=value key=value ...
-    Recognised keys: subject_id, sample_id, column, type, material, order_date
+    Required keys: sample_id, type, material
+    Optional keys: subject_id, order_date
+    Classifier columns: column_{classifier_name} for each classifier
     """
     parts = {}
     for token in raw.split():
@@ -52,34 +78,41 @@ def parse_sample(raw: str) -> dict:
         k, v = token.split("=", 1)
         parts[k.strip()] = v.strip()
 
-    required = {"sample_id", "column", "type", "material"}
+    required = {"sample_id", "type", "material"}
     missing = required - parts.keys()
     if missing:
         print(f"Sample is missing required keys: {missing}")
         sys.exit(1)
 
+    columns = {}
+    for clf_name in classifier_names:
+        col_key = f"column_{clf_name}"
+        if col_key in parts:
+            columns[clf_name] = parts[col_key]
+
     return {
-        "subject_id":      parts.get("subject_id"),
-        "sample_id":       parts["sample_id"],
-        "taxpasta_column": parts["column"],
-        "sample_type":     parts["type"],
-        "material":        parts["material"],
-        "order_date":      parts.get("order_date"),
+        "subject_id":  parts.get("subject_id"),
+        "sample_id":   parts["sample_id"],
+        "sample_type": parts["type"],
+        "material":    parts["material"],
+        "order_date":  parts.get("order_date"),
+        "columns":     columns,
     }
 
 
 def ingest(args):
     token = get_token(args.url, args.username, args.password)
 
-    samples = [parse_sample(s) for s in args.sample]
+    classifiers = [parse_classifier(c) for c in args.classifier]
+    classifier_names = [c["name"] for c in classifiers]
+    samples = [parse_sample(s, classifier_names) for s in args.sample]
 
     payload = {
         "case_id":            args.case_id,
         "taxonomy_db":        args.taxonomy_db,
-        "taxpasta_path":      args.taxpasta,
         "multiqc_path":       args.multiqc,
         "pipeline_info_path": args.pipeline_info,
-        "krona_path":         args.krona,
+        "classifiers":        classifiers,
         "samples":            samples,
     }
 
@@ -108,33 +141,25 @@ def main():
         description="Ingest a taxprofiler case into meta-vis-app",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-
-    # Case-level
-    parser.add_argument("--case-id",        required=True,  help="Case identifier, e.g. case_2026_02_23")
-    parser.add_argument("--taxonomy-db",    default=None,   help="Name of a loaded taxonomy, e.g. k2_pluspf")
-
-    # Shared pipeline outputs
-    parser.add_argument("--taxpasta",       required=True,  help="Path to TAXPASTA TSV file (shared across all samples)")
-    parser.add_argument("--multiqc",        required=True,  help="Path to multiqc_data.json (shared across all samples)")
-    parser.add_argument("--pipeline-info",  required=True,  help="Path to pipeline_info directory (shared across all samples)")
-    parser.add_argument("--krona",          default=None,   help="Path to Krona HTML file for the case (optional)")
-
-    # Per-sample — repeat --sample for each sample in the case
+    parser.add_argument("--case-id",       required=True)
+    parser.add_argument("--taxonomy-db",   default=None)
+    parser.add_argument("--multiqc",       required=True)
+    parser.add_argument("--pipeline-info", required=True)
+    parser.add_argument(
+        "--classifier",
+        action="append",
+        required=True,
+        metavar="NAME db=DB taxpasta=PATH [krona=PATH]",
+        help="Classifier descriptor. Repeat for each classifier.",
+    )
     parser.add_argument(
         "--sample",
         action="append",
         required=True,
         metavar="KEY=VALUE ...",
-        help=(
-            "Sample descriptor as space-separated key=value pairs. "
-            "Required keys: sample_id, column, type, material. "
-            "Optional keys: subject_id, order_date. "
-            "Repeat --sample for each sample in the case."
-        ),
+        help="Sample descriptor. Repeat for each sample.",
     )
-
-    # Server / auth
-    parser.add_argument("--url",      default="http://localhost:8000", help="API base URL")
+    parser.add_argument("--url",      default="http://localhost:8000")
     parser.add_argument("--username", default="admin")
     parser.add_argument("--password", required=True)
 

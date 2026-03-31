@@ -28,8 +28,9 @@ export default function CaseDetail() {
   const [filter,          setFilter]          = useState('All')
   const [reviewing,       setReviewing]       = useState(false)
   const [unreviewConfirm, setUnreviewConfirm] = useState(false)
-  const [kronaUrl,        setKronaUrl]        = useState(null)
-  const [kronaError,      setKronaError]      = useState(false)
+  const [kronaUrls,       setKronaUrls]       = useState({})
+  const [kronaErrors,     setKronaErrors]     = useState({})
+  const [kronaTab,        setKronaTab]        = useState(null)
   const [provenanceOpen,  setProvenanceOpen]  = useState(false)
 
   useEffect(() => {
@@ -41,13 +42,19 @@ export default function CaseDetail() {
         ])
         setCaseData(fetchedCase)
         setSamples(samplesData)
-        if (fetchedCase.has_krona) {
-          try {
-            const url = await getCaseKronaUrl(caseId)
-            setKronaUrl(url)
-          } catch {
-            setKronaError(true)
-          }
+
+        if (fetchedCase.has_krona && fetchedCase.classifiers?.length) {
+          const firstClassifier = fetchedCase.classifiers[0].name
+          setKronaTab(firstClassifier)
+          fetchedCase.classifiers.forEach(async clf => {
+            if (!clf.krona_id) return
+            try {
+              const url = await getCaseKronaUrl(caseId, clf.name)
+              setKronaUrls(prev => ({ ...prev, [clf.name]: url }))
+            } catch {
+              setKronaErrors(prev => ({ ...prev, [clf.name]: true }))
+            }
+          })
         }
       } catch {
         setError('Failed to load case.')
@@ -97,12 +104,8 @@ export default function CaseDetail() {
     return samples
   }, [samples, filter])
 
-  const testSamples = samples.filter(s => s.sample_type === 'test')
-  const controls    = samples.filter(s =>
-    s.sample_type === 'negative_ctrl' || s.sample_type === 'positive_ctrl'
-  )
-
   const reviewed = caseData?.review?.reviewed
+  const classifiers = caseData?.classifiers ?? []
 
   if (loading) return <div className="flex items-center justify-center h-full text-sm text-gray-400">Loading…</div>
   if (error)   return <div className="flex items-center justify-center h-full text-sm text-red-500">{error}</div>
@@ -125,11 +128,7 @@ export default function CaseDetail() {
         <h1 className="text-sm font-medium text-gray-900 font-mono flex-1">{caseId}</h1>
         <Badge type={reviewed ? 'reviewed' : 'pending'} />
         {!reviewed && role !== 'reader' && (
-          <button
-            onClick={handleReview}
-            disabled={reviewing}
-            className="btn-primary disabled:opacity-50"
-          >
+          <button onClick={handleReview} disabled={reviewing} className="btn-primary disabled:opacity-50">
             {reviewing ? 'Saving…' : 'Mark case as reviewed'}
           </button>
         )}
@@ -146,7 +145,7 @@ export default function CaseDetail() {
                 <div className="bg-white rounded-xl border border-gray-100 shadow-lg p-6 w-80 flex flex-col gap-4">
                   <p className="text-sm font-medium text-gray-900">Remove review?</p>
                   <p className="text-xs text-gray-500">
-                    This will remove the review by <span className="font-medium">{caseData.review.reviewed_by}</span> and reset the case to pending. This cannot be undone.
+                    This will remove the review by <span className="font-medium">{caseData.review.reviewed_by}</span> and reset the case to pending.
                   </p>
                   <div className="flex gap-2 justify-end">
                     <button onClick={() => setUnreviewConfirm(false)} className="btn-secondary">Cancel</button>
@@ -161,7 +160,7 @@ export default function CaseDetail() {
 
       <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 flex flex-col gap-6">
 
-        {/* Samples table */}
+        {/* Samples table — classifier-agnostic */}
         <section className="bg-white border border-gray-100 rounded-xl">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">Samples</p>
@@ -182,7 +181,7 @@ export default function CaseDetail() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr>
-                {['Sample ID', 'Material', 'Order date', 'Type', 'Unclassified', 'Q30', 'Positive control', 'Top taxa'].map(h => (
+                {['Sample ID', 'Material', 'Order date', 'Type', 'Total reads'].map(h => (
                   <th key={h} className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap">
                     {h}
                   </th>
@@ -200,110 +199,136 @@ export default function CaseDetail() {
                   <td className="px-4 py-3 text-xs text-gray-500">{s.material ?? '—'}</td>
                   <td className="px-4 py-3 text-xs text-gray-500">{s.order_date ?? '—'}</td>
                   <td className="px-4 py-3"><Badge type={s.sample_type} /></td>
-                  <td className="px-4 py-3 text-xs text-gray-700">{fmtPct(s.taxprofiler?.kraken2?.pct_unclassified)}</td>
-                 <td className="px-4 py-3 text-xs text-gray-700">
-                    {fmtPct(s.taxprofiler?.fastp?.q30_rate ? s.taxprofiler.fastp.q30_rate * 100 : null)}
-                  </td>
-                  <td className="px-4 py-3 text-xs">
-                    {s.spike_in_taxa && s.spike_in_taxa.length > 0 ? (
-                      <div className="flex flex-col gap-0.5">
-                        {s.spike_in_taxa.map((t, i) => (
-                          <span key={i} className="text-gray-600 italic">
-                            {t.name}
-                            {t.pct != null && (
-                            <span className="not-italic text-gray-400 ml-1">{t.pct}% ({t.abundance.toLocaleString()})</span>
-                          )}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <span className="text-gray-300">Non detected</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col gap-0.5">
-                      {(s.top_taxa || []).map((t, i) => (
-                        <span key={i} className="flex items-center gap-1 text-xs">
-                          <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                            t.superkingdom === 'Bacteria'  ? 'bg-blue-400'   :
-                            t.superkingdom === 'Viruses'   ? 'bg-red-400'    :
-                            t.superkingdom === 'Eukaryota' ? 'bg-amber-400'  :
-                            t.superkingdom === 'Archaea'   ? 'bg-purple-400' : 'bg-gray-300'
-                          }`} />
-                          <span className="text-gray-600 italic truncate max-w-36">{t.name}</span>
-                          {t.pct != null && (
-                            <span className="text-gray-400 flex-shrink-0">{t.pct}%</span>
-                          )}
-                        </span>
-                      ))}
-                    </div>
+                  <td className="px-4 py-3 text-xs text-gray-700">
+                    {fmt(s.taxprofiler?.fastp?.total_reads_before_filtering)}
                   </td>
                 </tr>
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-400">No samples match this filter.</td>
+                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-400">No samples match this filter.</td>
                 </tr>
               )}
             </tbody>
           </table>
         </section>
 
-        {/* Krona */}
-        {caseData?.has_krona && (
-          <section className="bg-white border border-gray-100 rounded-xl p-4">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Krona</p>
-            {kronaError && <p className="text-xs text-red-400">Krona file could not be loaded.</p>}
-            {!kronaUrl && !kronaError && (
-              <div className="flex items-center justify-center h-40 text-sm text-gray-400">Loading Krona…</div>
-            )}
-            {kronaUrl && (
-              <iframe
-                src={kronaUrl}
-                title="Krona taxonomic chart"
-                className="w-full rounded-lg border border-gray-100"
-                style={{ height: '85vh' }}
-                sandbox="allow-scripts allow-popups allow-forms"
-              />
-            )}
-          </section>
-        )}
-
-        {/* Controls comparison */}
-        {controls.length > 0 && (
-          <section className="bg-white border border-gray-100 rounded-xl p-4">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Controls comparison</p>
-            <table className="w-full">
+        {/* Classifier QC sections — one per classifier */}
+        {classifiers.map(clf => (
+          <section key={clf.name} className="bg-white border border-gray-100 rounded-xl">
+            <div className="px-4 py-3 border-b border-gray-100">
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+                {clf.name}
+                <span className="ml-2 normal-case font-normal text-gray-300">· {clf.db}</span>
+              </p>
+            </div>
+            <table className="w-full text-left border-collapse">
               <thead>
                 <tr>
-                  <th className="text-left text-xs font-medium text-gray-400 pb-2 pr-4">Metric</th>
-                  {[...testSamples, ...controls].map(s => (
-                    <th key={s._id} className="text-right text-xs font-medium text-gray-400 pb-2 px-3">
-                      <span className="font-mono">{s.sample?.sample_id}</span>
-                      <span className="block font-normal text-gray-300 normal-case">
-                        {s.sample_type === 'test' ? 'test' : s.sample_type === 'negative_ctrl' ? 'neg ctrl' : 'pos ctrl'}
-                      </span>
-                    </th>
-                  ))}
+                  <th className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap">Sample</th>
+                  <th className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap">Unclassified</th>
+                  <th className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap">Species</th>
+                  <th className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap">Genera</th>
+                  <th className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap">Positive control</th>
+                  <th className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap">Top taxa</th>
                 </tr>
               </thead>
               <tbody>
-                {[
-                  { label: 'Unclassified %', fn: s => fmtPct(s.taxprofiler?.kraken2?.pct_unclassified) },
-                  { label: 'Species',        fn: s => fmt(s.taxprofiler?.kraken2?.num_species) },
-                  { label: 'Genera',         fn: s => fmt(s.taxprofiler?.kraken2?.num_genera) },
-                  { label: 'Q30 rate',       fn: s => fmtPct(s.taxprofiler?.fastp?.q30_rate ? s.taxprofiler.fastp.q30_rate * 100 : null) },
-                  { label: 'Host reads',     fn: s => fmtPct(s.taxprofiler?.bowtie2?.overall_alignment_rate) },
-                ].map(row => (
-                  <tr key={row.label} className="border-t border-gray-50">
-                    <td className="py-2 pr-4 text-xs text-gray-500">{row.label}</td>
-                    {[...testSamples, ...controls].map(s => (
-                      <td key={s._id} className="py-2 px-3 text-xs text-gray-700 text-right">{row.fn(s)}</td>
-                    ))}
-                  </tr>
-                ))}
+                {samples.map(s => {
+                  const clfQc      = s.taxprofiler?.classifiers?.[clf.name]
+                  const topTaxa    = s.top_taxa?.[clf.name] ?? []
+                  const spikeIn    = s.spike_in_taxa?.[clf.name] ?? []
+                  return (
+                    <tr
+                      key={s._id}
+                      onClick={() => navigate(`/samples/${s._id}`)}
+                      className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                    >
+                      <td className="px-4 py-3 font-mono text-xs text-gray-700">{s.sample?.sample_id ?? '—'}</td>
+                      <td className="px-4 py-3 text-xs text-gray-700">{fmtPct(clfQc?.pct_unclassified)}</td>
+                      <td className="px-4 py-3 text-xs text-gray-700">{fmt(clfQc?.num_species)}</td>
+                      <td className="px-4 py-3 text-xs text-gray-700">{fmt(clfQc?.num_genera)}</td>
+                      <td className="px-4 py-3 text-xs">
+                        {spikeIn.length > 0 ? (
+                          <div className="flex flex-col gap-0.5">
+                            {spikeIn.map((t, i) => (
+                              <span key={i} className="text-gray-600 italic">
+                                {t.name}
+                                {t.pct != null && (
+                                  <span className="not-italic text-gray-400 ml-1">{t.pct}% ({t.abundance.toLocaleString()})</span>
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-gray-300">Non detected</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-0.5">
+                          {topTaxa.map((t, i) => (
+                            <span key={i} className="flex items-center gap-1 text-xs">
+                              <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                                t.superkingdom === 'Bacteria'  ? 'bg-blue-400'   :
+                                t.superkingdom === 'Viruses'   ? 'bg-red-400'    :
+                                t.superkingdom === 'Eukaryota' ? 'bg-amber-400'  :
+                                t.superkingdom === 'Archaea'   ? 'bg-purple-400' : 'bg-gray-300'
+                              }`} />
+                              <span className="text-gray-600 italic truncate max-w-36">{t.name}</span>
+                              {t.pct != null && (
+                                <span className="text-gray-400 flex-shrink-0">{t.pct}%</span>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
+          </section>
+        ))}
+
+        {/* Krona — tabs per classifier */}
+        {caseData.has_krona && classifiers.length > 0 && (
+          <section className="bg-white border border-gray-100 rounded-xl">
+            <div className="flex items-center gap-0 px-4 py-3 border-b border-gray-100">
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">Krona</p>
+              <div className="flex gap-1.5">
+                {classifiers.map(clf => (
+                  <button
+                    key={clf.name}
+                    onClick={() => setKronaTab(clf.name)}
+                    className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
+                      kronaTab === clf.name
+                        ? 'bg-gray-900 text-white font-medium'
+                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    }`}
+                  >
+                    {clf.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="p-4">
+              {kronaTab && kronaErrors[kronaTab] && (
+                <p className="text-xs text-red-400">Krona file could not be loaded.</p>
+              )}
+              {kronaTab && !kronaUrls[kronaTab] && !kronaErrors[kronaTab] && (
+                <div className="flex items-center justify-center h-40 text-sm text-gray-400">Loading Krona…</div>
+              )}
+              {kronaTab && kronaUrls[kronaTab] && (
+                <iframe
+                  key={kronaTab}
+                  src={kronaUrls[kronaTab]}
+                  title={`Krona — ${kronaTab}`}
+                  className="w-full rounded-lg border border-gray-100"
+                  style={{ height: '85vh' }}
+                  sandbox="allow-scripts allow-popups allow-forms"
+                />
+              )}
+            </div>
           </section>
         )}
 
