@@ -8,10 +8,14 @@ services:
       - mongodb_data:/data/db
       - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     environment:
-      MONGO_INITDB_DATABASE: meta-vis-dev
+      MONGO_INITDB_DATABASE: ${MONGODB_DB_NAME}
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
       MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD}
+      MONGODB_USERNAME: ${MONGODB_USERNAME}
+      MONGODB_DB_NAME: ${MONGODB_DB_NAME}
+    env_file:
+      - .env
 
 volumes:
   mongodb_data:
