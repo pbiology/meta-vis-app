@@ -107,6 +107,24 @@ def _read_blast(metaval_dir: Path) -> dict:
     return results
 
 
+def _read_metaval_pipeline_info(metaval_dir: Path) -> Optional[dict]:
+    """
+    Read the metaval software versions file from pipeline_info/.
+    Returns the same structure as pipeline_info_reader.read_pipeline_info.
+    """
+    pipeline_info_dir = metaval_dir / 'pipeline_info'
+    if not pipeline_info_dir.exists():
+        return None
+    versions_file = next(pipeline_info_dir.glob('*.yml'), None)
+    if not versions_file:
+        return None
+    try:
+        from app.ingestor.pipeline_info_reader import read_pipeline_info
+        return read_pipeline_info(str(versions_file))
+    except Exception:
+        return None
+
+
 def read_metaval(metaval_igv_dir: str) -> list[dict]:
     igv_dir     = Path(metaval_igv_dir)
     metaval_dir = igv_dir.parent
@@ -114,8 +132,9 @@ def read_metaval(metaval_igv_dir: str) -> list[dict]:
     if not igv_dir.exists():
         raise FileNotFoundError(f"Metaval IGV directory not found: {metaval_igv_dir}")
 
-    taxid_map  = _read_viral_taxids(metaval_dir)
+    taxid_map = _read_viral_taxids(metaval_dir)
     blast_data = _read_blast(metaval_dir)
+    metaval_pipeline = _read_metaval_pipeline_info(metaval_dir)
 
     # Group IGV files by (sample_name, classifier, taxon_name)
     groups: dict[tuple, list] = {}
@@ -153,4 +172,7 @@ def read_metaval(metaval_igv_dir: str) -> list[dict]:
             'blast':       blast_hits,
         })
 
-    return results
+    return {
+        'results': results,
+        'pipeline_info': metaval_pipeline,
+    }
