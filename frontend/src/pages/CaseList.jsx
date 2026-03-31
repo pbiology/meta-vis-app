@@ -2,12 +2,14 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getCases, getCaseSamples } from '../api/cases'
 import Badge from '../components/Badge'
+import { getOutbreaks } from '../api/alerts'
 
 export default function CaseList() {
   const [cases, setCases] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const navigate = useNavigate()
+  const [outbreakCaseIds, setOutbreakCaseIds] = useState(new Set())
 
   useEffect(() => {
     async function load() {
@@ -31,6 +33,12 @@ export default function CaseList() {
           return bDate.localeCompare(aDate)
         })
         setCases(sorted)
+        getOutbreaks(14)
+          .then(data => {
+            const ids = new Set(data.outbreaks.flatMap(o => o.case_ids))
+            setOutbreakCaseIds(ids)
+          })
+          .catch(() => {})
       } catch {
         setError('Failed to load cases.')
       } finally {
@@ -83,7 +91,17 @@ export default function CaseList() {
                     onClick={() => navigate(`/cases/${c.case_id}`)}
                     className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
                   >
-                    <td className="px-4 py-3 font-mono text-xs text-gray-700">{c.case_id}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-700">
+                      <div className="flex items-center gap-1.5">
+                        {c.case_id}
+                        {outbreakCaseIds.has(c._id) && (
+                          <svg className="w-3 h-3 text-amber-500 flex-shrink-0" viewBox="0 0 16 16" fill="none">
+                            <path d="M8 2L14 13H2L8 2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+                            <path d="M8 6v3M8 11v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                          </svg>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{c.order_date ?? '—'}</td>
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
                       {c.testSamples.length} test{c.testSamples.length !== 1 ? 's' : ''}

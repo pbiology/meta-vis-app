@@ -4,6 +4,7 @@ import { getSample, getProfile, getKronaUrl } from '../api/samples'
 import Badge from '../components/Badge'
 import MetricCard from '../components/MetricCard'
 import { getMetavalForSample } from '../api/metaval'
+import { getOutbreaks } from '../api/alerts'
 
 function fmt(n, decimals = 0) {
   if (n === undefined || n === null) return '—'
@@ -38,7 +39,7 @@ function KingdomBadge({ kingdom }) {
 
 const HOST_IDS = new Set([9606, 1, 0, 131567])
 
-function TaxonomyTable({ profile, clfQc, metavalResults, sampleId }) {
+function TaxonomyTable({ profile, clfQc, metavalResults, sampleId, outbreakTaxonIds }) {
   const [taxSearch,   setTaxSearch]   = useState('')
   const [taxKingdoms, setTaxKingdoms] = useState([])
   const [taxSort,     setTaxSort]     = useState({ col: 'abundance', dir: -1 })
@@ -231,11 +232,24 @@ function TaxonomyTable({ profile, clfQc, metavalResults, sampleId }) {
                         <span className="italic truncate">{t.name}</span>
                         {mv && (
                           <Link
-                              to={`/samples/${sampleId}/metaval/${mv._id}`}
-                              onClick={e => e.stopPropagation()}
-                              className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
-                            >
-                              <span className="underline">metaval</span>
+                            to={`/samples/${sampleId}/metaval/${mv._id}`}
+                            onClick={e => e.stopPropagation()}
+                            className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
+                          >
+                            <span className="underline">metaval</span>
+                          </Link>
+                        )}
+                        {outbreakTaxonIds.has(t.taxon_id) && (
+                          <Link
+                            to={`/alerts#taxon-${t.taxon_id}`}
+                            onClick={e => e.stopPropagation()}
+                            className="flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs bg-amber-50 text-amber-600 hover:bg-amber-100 transition-colors"
+                          >
+                            <svg className="w-2.5 h-2.5" viewBox="0 0 16 16" fill="none">
+                              <path d="M8 2L14 13H2L8 2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+                              <path d="M8 6v3M8 11v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                            </svg>
+                            <span>alert</span>
                           </Link>
                         )}
                       </div>
@@ -283,7 +297,8 @@ export default function SampleDetail() {
   const [kronaUrls,      setKronaUrls]      = useState({})
   const [kronaErrors,    setKronaErrors]    = useState({})
   const [activeTab, setActiveTab] = useState(null)
-  const [metavalResults, setMetavalResults] = useState([])
+  const [metavalResults,    setMetavalResults]    = useState([])
+  const [outbreakTaxonIds,  setOutbreakTaxonIds]  = useState(new Set())
 
   useEffect(() => {
     async function load() {
@@ -292,6 +307,10 @@ export default function SampleDetail() {
         setSample(s)
         setProfile(p)
         getMetavalForSample(sampleId).then(setMetavalResults).catch(() => {})
+        getOutbreaks(14).then(data => {
+          const ids = new Set(data.outbreaks.map(o => o.taxon_id))
+          setOutbreakTaxonIds(ids)
+        }).catch(() => {})
         if (s.has_krona && p.profiles?.length) {
           const firstClassifier = p.profiles[0].classifier
           setActiveTab(firstClassifier)
@@ -468,6 +487,7 @@ export default function SampleDetail() {
                 clfQc={qc?.classifiers?.[clf.classifier]}
                 metavalResults={metavalResults}
                 sampleId={sampleId}
+                outbreakTaxonIds={outbreakTaxonIds}
               />
             ) : null)}
           </section>
