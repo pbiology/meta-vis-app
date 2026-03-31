@@ -78,7 +78,18 @@ export default function Layout() {
               </svg>
             }
           />
+          <NavItem
+            to="/alerts"
+            label="Alerts"
+            icon={
+              <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+                <path d="M8 2L14 13H2L8 2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+                <path d="M8 6v3M8 11v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+              </svg>
+            }
+          />
         </nav>
+
 
         <div className="flex flex-col border-t border-gray-100">
           {role === 'admin' && (

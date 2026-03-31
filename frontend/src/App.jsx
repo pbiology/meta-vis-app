@@ -7,6 +7,7 @@ import CaseList from './pages/CaseList'
 import CaseDetail from './pages/CaseDetail'
 import Admin from './pages/Admin'
 import MetavalDetails from './pages/MetavalDetails'
+import Alerts from './pages/Alerts'
 import Layout from './components/Layout'
 
 function ProtectedRoute({ children }) {
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="samples/:sampleId" element={<SampleDetail />} />
         <Route path="admin" element={<Admin />} />
         <Route path="samples/:sampleId/metaval/:metavalId" element={<MetavalDetails />} />
+        <Route path="alerts" element={<Alerts />} />
       </Route>
     </Routes>
   )
