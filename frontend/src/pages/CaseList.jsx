@@ -71,7 +71,7 @@ export default function CaseList() {
           <table className="w-full text-left border-collapse">
             <thead className="sticky top-0 bg-white z-10">
               <tr>
-                {['Case name', 'Date', 'Samples', 'Sample names', 'Status', 'Reviewed by'].map(h => (
+                {['Case name', 'Date', 'Samples', 'Sample names', 'Notes', 'Status', 'Reviewed by'].map(h => (
                   <th key={h} className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap">
                     {h}
                   </th>
@@ -103,6 +103,11 @@ export default function CaseList() {
                       >
                         {sampleNames.join(', ') || '—'}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-400">
+                      {(c.notes?.length ?? 0) > 0
+                        ? <span className="text-amber-600 font-medium">{c.notes.length}</span>
+                        : '—'}
                     </td>
                     <td className="px-4 py-3">
                       <Badge type={c.review?.reviewed ? 'reviewed' : 'pending'} />

@@ -35,3 +35,13 @@ export async function getCaseKronaUrl(caseId, classifier = 'kraken2') {
   })
   return URL.createObjectURL(resp.data)
 }
+
+export async function addNote(caseId, text) {
+  const res = await client.post(`/cases/${caseId}/notes`, { text })
+  return res.data
+}
+
+export async function deleteNote(caseId, noteIndex) {
+  const res = await client.delete(`/cases/${caseId}/notes/${noteIndex}`)
+  return res.data
+}
