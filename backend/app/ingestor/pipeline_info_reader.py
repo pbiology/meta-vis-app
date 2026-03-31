@@ -23,13 +23,21 @@ def read_pipeline_info(pipeline_info_path: str) -> dict:
     workflow_info = data.pop("Workflow", {})
 
     # Normalise key capitalisation — older files use 'nf-core/taxprofiler', newer use it too
-    pipeline_version = workflow_info.get("nf-core/taxprofiler")
     nextflow_version = workflow_info.get("Nextflow")
+    pipeline_version = next(
+        (v for k, v in workflow_info.items() if k != "Nextflow"),
+        None
+    )
+    pipeline_name = next(
+        (k for k in workflow_info.keys() if k != "Nextflow"),
+        None
+    )
 
     return {
         "software_used": data,
         "pipeline_configuration": {
-            "pipeline": pipeline_version,
+            "pipeline_name": pipeline_name,
+            "pipeline_version": pipeline_version,
             "nextflow": nextflow_version,
         },
     }

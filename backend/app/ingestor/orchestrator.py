@@ -182,7 +182,14 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
 
     # Ingest metaval results if provided
     if request.metaval:
-        metaval_results = read_metaval(request.metaval.igv_dir)
+        metaval_data = read_metaval(request.metaval.igv_dir)
+        metaval_results = metaval_data['results']
+
+        if metaval_data.get('pipeline_info'):
+            await db["cases"].update_one(
+                {"_id": case_object_id},
+                {"$set": {"metaval_pipeline_info": metaval_data['pipeline_info']}},
+            )
 
         for r in metaval_results:
             # Resolve sample ObjectId from sample_name

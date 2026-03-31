@@ -355,38 +355,90 @@ export default function CaseDetail() {
                 })
               })
               const toolRows = Object.entries(toolMap).sort()
+
+              const mvInfo = caseData.metaval_pipeline_info
+              const mvConfig = mvInfo?.pipeline_configuration || {}
+              const mvToolMap = {}
+              Object.values(mvInfo?.software_used || {}).forEach(processTools => {
+                Object.entries(processTools).forEach(([name, ver]) => {
+                  mvToolMap[String(name)] = String(ver)
+                })
+              })
+              const mvToolRows = Object.entries(mvToolMap).sort()
+
               return (
-                <div className="border-t border-gray-100 px-4 py-3 flex flex-col gap-3">
-                  <div className="flex gap-6">
-                    {pipelineConfig.pipeline && (
+                <div className="border-t border-gray-100 px-4 py-3 flex flex-col gap-4">
+
+                  {/* taxprofiler */}
+                  <div className="flex flex-col gap-3">
+                    <div className="flex gap-6">
+                      {pipelineConfig.pipeline_name && (
                       <span className="text-xs text-gray-500">
-                        <span className="text-gray-400">nf-core/taxprofiler</span>
-                        <span className="font-mono ml-2 text-gray-700">{String(pipelineConfig.pipeline)}</span>
+                        <span className="text-gray-400">{pipelineConfig.pipeline_name}</span>
+                        <span className="font-mono ml-2 text-gray-700">{String(pipelineConfig.pipeline_version)}</span>
                       </span>
                     )}
-                    {pipelineConfig.nextflow && (
-                      <span className="text-xs text-gray-500">
-                        <span className="text-gray-400">Nextflow</span>
-                        <span className="font-mono ml-2 text-gray-700">{String(pipelineConfig.nextflow)}</span>
-                      </span>
-                    )}
-                  </div>
-                  <table className="w-full">
-                    <thead>
-                      <tr>
-                        <th className="text-left text-xs font-medium text-gray-400 pb-1.5 w-1/2">Tool</th>
-                        <th className="text-left text-xs font-medium text-gray-400 pb-1.5">Version</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {toolRows.map(([name, ver]) => (
-                        <tr key={name} className="border-t border-gray-50">
-                          <td className="py-1 text-xs text-gray-600">{name}</td>
-                          <td className="py-1 font-mono text-xs text-gray-400">{ver}</td>
+                      {pipelineConfig.nextflow && (
+                        <span className="text-xs text-gray-500">
+                          <span className="text-gray-400">Nextflow</span>
+                          <span className="font-mono ml-2 text-gray-700">{String(pipelineConfig.nextflow)}</span>
+                        </span>
+                      )}
+                    </div>
+                    <table className="w-full">
+                      <thead>
+                        <tr>
+                          <th className="text-left text-xs font-medium text-gray-400 pb-1.5 w-1/2">Tool</th>
+                          <th className="text-left text-xs font-medium text-gray-400 pb-1.5">Version</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {toolRows.map(([name, ver]) => (
+                          <tr key={name} className="border-t border-gray-50">
+                            <td className="py-1 text-xs text-gray-600">{name}</td>
+                            <td className="py-1 font-mono text-xs text-gray-400">{ver}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* metaval — only shown if ingested */}
+                  {mvInfo && mvToolRows.length > 0 && (
+                    <div className="flex flex-col gap-3 border-t border-gray-50 pt-3">
+                      <div className="flex gap-6">
+                        {mvConfig.pipeline_name && (
+                          <span className="text-xs text-gray-500">
+                            <span className="text-gray-400">{mvConfig.pipeline_name}</span>
+                            <span className="font-mono ml-2 text-gray-700">{String(mvConfig.pipeline_version)}</span>
+                          </span>
+                        )}
+                        {mvConfig.nextflow && (
+                          <span className="text-xs text-gray-500">
+                            <span className="text-gray-400">Nextflow</span>
+                            <span className="font-mono ml-2 text-gray-700">{String(mvConfig.nextflow)}</span>
+                          </span>
+                        )}
+                      </div>
+                      <table className="w-full">
+                        <thead>
+                          <tr>
+                            <th className="text-left text-xs font-medium text-gray-400 pb-1.5 w-1/2">Tool</th>
+                            <th className="text-left text-xs font-medium text-gray-400 pb-1.5">Version</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {mvToolRows.map(([name, ver]) => (
+                            <tr key={name} className="border-t border-gray-50">
+                              <td className="py-1 text-xs text-gray-600">{name}</td>
+                              <td className="py-1 font-mono text-xs text-gray-400">{ver}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
                 </div>
               )
             })()}
