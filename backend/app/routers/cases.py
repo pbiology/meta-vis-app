@@ -90,14 +90,17 @@ async def list_samples_for_case(
     controls_taxa = _load_controls_taxa()
     spike_in_ids = set(controls_taxa.get("spike_in", []))
 
-    def _non_host_total(entries: list) -> float:
-        host_reads = next((e["abundance"] for e in entries if e.get("name") == "Homo sapiens"), 0)
-        unclass_reads = sum(e["abundance"] for e in entries if e.get("name") == "unclassified")
-        total_reads = sum(e["abundance"] for e in entries)
-        return total_reads - host_reads - unclass_reads
+    def _non_host_total(entries: list, clf_qc: dict = None) -> float:
+        host_reads = next((e["abundance"] for e in entries if e.get("taxon_id") == 9606), 0)
+        if clf_qc and clf_qc.get("classified_reads") is not None:
+            # Use multiqc-derived classified reads as the reliable total
+            return clf_qc["classified_reads"] - host_reads
+        # Fallback: use root rooted count from taxpasta
+        root_reads = next((e["abundance"] for e in entries if e.get("taxon_id") == 1), 0)
+        return root_reads - host_reads
 
-    def top_taxa_for(entries: list, n: int = 3) -> list:
-        non_host_total = _non_host_total(entries)
+    def top_taxa_for(entries: list, clf_qc: dict = None, n: int = 3) -> list:
+        non_host_total = _non_host_total(entries, clf_qc)
         non_host_entries = [
             e for e in entries
             if e.get("taxon_id") not in HOST_TAXON_IDS
@@ -115,10 +118,10 @@ async def list_samples_for_case(
             for e in non_host_entries[:n]
         ]
 
-    def spike_in_for(entries: list) -> list:
+    def spike_in_for(entries: list, clf_qc: dict = None) -> list:
         if not spike_in_ids:
             return []
-        non_host_total = _non_host_total(entries)
+        non_host_total = _non_host_total(entries, clf_qc)
         return [
             {
                 "name": e["name"],
@@ -138,8 +141,9 @@ async def list_samples_for_case(
         for p in profiles:
             clf = p.get("classifier", "unknown")
             entries = p.get("profile", [])
-            top_taxa_by_clf[clf] = top_taxa_for(entries)
-            spike_in_by_clf[clf] = spike_in_for(entries)
+            clf_qc = doc.get("taxprofiler", {}).get("classifiers", {}).get(clf)
+            top_taxa_by_clf[clf] = top_taxa_for(entries, clf_qc)
+            spike_in_by_clf[clf] = spike_in_for(entries, clf_qc)
         doc["top_taxa"] = top_taxa_by_clf
         doc["spike_in_taxa"] = spike_in_by_clf
         doc.pop("profiles", None)

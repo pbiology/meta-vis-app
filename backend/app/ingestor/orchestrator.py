@@ -201,13 +201,23 @@ def _extract_classifier_qc(qc_data: dict, classifier_name: str, col: str) -> dic
         return {}
 
     unclassified_reads = sum(r["counts_rooted"] for r in records if r.get("rank_code") == "U")
-    total_reads        = sum(r["counts_rooted"] for r in records if r.get("rank_code") in ("U", "R"))
+    root_records       = [r for r in records if r.get("rank_code") == "R"]
     num_species        = len([r for r in records if r.get("rank_code") == "S"])
     num_genera         = len([r for r in records if r.get("rank_code") == "G"])
+
+    if root_records:
+        classified_reads = root_records[0]["counts_rooted"]
+    else:
+        # centrifuge has no R record — sum all species-level rooted counts as best estimate
+        classified_reads = sum(r["counts_rooted"] for r in records if r.get("rank_code") == "S")
+
+    total_reads = unclassified_reads + classified_reads
 
     return {
         "pct_unclassified":   round(unclassified_reads / total_reads * 100, 2) if total_reads else None,
         "unclassified_reads": unclassified_reads or None,
+        "classified_reads":   classified_reads or None,
+        "total_reads":        total_reads or None,
         "num_species":        num_species or None,
         "num_genera":         num_genera  or None,
     }
