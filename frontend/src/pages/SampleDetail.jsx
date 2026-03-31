@@ -37,7 +37,7 @@ function KingdomBadge({ kingdom }) {
 
 const HOST_IDS = new Set([9606, 1, 0, 131567])
 
-function TaxonomyTable({ profile }) {
+function TaxonomyTable({ profile, clfQc }) {
   const [taxSearch,  setTaxSearch]  = useState('')
   const [taxKingdom, setTaxKingdom] = useState('')
   const [taxSort,    setTaxSort]    = useState({ col: 'abundance', dir: -1 })
@@ -45,10 +45,15 @@ function TaxonomyTable({ profile }) {
   const TAX_PER_PAGE = 50
 
   const allEntries   = profile?.profile ?? []
-  const hostReads    = allEntries.find(t => t.name === 'Homo sapiens')?.abundance ?? 0
-  const unclassReads = allEntries.filter(t => t.name === 'unclassified').reduce((a, t) => a + t.abundance, 0)
-  const totalReads   = allEntries.reduce((a, t) => a + t.abundance, 0)
-  const nonHostTotal = totalReads - hostReads - unclassReads
+  const hostReads    = allEntries.find(t => t.taxon_id === 9606)?.abundance ?? 0
+  const unclassReads = allEntries.find(t => t.taxon_id === 0)?.abundance ?? 0
+
+  // Use multiqc-derived classified reads if available (rooted counts),
+  // otherwise fall back to taxpasta root entry (may be direct counts only)
+  const classifiedReads = clfQc?.classified_reads
+    ?? (allEntries.find(t => t.taxon_id === 1)?.abundance ?? 0)
+  const totalReads   = unclassReads + classifiedReads
+  const nonHostTotal = classifiedReads - hostReads
 
   const tableEntries = allEntries.filter(t =>
     !HOST_IDS.has(t.taxon_id) &&
@@ -383,7 +388,7 @@ export default function SampleDetail() {
               </div>
             </div>
             {taxTab && classifiers.map(clf => clf.classifier === taxTab ? (
-              <TaxonomyTable key={clf.classifier} profile={clf} />
+              <TaxonomyTable key={clf.classifier} profile={clf} clfQc={qc?.classifiers?.[clf.classifier]} />
             ) : null)}
           </section>
         )}

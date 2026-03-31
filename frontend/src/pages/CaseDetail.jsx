@@ -294,7 +294,7 @@ export default function CaseDetail() {
                                   }`} />
                                   <span className="text-gray-600 italic truncate max-w-36">{t.name}</span>
                                   {t.pct != null && (
-                                    <span className="text-gray-400 flex-shrink-0">{t.pct}%</span>
+                                    <span className="text-gray-400 flex-shrink-0">{t.pct?.toFixed(1)}%</span>
                                   )}
                                 </span>
                               ))}
