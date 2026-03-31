@@ -1,6 +1,6 @@
-db = db.getSiblingDB('meta-vis-dev');
+db = db.getSiblingDB('admin');
 db.createUser({
-  user: 'meta_vis_app',
+  user: process.env.MONGODB_USERNAME,
   pwd: process.env.MONGO_APP_PASSWORD,
-  roles: [{ role: 'readWrite', db: 'meta-vis-dev' }]
+  roles: [{ role: 'readWrite', db: process.env.MONGODB_DB_NAME }]
 });
