@@ -5,33 +5,28 @@ from pathlib import Path
 from typing import Optional
 
 
-def name_from_lineage(lineage: str) -> str:
-    """
-    Extract a display name from a lineage string by taking the last element.
-    e.g. "cellular organisms;Eukaryota;Opisthokonta" -> "Opisthokonta"
-    Empty lineage (unclassified reads) returns "unclassified".
-    """
+# Superkingdom names as they appear in the lineage string
+SUPERKINGDOM_NAMES = {
+    "Bacteria", "Archaea", "Eukaryota", "Viruses",
+}
+
+
+def _superkingdom_from_lineage(lineage: str) -> Optional[str]:
+    """Extract superkingdom from a lineage string like 'Bacteria;Firmicutes;...'"""
     if not lineage or pd.isna(lineage):
-        return "unclassified"
+        return None
     parts = [p.strip() for p in str(lineage).split(";")]
-    return parts[-1] if parts[-1] else "unclassified"
+    for part in parts:
+        if part in SUPERKINGDOM_NAMES:
+            return part
+    return None
 
 
 def read_taxpasta(
     file_path: str,
     sample_column: str,
-    superkingdom_map: Optional[dict] = None,
+    superkingdom_map: Optional[dict] = None,  # kept for API compatibility, no longer used
 ) -> list[dict]:
-    """
-    Read a TAXPASTA TSV file and return a list of taxon entry dicts.
-
-    Args:
-        file_path:        Absolute path to the TAXPASTA TSV file.
-        sample_column:    Column name corresponding to this sample's read counts.
-        superkingdom_map: Optional dict of taxon_id -> superkingdom string,
-                          preloaded from the taxonomy_nodes collection.
-                          When omitted, 'superkingdom' is stored as None.
-    """
     path = Path(file_path)
 
     if not path.exists():
@@ -39,10 +34,11 @@ def read_taxpasta(
 
     df = pd.read_csv(path, sep="\t")
 
-    if "taxonomy_id" not in df.columns or "lineage" not in df.columns:
+    required = {"taxonomy_id", "name"}
+    missing = required - set(df.columns)
+    if missing:
         raise ValueError(
-            f"Unexpected TAXPASTA format. Expected 'taxonomy_id' and 'lineage' columns. "
-            f"Got: {set(df.columns)}"
+            f"TAXPASTA file missing required columns: {missing}. Got: {set(df.columns)}"
         )
 
     if sample_column not in df.columns:
@@ -50,6 +46,8 @@ def read_taxpasta(
             f"Sample column '{sample_column}' not found in TAXPASTA file. "
             f"Available columns: {list(df.columns)}"
         )
+
+    has_lineage = "lineage" in df.columns
 
     df = df.rename(columns={
         "taxonomy_id": "taxon_id",
@@ -61,15 +59,17 @@ def read_taxpasta(
     df = df[df["abundance"] > 0].copy()
 
     records = []
-    for row in df[["taxon_id", "lineage", "abundance"]].itertuples(index=False):
-        taxon_id = int(row.taxon_id)
-        entry = {
+    for row in df.itertuples(index=False):
+        taxon_id   = int(row.taxon_id)
+        name       = row.name if row.name and not pd.isna(row.name) else str(taxon_id)
+        lineage    = getattr(row, "lineage", None) if has_lineage else None
+        superkingdom = _superkingdom_from_lineage(lineage)
+        records.append({
             "taxon_id":     taxon_id,
-            "name":         name_from_lineage(row.lineage),
-            "rank":         None,
+            "name":         name,
+            "rank":         getattr(row, "rank", None) if "rank" in df.columns else None,
             "abundance":    float(row.abundance),
-            "superkingdom": superkingdom_map.get(taxon_id) if superkingdom_map else None,
-        }
-        records.append(entry)
+            "superkingdom": superkingdom,
+        })
 
     return records

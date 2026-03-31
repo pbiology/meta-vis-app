@@ -160,7 +160,6 @@ class SampleIngestRequest(BaseModel):
 
 class IngestRequest(BaseModel):
     case_id: str
-    taxonomy_db: Optional[str] = None
     multiqc_path: str
     pipeline_info_path: str
     classifiers: List[ClassifierIngestRequest]

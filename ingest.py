@@ -109,7 +109,6 @@ def ingest(args):
 
     payload = {
         "case_id":            args.case_id,
-        "taxonomy_db":        args.taxonomy_db,
         "multiqc_path":       args.multiqc,
         "pipeline_info_path": args.pipeline_info,
         "classifiers":        classifiers,
@@ -142,7 +141,6 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--case-id",       required=True)
-    parser.add_argument("--taxonomy-db",   default=None)
     parser.add_argument("--multiqc",       required=True)
     parser.add_argument("--pipeline-info", required=True,
                         help="Path to nf_core_*_software_mqc_versions.yml file (or legacy pipeline_info directory)")
