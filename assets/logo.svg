@@ -16,7 +16,7 @@
   <circle cx="12" cy="22" r="5" fill="#a855f7"/>
   <!-- Wordmark -->
   <text x="92" y="46" font-family="DM Sans, system-ui, sans-serif" font-size="30" font-weight="500" fill="#111827" letter-spacing="-0.5">meta</text>
-  <text x="178" y="46" font-family="DM Sans, system-ui, sans-serif" font-size="30" font-weight="500" fill="#3b82f6" letter-spacing="-0.5">-vis</text>
+  <text x="158" y="46" font-family="DM Sans, system-ui, sans-serif" font-size="30" font-weight="500" fill="#3b82f6" letter-spacing="-0.5">-vis</text>
   <!-- Subtitle -->
   <text x="93" y="62" font-family="DM Mono, monospace" font-size="10" fill="#9ca3af" letter-spacing="1.5">METAGENOMICS VISUALISER</text>
 </svg>
