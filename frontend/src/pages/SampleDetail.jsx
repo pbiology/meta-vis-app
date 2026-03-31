@@ -70,6 +70,7 @@ function TaxonomyTable({ profile, clfQc, metavalResults, sampleId }) {
 
   const sorted = [...filtered].sort((a, b) => {
     if (taxSort.col === 'name')         return taxSort.dir * a.name.localeCompare(b.name)
+    if (taxSort.col === 'rank')         return taxSort.dir * (a.rank ?? '').localeCompare(b.rank ?? '')
     if (taxSort.col === 'superkingdom') return taxSort.dir * (a.superkingdom ?? '').localeCompare(b.superkingdom ?? '')
     return taxSort.dir * (a.abundance - b.abundance)
   })
@@ -193,15 +194,17 @@ function TaxonomyTable({ profile, clfQc, metavalResults, sampleId }) {
         <div className="overflow-x-auto">
           <table className="w-full text-left" style={{ tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: '44%' }} />
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '28%' }} />
+              <col style={{ width: '38%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '26%' }} />
             </colgroup>
             <thead>
               <tr>
                 {[
                   { label: 'Organism',   col: 'name'         },
+                  { label: 'Rank',       col: 'rank'         },
                   { label: 'Kingdom',    col: 'superkingdom' },
                   { label: 'Reads',      col: 'abundance'    },
                   { label: '% non-host', col: null           },
@@ -237,6 +240,7 @@ function TaxonomyTable({ profile, clfQc, metavalResults, sampleId }) {
                         )}
                       </div>
                     </td>
+                    <td className="py-2 pr-3 text-xs text-gray-400">{t.rank ?? '—'}</td>
                     <td className="py-2 pr-3"><KingdomBadge kingdom={t.superkingdom} /></td>
                     <td className="py-2 pr-3 text-xs text-gray-500 tabular-nums">{fmt(t.abundance)}</td>
                     <td className="py-2">
