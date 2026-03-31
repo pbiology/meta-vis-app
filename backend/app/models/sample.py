@@ -155,14 +155,12 @@ class SampleIngestRequest(BaseModel):
     sample_id: str
     sample_type: str = "test"
     material: str = "DNA"
-    order_date: Optional[date] = None
-    columns: dict                # {"kraken2": "PE-04-28_k2_pluspf...", "centrifuge": "PE-04-28_p_compressed+h+v.centrifuge"}
-    library_preparation: Optional[LibraryPreparation] = None
-    sequencing: Optional[SequencingMetadata] = None
+    columns: dict
 
 
 class IngestRequest(BaseModel):
     case_id: str
+    order_date: Optional[date] = None
     multiqc_path: str
     pipeline_info_path: str
     classifiers: List[ClassifierIngestRequest]

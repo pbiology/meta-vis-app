@@ -74,7 +74,8 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
         })
 
     case_doc = {
-        "case_id":     request.case_id,
+        "case_id": request.case_id,
+        "order_date": request.order_date.isoformat() if request.order_date else None,
         "ingested_at": now,
         "sample_ids":  [],
         "classifiers": classifier_docs,
@@ -146,16 +147,12 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             "subject_id":  subject_object_id,
             "sample_type": s.sample_type,
             "material":    s.material,
-            "order_date":  s.order_date.isoformat() if s.order_date else None,
             "sample": {
                 "sample_id":   s.sample_id,
                 "material":    s.material,
                 "sample_type": s.sample_type,
                 "subject_id":  s.subject_id,
-                "order_date":  s.order_date.isoformat() if s.order_date else None,
             },
-            "library_preparation": s.library_preparation.model_dump() if s.library_preparation else None,
-            "sequencing":          s.sequencing.model_dump() if s.sequencing else None,
             "taxprofiler": {
                 **base_qc,
                 "classifiers":   classifier_qc,
