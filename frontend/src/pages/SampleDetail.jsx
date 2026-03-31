@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { getSample, getProfile, getKronaUrl } from '../api/samples'
 import Badge from '../components/Badge'
 import MetricCard from '../components/MetricCard'
+import { getMetavalForSample } from '../api/metaval'
+
 
 function fmt(n, decimals = 0) {
   if (n === undefined || n === null) return '—'
@@ -37,7 +39,7 @@ function KingdomBadge({ kingdom }) {
 
 const HOST_IDS = new Set([9606, 1, 0, 131567])
 
-function TaxonomyTable({ profile, clfQc }) {
+function TaxonomyTable({ profile, clfQc, metavalResults, sampleId }) {
   const [taxSearch,  setTaxSearch]  = useState('')
   const [taxKingdom, setTaxKingdom] = useState('')
   const [taxSort,    setTaxSort]    = useState({ col: 'abundance', dir: -1 })
@@ -176,7 +178,26 @@ function TaxonomyTable({ profile, clfQc }) {
                 const pctStr = pct < 0.001 ? '<0.001%' : `${pct.toFixed(3)}%`
                 return (
                   <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
-                    <td className="py-2 pr-3 text-xs text-gray-700 italic truncate">{t.name}</td>
+                    <td className="py-2 pr-3 text-xs text-gray-700">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="italic truncate">{t.name}</span>
+                        {(() => {
+                          const mv = metavalResults.find(
+                            r => r.taxon_id === t.taxon_id && r.classifier === profile.classifier
+                          )
+                          if (!mv) return null
+                          return (
+                            <Link
+                              to={`/samples/${sampleId}/metaval/${mv._id}`}
+                              onClick={e => e.stopPropagation()}
+                              className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                            >
+                              metaval
+                            </Link>
+                          )
+                        })()}
+                      </div>
+                    </td>
                     <td className="py-2 pr-3"><KingdomBadge kingdom={t.superkingdom} /></td>
                     <td className="py-2 pr-3 text-xs text-gray-500 tabular-nums">{fmt(t.abundance)}</td>
                     <td className="py-2">
@@ -220,12 +241,14 @@ export default function SampleDetail() {
   const [kronaErrors,setKronaErrors]= useState({})
   const [kronaTab,   setKronaTab]   = useState(null)
   const [taxTab,     setTaxTab]     = useState(null)
+  const [metavalResults, setMetavalResults] = useState([])
 
   useEffect(() => {
     async function load() {
       try {
         const [s, p] = await Promise.all([getSample(sampleId), getProfile(sampleId)])
         setSample(s)
+        getMetavalForSample(sampleId).then(setMetavalResults).catch(() => {})
         setProfile(p)
         if (s.has_krona && p.profiles?.length) {
           const firstClassifier = p.profiles[0].classifier
@@ -388,7 +411,13 @@ export default function SampleDetail() {
               </div>
             </div>
             {taxTab && classifiers.map(clf => clf.classifier === taxTab ? (
-              <TaxonomyTable key={clf.classifier} profile={clf} clfQc={qc?.classifiers?.[clf.classifier]} />
+              <TaxonomyTable
+                key={clf.classifier}
+                profile={clf}
+                clfQc={qc?.classifiers?.[clf.classifier]}
+                metavalResults={metavalResults}
+                sampleId={sampleId}
+              />
             ) : null)}
           </section>
         )}

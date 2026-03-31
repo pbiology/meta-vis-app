@@ -111,8 +111,9 @@ def ingest(args):
         "case_id":            args.case_id,
         "multiqc_path":       args.multiqc,
         "pipeline_info_path": args.pipeline_info,
-        "classifiers":        classifiers,
-        "samples":            samples,
+        "classifiers": classifiers,
+        "samples": samples,
+        "metaval": {"igv_dir": args.metaval_igv} if args.metaval_igv else None,
     }
 
     print(f"Ingesting {len(samples)} sample(s) for case '{args.case_id}' ...")
@@ -144,6 +145,7 @@ def main():
     parser.add_argument("--multiqc",       required=True)
     parser.add_argument("--pipeline-info", required=True,
                         help="Path to nf_core_*_software_mqc_versions.yml file (or legacy pipeline_info directory)")
+    parser.add_argument("--metaval-igv", default=None, help="Path to metaval igv/ directory (optional)")
     parser.add_argument(
         "--classifier",
         action="append",

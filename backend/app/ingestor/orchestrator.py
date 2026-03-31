@@ -9,6 +9,7 @@ from app.models.sample import IngestRequest
 from app.ingestor.taxpasta_reader import read_taxpasta
 from app.ingestor.multiqc_reader import read_multiqc
 from app.ingestor.pipeline_info_reader import read_pipeline_info
+from app.ingestor.metaval_reader import read_metaval
 
 
 async def _upsert_subject(db: AsyncIOMotorDatabase, subject_id: str) -> ObjectId:
@@ -178,6 +179,30 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
         {"_id": case_object_id},
         {"$set": {"sample_ids": sample_ids}},
     )
+
+    # Ingest metaval results if provided
+    if request.metaval:
+        metaval_results = read_metaval(request.metaval.igv_dir)
+
+        for r in metaval_results:
+            # Resolve sample ObjectId from sample_name
+            sample_doc = await db["samples"].find_one({
+                "case_id": case_object_id,
+                "sample.sample_id": r["sample_name"],
+            })
+            sample_object_id = sample_doc["_id"] if sample_doc else None
+
+            await db["metaval_results"].insert_one({
+                "case_id": case_object_id,
+                "sample_id": sample_object_id,
+                "sample_name": r["sample_name"],
+                "classifier": r["classifier"],
+                "taxon_id": r["taxon_id"],
+                "taxon_name": r["taxon_name"],
+                "organisms": r["organisms"],
+                "blast": r["blast"],
+                "ingested_at": now,
+            })
 
     return {
         "case_id":          request.case_id,
