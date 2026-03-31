@@ -54,9 +54,10 @@ def read_taxpasta(
         sample_column: "abundance",
     })
 
-    df["taxon_id"]  = pd.to_numeric(df["taxon_id"],  errors="coerce").fillna(0).astype(int)
+    df["taxon_id"] = pd.to_numeric(df["taxon_id"], errors="coerce").fillna(0).astype(int)
     df["abundance"] = pd.to_numeric(df["abundance"], errors="coerce").fillna(0.0)
-    df = df[df["abundance"] > 0].copy()
+    df = df[df["abundance"] > 0]
+    df = df[df["abundance"].apply(lambda x: isinstance(x, (int, float)) and x == x and x != float('inf'))].copy()
 
     records = []
     for row in df.itertuples(index=False):
@@ -64,11 +65,14 @@ def read_taxpasta(
         name       = row.name if row.name and not pd.isna(row.name) else str(taxon_id)
         lineage    = getattr(row, "lineage", None) if has_lineage else None
         superkingdom = _superkingdom_from_lineage(lineage)
+        rank_val = getattr(row, "rank", None) if "rank" in df.columns else None
+        if rank_val is not None and (not isinstance(rank_val, str)) and pd.isna(rank_val):
+            rank_val = None
         records.append({
-            "taxon_id":     taxon_id,
-            "name":         name,
-            "rank":         getattr(row, "rank", None) if "rank" in df.columns else None,
-            "abundance":    float(row.abundance),
+            "taxon_id": taxon_id,
+            "name": name,
+            "rank": rank_val,
+            "abundance": float(row.abundance),
             "superkingdom": superkingdom,
         })
 

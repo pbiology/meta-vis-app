@@ -137,9 +137,8 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             if clf_qc:
                 classifier_qc[clf.name] = clf_qc
 
-        # Classifier-agnostic QC (fastp, bowtie2, fastqc) — use first available column
-        first_col = next(iter(s.columns.values()), None)
-        base_qc = _extract_base_qc(qc_data, first_col) if first_col else {}
+        # Classifier-agnostic QC (fastp, bowtie2, fastqc) — keyed by sample_id
+        base_qc = _extract_base_qc(qc_data, s.sample_id)
 
         sample_doc = {
             "case_id":     case_object_id,
@@ -187,73 +186,42 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
         "sample_ids":       [str(sid) for sid in sample_ids],
     }
 
-
-def _base_sample_name(col: str) -> str:
-    """Strip classifier/db suffixes to get the base sample name."""
-    name = col.split(".kraken2")[0].split(".centrifuge")[0]
-    name = name.split("_k2")[0]
-    for sep in ["_p_compressed", "_p_h_v"]:
-        name = name.split(sep)[0]
-    return name
-
-
 def _extract_classifier_qc(qc_data: dict, classifier_name: str, col: str) -> dict:
-    """Extract classifier-specific QC stats (unclassified %, species, genera)."""
-    stats = {}
+    """Extract classifier-specific QC stats from new multiqc list-of-records format."""
 
     if classifier_name == "kraken2":
-        kraken_key = col.split(".kraken2")[0]
-        kraken2 = qc_data.get("kraken2", {}).get(kraken_key)
-        if kraken2:
-            unclassified_reads = sum(kraken2.get("U", {}).values()) if kraken2.get("U") else None
-            total_classified   = sum(kraken2.get("R", {}).values()) if kraken2.get("R") else None
-            num_species        = len(kraken2.get("S", {})) if kraken2.get("S") else None
-            num_genera         = len(kraken2.get("G", {})) if kraken2.get("G") else None
-            total_reads = (unclassified_reads or 0) + (total_classified or 0)
-            pct_unclassified = (
-                round(unclassified_reads / total_reads * 100, 2)
-                if total_reads and unclassified_reads is not None else None
-            )
-            stats = {
-                "pct_unclassified":  pct_unclassified,
-                "unclassified_reads": unclassified_reads,
-                "num_species":        num_species,
-                "num_genera":         num_genera,
-            }
-
+        key = col.split(".kraken2")[0]
+        records = qc_data.get("kraken2", {}).get(key)
     elif classifier_name == "centrifuge":
-        centrifuge_key = col  # column name is the key directly
-        centrifuge = qc_data.get("centrifuge", {}).get(centrifuge_key)
-        if centrifuge:
-            unclassified_reads = sum(centrifuge.get("U", {}).values()) if centrifuge.get("U") else None
-            total_classified   = sum(centrifuge.get("R", {}).values()) if centrifuge.get("R") else None
-            num_species        = len(centrifuge.get("S", {})) if centrifuge.get("S") else None
-            num_genera         = len(centrifuge.get("G", {})) if centrifuge.get("G") else None
-            total_reads = (unclassified_reads or 0) + (total_classified or 0)
-            pct_unclassified = (
-                round(unclassified_reads / total_reads * 100, 2)
-                if total_reads and unclassified_reads is not None else None
-            )
-            stats = {
-                "pct_unclassified":  pct_unclassified,
-                "unclassified_reads": unclassified_reads,
-                "num_species":        num_species,
-                "num_genera":         num_genera,
-            }
+        records = qc_data.get("centrifuge", {}).get(col)
+    else:
+        return {}
 
-    return stats
+    if not records or not isinstance(records, list):
+        return {}
+
+    unclassified_reads = sum(r["counts_rooted"] for r in records if r.get("rank_code") == "U")
+    total_reads        = sum(r["counts_rooted"] for r in records if r.get("rank_code") in ("U", "R"))
+    num_species        = len([r for r in records if r.get("rank_code") == "S"])
+    num_genera         = len([r for r in records if r.get("rank_code") == "G"])
+
+    return {
+        "pct_unclassified":   round(unclassified_reads / total_reads * 100, 2) if total_reads else None,
+        "unclassified_reads": unclassified_reads or None,
+        "num_species":        num_species or None,
+        "num_genera":         num_genera  or None,
+    }
 
 
-def _extract_base_qc(qc_data: dict, col: str) -> dict:
+def _extract_base_qc(qc_data: dict, sample_id: str) -> dict:
     """Extract classifier-agnostic QC stats: fastp, bowtie2, fastqc."""
     stats = {}
-    base = _base_sample_name(col)
 
     fastp_all   = qc_data.get("fastp", {})
     bowtie2_all = qc_data.get("bowtie2", {})
 
-    fastp_lanes   = {k: v for k, v in fastp_all.items()   if k.startswith(f"{base}_")}
-    bowtie2_lanes = {k: v for k, v in bowtie2_all.items() if k.startswith(f"{base}_")}
+    fastp_lanes   = {k: v for k, v in fastp_all.items()   if k.startswith(f"{sample_id}_") or k == sample_id}
+    bowtie2_lanes = {k: v for k, v in bowtie2_all.items() if k.startswith(f"{sample_id}_") or k == sample_id}
 
     if fastp_lanes:
         n_lanes      = len(fastp_lanes)
@@ -262,8 +230,8 @@ def _extract_base_qc(qc_data: dict, col: str) -> dict:
         passed       = sum(v.get("filtering_result", {}).get("passed_filter_reads", 0) for v in fastp_lanes.values())
         low_quality  = sum(v.get("filtering_result", {}).get("low_quality_reads",   0) for v in fastp_lanes.values())
         too_short    = sum(v.get("filtering_result", {}).get("too_short_reads",     0) for v in fastp_lanes.values())
-        q20_vals     = [v.get("summary", {}).get("after_filtering", {}).get("q20_rate")  for v in fastp_lanes.values()]
-        q30_vals     = [v.get("summary", {}).get("after_filtering", {}).get("q30_rate")  for v in fastp_lanes.values()]
+        q20_vals     = [v.get("summary", {}).get("after_filtering", {}).get("q20_rate")   for v in fastp_lanes.values()]
+        q30_vals     = [v.get("summary", {}).get("after_filtering", {}).get("q30_rate")   for v in fastp_lanes.values()]
         gc_vals      = [v.get("summary", {}).get("after_filtering", {}).get("gc_content") for v in fastp_lanes.values()]
         stats["fastp"] = {
             "total_reads_before_filtering": total_before or None,
@@ -288,20 +256,20 @@ def _extract_base_qc(qc_data: dict, col: str) -> dict:
         }
 
     fastqc_all       = qc_data.get("fastqc", {})
-    fastqc_fwd_lanes = {k: v for k, v in fastqc_all.items() if k.startswith(f"{base}_") and k.endswith("_raw_1")}
-    fastqc_rev_lanes = {k: v for k, v in fastqc_all.items() if k.startswith(f"{base}_") and k.endswith("_raw_2")}
+    fastqc_fwd_lanes = {k: v for k, v in fastqc_all.items() if k.startswith(f"{sample_id}_") and k.endswith("_raw_1")}
+    fastqc_rev_lanes = {k: v for k, v in fastqc_all.items() if k.startswith(f"{sample_id}_") and k.endswith("_raw_2")}
 
     if fastqc_fwd_lanes or fastqc_rev_lanes:
         def _avg(lanes, field):
             vals = [v.get(field) for v in lanes.values() if v.get(field) is not None]
             return round(sum(vals) / len(vals), 2) if vals else None
         stats["fastqc"] = {
-            "total_sequences":            sum(v.get("total_sequences", 0) for v in fastqc_fwd_lanes.values()) or None,
-            "avg_sequence_length":        _avg(fastqc_fwd_lanes, "avg_sequence_length"),
-            "pct_gc_forward":             _avg(fastqc_fwd_lanes, "percent_gc"),
-            "pct_gc_reverse":             _avg(fastqc_rev_lanes, "percent_gc"),
-            "pct_poor_quality_forward":   _avg(fastqc_fwd_lanes, "percent_fails"),
-            "pct_poor_quality_reverse":   _avg(fastqc_rev_lanes, "percent_fails"),
+            "total_sequences":          sum(v.get("total_sequences", 0) for v in fastqc_fwd_lanes.values()) or None,
+            "avg_sequence_length":      _avg(fastqc_fwd_lanes, "avg_sequence_length"),
+            "pct_gc_forward":           _avg(fastqc_fwd_lanes, "percent_gc"),
+            "pct_gc_reverse":           _avg(fastqc_rev_lanes, "percent_gc"),
+            "pct_poor_quality_forward": _avg(fastqc_fwd_lanes, "percent_fails"),
+            "pct_poor_quality_reverse": _avg(fastqc_rev_lanes, "percent_fails"),
         }
 
     return stats
