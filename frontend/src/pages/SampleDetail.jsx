@@ -282,8 +282,7 @@ export default function SampleDetail() {
   const [error,          setError]          = useState(null)
   const [kronaUrls,      setKronaUrls]      = useState({})
   const [kronaErrors,    setKronaErrors]    = useState({})
-  const [kronaTab,       setKronaTab]       = useState(null)
-  const [taxTab,         setTaxTab]         = useState(null)
+  const [activeTab, setActiveTab] = useState(null)
   const [metavalResults, setMetavalResults] = useState([])
 
   useEffect(() => {
@@ -295,8 +294,7 @@ export default function SampleDetail() {
         getMetavalForSample(sampleId).then(setMetavalResults).catch(() => {})
         if (s.has_krona && p.profiles?.length) {
           const firstClassifier = p.profiles[0].classifier
-          setKronaTab(firstClassifier)
-          setTaxTab(firstClassifier)
+          setActiveTab(firstClassifier)
           p.profiles.forEach(async prof => {
             try {
               const url = await getKronaUrl(sampleId, prof.classifier)
@@ -306,7 +304,7 @@ export default function SampleDetail() {
             }
           })
         } else if (p.profiles?.length) {
-          setTaxTab(p.profiles[0].classifier)
+          setActiveTab(p.profiles[0].classifier)
         }
       } catch {
         setError('Failed to load sample.')
@@ -399,9 +397,9 @@ export default function SampleDetail() {
                 {classifiers.map(clf => (
                   <button
                     key={clf.classifier}
-                    onClick={() => setKronaTab(clf.classifier)}
+                    onClick={() => setActiveTab(clf.classifier)}
                     className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
-                      kronaTab === clf.classifier
+                      activeTab === clf.classifier
                         ? 'bg-gray-900 text-white font-medium'
                         : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                     }`}
@@ -412,17 +410,17 @@ export default function SampleDetail() {
               </div>
             </div>
             <div className="p-4">
-              {kronaTab && kronaErrors[kronaTab] && (
+              {activeTab && kronaErrors[activeTab] && (
                 <p className="text-xs text-red-400">Krona file could not be loaded.</p>
               )}
-              {kronaTab && !kronaUrls[kronaTab] && !kronaErrors[kronaTab] && (
+              {activeTab && !kronaUrls[activeTab] && !kronaErrors[activeTab] && (
                 <div className="flex items-center justify-center h-40 text-sm text-gray-400">Loading Krona…</div>
               )}
-              {kronaTab && kronaUrls[kronaTab] && (
+              {activeTab && kronaUrls[activeTab] && (
                 <iframe
-                  key={kronaTab}
-                  src={kronaUrls[kronaTab]}
-                  title={`Krona — ${kronaTab}`}
+                  key={activeTab}
+                  src={kronaUrls[activeTab]}
+                  title={`Krona — ${activeTab}`}
                   className="w-full rounded-lg border border-gray-100"
                   style={{ height: '85vh' }}
                   sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
@@ -441,9 +439,9 @@ export default function SampleDetail() {
                 {classifiers.map(clf => (
                   <button
                     key={clf.classifier}
-                    onClick={() => setTaxTab(clf.classifier)}
+                    onClick={() => setActiveTab(clf.classifier)}
                     className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
-                      taxTab === clf.classifier
+                      activeTab === clf.classifier
                         ? 'bg-gray-900 text-white font-medium'
                         : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                     }`}
@@ -453,7 +451,7 @@ export default function SampleDetail() {
                 ))}
               </div>
             </div>
-            {taxTab && classifiers.map(clf => clf.classifier === taxTab ? (
+            {activeTab && classifiers.map(clf => clf.classifier === activeTab ? (
               <TaxonomyTable
                 key={clf.classifier}
                 profile={clf}
