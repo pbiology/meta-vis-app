@@ -74,6 +74,48 @@ export default function MetavalDetails() {
 
       <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 flex flex-col gap-6">
 
+        {/* BLAST results */}
+        <section className="bg-white border border-gray-100 rounded-xl">
+          <div className="px-4 py-3 border-b border-gray-100">
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+              BLASTN results
+            </p>
+          </div>
+          {!result?.blast || result.blast.length === 0 ? (
+            <p className="px-4 py-6 text-xs text-gray-300 text-center">No BLAST hits for this taxon.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr>
+                    {['Query', 'Match', 'Tax ID', 'Hits', 'Min %id', 'Max %id', 'Median %id', 'Min len', 'Max len', 'Median bitscore'].map(h => (
+                      <th key={h} className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.blast.map((row, i) => (
+                    <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
+                      <td className="px-4 py-2 text-xs font-mono text-gray-600 max-w-48 truncate" title={row.qseqid}>{row.qseqid}</td>
+                      <td className="px-4 py-2 text-xs text-gray-700 italic">{row.ssciname}</td>
+                      <td className="px-4 py-2 text-xs text-gray-400 font-mono">{row.staxid}</td>
+                      <td className="px-4 py-2 text-xs text-gray-500">{row.count}</td>
+                      <td className="px-4 py-2 text-xs text-gray-500">{row.min_pident}</td>
+                      <td className="px-4 py-2 text-xs text-gray-500">{row.max_pident}</td>
+                      <td className="px-4 py-2 text-xs text-gray-500">{row.median_pident}</td>
+                      <td className="px-4 py-2 text-xs text-gray-500">{row.min_length}</td>
+                      <td className="px-4 py-2 text-xs text-gray-500">{row.max_length}</td>
+                      <td className="px-4 py-2 text-xs text-gray-500">{row.median_bitscore}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
         {/* Organisms table */}
         <section className="bg-white border border-gray-100 rounded-xl">
           <div className="px-4 py-3 border-b border-gray-100">
