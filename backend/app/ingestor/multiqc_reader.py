@@ -22,7 +22,8 @@ def read_multiqc(file_path: str) -> dict:
 
     return {
         "kraken2": raw.get("multiqc_kraken", {}),
-        "fastqc":  raw.get("multiqc_fastqc", {}),
-        "fastp":   raw.get("multiqc_fastp", {}),
+        "centrifuge": raw.get("multiqc_centrifuge_centrifuge", {}),
+        "fastqc": raw.get("multiqc_fastqc", {}),
+        "fastp": raw.get("multiqc_fastp", {}),
         "bowtie2": raw.get("multiqc_bowtie2", {}),
     }

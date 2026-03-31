@@ -40,8 +40,9 @@ export async function reviewSample(sampleId, notes = null) {
   return res.data
 }
 
-export async function getKronaUrl(sampleId) {
+export async function getKronaUrl(sampleId, classifier = 'kraken2') {
   const resp = await client.get(`/samples/${sampleId}/krona`, {
+    params: { classifier },
     responseType: 'blob',
   })
   return URL.createObjectURL(resp.data)
