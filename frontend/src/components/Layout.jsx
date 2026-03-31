@@ -32,8 +32,26 @@ export default function Layout() {
      <div className="flex h-full bg-gray-50">
       {/* Sidebar */}
       <div className="w-52 bg-white border-r border-gray-100 flex flex-col flex-shrink-0">
-        <div className="px-4 pt-5 pb-6">
-          <span className="text-sm font-medium text-gray-900 tracking-tight">meta-vis</span>
+        <div className="px-4 pt-5 pb-5 flex items-center gap-2.5">
+          <svg width="24" height="24" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
+            <rect width="32" height="32" rx="7" fill="#ffffff"/>
+            <circle cx="16" cy="16" r="5.5" fill="#3b82f6"/>
+            <line x1="16" y1="10.5" x2="16" y2="4" stroke="#3b82f6" strokeWidth="1" opacity="0.4"/>
+            <line x1="20.8" y1="13" x2="26" y2="9.5" stroke="#3b82f6" strokeWidth="1" opacity="0.3"/>
+            <line x1="21" y1="19" x2="27" y2="22" stroke="#ef4444" strokeWidth="1" opacity="0.35"/>
+            <line x1="16" y1="21.5" x2="15" y2="28" stroke="#f59e0b" strokeWidth="1" opacity="0.35"/>
+            <line x1="11.2" y1="19" x2="6" y2="22.5" stroke="#f59e0b" strokeWidth="1" opacity="0.3"/>
+            <line x1="11" y1="13" x2="5.5" y2="9.5" stroke="#a855f7" strokeWidth="1" opacity="0.35"/>
+            <circle cx="16" cy="3" r="2.5" fill="#3b82f6"/>
+            <circle cx="27.5" cy="8.5" r="2" fill="#3b82f6" opacity="0.7"/>
+            <circle cx="28" cy="23" r="3" fill="#ef4444"/>
+            <circle cx="15" cy="29" r="2.5" fill="#f59e0b"/>
+            <circle cx="4.5" cy="23.5" r="2" fill="#f59e0b" opacity="0.7"/>
+            <circle cx="4" cy="8.5" r="2.5" fill="#a855f7"/>
+          </svg>
+          <span className="text-sm font-medium text-gray-900 tracking-tight">
+            meta<span className="text-blue-500">-vis</span>
+          </span>
         </div>
 
         <nav className="flex flex-col gap-0.5 flex-1">

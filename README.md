@@ -1,4 +1,5 @@
-# meta-vis-app
+
+![meta-vis logo](assets/logo.svg)
 
 A web application for visualising and reviewing the output of [nf-core/taxprofiler](https://github.com/nf-core/taxprofiler) metagenomics runs, with optional integration of [metaval](https://github.com/genomic-medicine-sweden/metaval) post-processing results.
 
