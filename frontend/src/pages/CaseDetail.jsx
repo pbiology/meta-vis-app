@@ -46,15 +46,26 @@ export default function CaseDetail() {
         if (fetchedCase.has_krona && fetchedCase.classifiers?.length) {
           const firstClassifier = fetchedCase.classifiers[0].name
           setKronaTab(firstClassifier)
-          fetchedCase.classifiers.forEach(async clf => {
-            if (!clf.krona_id) return
-            try {
-              const url = await getCaseKronaUrl(caseId, clf.name)
-              setKronaUrls(prev => ({ ...prev, [clf.name]: url }))
-            } catch {
-              setKronaErrors(prev => ({ ...prev, [clf.name]: true }))
-            }
+          const urlEntries = await Promise.all(
+            fetchedCase.classifiers
+              .filter(clf => clf.krona_id)
+              .map(async clf => {
+                try {
+                  const url = await getCaseKronaUrl(caseId, clf.name)
+                  return { name: clf.name, url, error: false }
+                } catch {
+                  return { name: clf.name, url: null, error: true }
+                }
+              })
+          )
+          const urls   = {}
+          const errors = {}
+          urlEntries.forEach(({ name, url, error }) => {
+            if (error) errors[name] = true
+            else urls[name] = url
           })
+          setKronaUrls(urls)
+          setKronaErrors(errors)
         }
       } catch {
         setError('Failed to load case.')
@@ -317,6 +328,7 @@ export default function CaseDetail() {
                     )}
                     {kronaUrls[clf.name] && (
                       <iframe
+                        key={kronaUrls[clf.name]}
                         src={kronaUrls[clf.name]}
                         title={`Krona — ${clf.name}`}
                         className="w-full rounded-lg border border-gray-100"

@@ -295,14 +295,24 @@ export default function SampleDetail() {
         if (s.has_krona && p.profiles?.length) {
           const firstClassifier = p.profiles[0].classifier
           setActiveTab(firstClassifier)
-          p.profiles.forEach(async prof => {
-            try {
-              const url = await getKronaUrl(sampleId, prof.classifier)
-              setKronaUrls(prev => ({ ...prev, [prof.classifier]: url }))
-            } catch {
-              setKronaErrors(prev => ({ ...prev, [prof.classifier]: true }))
-            }
+          const urlEntries = await Promise.all(
+            p.profiles.map(async prof => {
+              try {
+                const url = await getKronaUrl(sampleId, prof.classifier)
+                return { name: prof.classifier, url, error: false }
+              } catch {
+                return { name: prof.classifier, url: null, error: true }
+              }
+            })
+          )
+          const urls   = {}
+          const errors = {}
+          urlEntries.forEach(({ name, url, error }) => {
+            if (error) errors[name] = true
+            else urls[name] = url
           })
+          setKronaUrls(urls)
+          setKronaErrors(errors)
         } else if (p.profiles?.length) {
           setActiveTab(p.profiles[0].classifier)
         }
@@ -418,7 +428,7 @@ export default function SampleDetail() {
               )}
               {activeTab && kronaUrls[activeTab] && (
                 <iframe
-                  key={activeTab}
+                  key={kronaUrls[activeTab]}
                   src={kronaUrls[activeTab]}
                   title={`Krona — ${activeTab}`}
                   className="w-full rounded-lg border border-gray-100"
