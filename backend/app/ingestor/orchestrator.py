@@ -2,7 +2,6 @@
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -47,31 +46,9 @@ async def _store_krona(
     return result["_id"]
 
 
-async def _load_superkingdom_map(
-    db: AsyncIOMotorDatabase,
-    taxonomy_name: Optional[str],
-) -> Optional[dict]:
-    if not taxonomy_name:
-        return None
-    tax = await db["taxonomy_databases"].find_one({"name": taxonomy_name})
-    if not tax:
-        raise ValueError(
-            f"Taxonomy '{taxonomy_name}' not found. "
-            f"Load it first with: python taxonomy.py --name {taxonomy_name} ..."
-        )
-    taxonomy_db_id = tax["_id"]
-    cursor = db["taxonomy_nodes"].find(
-        {"taxonomy_db_id": taxonomy_db_id},
-        {"taxon_id": 1, "superkingdom": 1, "_id": 0},
-    )
-    nodes = await cursor.to_list(length=None)
-    return {n["taxon_id"]: n["superkingdom"] for n in nodes}
-
-
 async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     now = datetime.now(timezone.utc)
 
-    superkingdom_map = await _load_superkingdom_map(db, request.taxonomy_db)
     pipeline_info    = read_pipeline_info(request.pipeline_info_path)
     qc_data          = read_multiqc(request.multiqc_path)
 
@@ -99,7 +76,6 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
         "case_id":     request.case_id,
         "ingested_at": now,
         "sample_ids":  [],
-        "taxonomy_db": request.taxonomy_db,
         "classifiers": classifier_docs,
         "has_krona":   any(clf.krona for clf in request.classifiers),
         "pipeline_info": pipeline_info,
@@ -150,7 +126,6 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             profile = read_taxpasta(
                 clf.taxpasta,
                 col,
-                superkingdom_map=superkingdom_map,
             )
             profiles.append({
                 "classifier":    clf.name,

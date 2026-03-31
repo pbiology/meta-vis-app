@@ -8,26 +8,28 @@ def read_pipeline_info(pipeline_info_path: str) -> dict:
     if not path.exists():
         raise FileNotFoundError(f"Pipeline info file not found: {pipeline_info_path}")
 
-    if path.is_dir():
-        # Legacy: accept a directory and find the file within it
-        versions_file = next(path.glob("nf_core_*_software_mqc_versions.yml"), None)
-        if not versions_file:
-            raise FileNotFoundError(
-                f"No software versions file found in {pipeline_info_path}. "
-                f"Expected a file matching 'nf_core_*_software_mqc_versions.yml'."
-            )
-    else:
-        versions_file = path
+    if not path.is_file():
+        raise ValueError(f"Expected a file, got a directory: {pipeline_info_path}. Pass the yml file directly.")
 
-    with open(versions_file) as f:
-        software_versions = yaml.safe_load(f) or {}
+    with open(path) as f:
+        data = yaml.safe_load(f) or {}
 
-    workflow_info = software_versions.pop("Workflow", {})
+    if "Workflow" not in data:
+        raise ValueError(
+            f"'{pipeline_info_path}' does not appear to be a valid pipeline software versions file — "
+            f"missing 'Workflow' key."
+        )
+
+    workflow_info = data.pop("Workflow", {})
+
+    # Normalise key capitalisation — older files use 'nf-core/taxprofiler', newer use it too
+    pipeline_version = workflow_info.get("nf-core/taxprofiler")
+    nextflow_version = workflow_info.get("Nextflow")
 
     return {
-        "software_used": software_versions,
+        "software_used": data,
         "pipeline_configuration": {
-            "pipeline": workflow_info.get("nf-core/taxprofiler"),
-            "nextflow": workflow_info.get("Nextflow"),
+            "pipeline": pipeline_version,
+            "nextflow": nextflow_version,
         },
     }
