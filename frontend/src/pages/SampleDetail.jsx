@@ -5,7 +5,6 @@ import Badge from '../components/Badge'
 import MetricCard from '../components/MetricCard'
 import { getMetavalForSample } from '../api/metaval'
 
-
 function fmt(n, decimals = 0) {
   if (n === undefined || n === null) return '—'
   return typeof n === 'number' ? n.toLocaleString(undefined, { maximumFractionDigits: decimals }) : n
@@ -40,18 +39,17 @@ function KingdomBadge({ kingdom }) {
 const HOST_IDS = new Set([9606, 1, 0, 131567])
 
 function TaxonomyTable({ profile, clfQc, metavalResults, sampleId }) {
-  const [taxSearch,  setTaxSearch]  = useState('')
-  const [taxKingdom, setTaxKingdom] = useState('')
-  const [taxSort,    setTaxSort]    = useState({ col: 'abundance', dir: -1 })
-  const [taxPage,    setTaxPage]    = useState(0)
+  const [taxSearch,   setTaxSearch]   = useState('')
+  const [taxKingdoms, setTaxKingdoms] = useState([])
+  const [taxSort,     setTaxSort]     = useState({ col: 'abundance', dir: -1 })
+  const [taxPage,     setTaxPage]     = useState(0)
+  const [metavalOnly, setMetavalOnly] = useState(false)
+  const [kingdomOpen, setKingdomOpen] = useState(false)
   const TAX_PER_PAGE = 50
 
   const allEntries   = profile?.profile ?? []
   const hostReads    = allEntries.find(t => t.taxon_id === 9606)?.abundance ?? 0
   const unclassReads = allEntries.find(t => t.taxon_id === 0)?.abundance ?? 0
-
-  // Use multiqc-derived classified reads if available (rooted counts),
-  // otherwise fall back to taxpasta root entry (may be direct counts only)
   const classifiedReads = clfQc?.classified_reads
     ?? (allEntries.find(t => t.taxon_id === 1)?.abundance ?? 0)
   const totalReads   = unclassReads + classifiedReads
@@ -64,8 +62,9 @@ function TaxonomyTable({ profile, clfQc, metavalResults, sampleId }) {
   )
 
   const filtered = tableEntries.filter(t => {
-    if (taxSearch  && !t.name?.toLowerCase().includes(taxSearch.toLowerCase())) return false
-    if (taxKingdom && t.superkingdom !== taxKingdom) return false
+    if (taxSearch && !t.name?.toLowerCase().includes(taxSearch.toLowerCase())) return false
+    if (taxKingdoms.length > 0 && !taxKingdoms.includes(t.superkingdom)) return false
+    if (metavalOnly && !metavalResults.find(r => r.taxon_id === t.taxon_id && r.classifier === profile.classifier)) return false
     return true
   })
 
@@ -75,8 +74,8 @@ function TaxonomyTable({ profile, clfQc, metavalResults, sampleId }) {
     return taxSort.dir * (a.abundance - b.abundance)
   })
 
-  const totalPages  = Math.ceil(sorted.length / TAX_PER_PAGE)
-  const pageEntries = sorted.slice(taxPage * TAX_PER_PAGE, (taxPage + 1) * TAX_PER_PAGE)
+  const totalPages   = Math.ceil(sorted.length / TAX_PER_PAGE)
+  const pageEntries  = sorted.slice(taxPage * TAX_PER_PAGE, (taxPage + 1) * TAX_PER_PAGE)
   const maxAbundance = tableEntries.length > 0 ? Math.max(...tableEntries.map(t => t.abundance)) : 1
 
   function toggleSort(col) {
@@ -124,6 +123,7 @@ function TaxonomyTable({ profile, clfQc, metavalResults, sampleId }) {
           <p className="text-sm font-medium text-gray-700">{taxPage + 1} / {Math.max(1, totalPages)}</p>
         </div>
       </div>
+
       {/* Filters */}
       <div className="flex gap-2">
         <input
@@ -133,15 +133,59 @@ function TaxonomyTable({ profile, clfQc, metavalResults, sampleId }) {
           onChange={e => { setTaxSearch(e.target.value); setTaxPage(0) }}
           className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-blue-300"
         />
-        <select
-          value={taxKingdom}
-          onChange={e => { setTaxKingdom(e.target.value); setTaxPage(0) }}
-          className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-blue-300 bg-white"
-        >
-          <option value="">All kingdoms</option>
-          {kingdoms.map(k => <option key={k} value={k}>{k}</option>)}
-        </select>
+        <div className="relative">
+          <button
+            onClick={() => setKingdomOpen(o => !o)}
+            className={`text-xs border rounded-lg px-3 py-1.5 bg-white flex items-center gap-1.5 transition-colors ${
+              taxKingdoms.length > 0 ? 'border-blue-300 text-blue-600' : 'border-gray-200 text-gray-500'
+            }`}
+          >
+            {taxKingdoms.length > 0 ? `Kingdom (${taxKingdoms.length})` : 'All kingdoms'}
+            <svg className={`w-3 h-3 transition-transform ${kingdomOpen ? 'rotate-180' : ''}`} viewBox="0 0 16 16" fill="none">
+              <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+          {kingdomOpen && (
+            <div className="absolute right-0 top-full mt-1 bg-white border border-gray-100 rounded-xl shadow-lg z-20 min-w-36 py-1">
+              {kingdoms.map(k => (
+                <label key={k} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={taxKingdoms.includes(k)}
+                    onChange={e => {
+                      setTaxKingdoms(prev => e.target.checked ? [...prev, k] : prev.filter(x => x !== k))
+                      setTaxPage(0)
+                    }}
+                    className="rounded"
+                  />
+                  <span className="text-xs text-gray-600">{k}</span>
+                </label>
+              ))}
+              {taxKingdoms.length > 0 && (
+                <button
+                  onClick={() => { setTaxKingdoms([]); setTaxPage(0) }}
+                  className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 border-t border-gray-50 mt-1"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+        {metavalResults.length > 0 && (
+          <button
+            onClick={() => { setMetavalOnly(o => !o); setTaxPage(0) }}
+            className={`text-xs border rounded-lg px-3 py-1.5 transition-colors ${
+              metavalOnly
+                ? 'border-blue-300 bg-blue-50 text-blue-600'
+                : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            Metaval only
+          </button>
+        )}
       </div>
+
       {/* Table */}
       {pageEntries.length === 0 ? (
         <p className="text-xs text-gray-400 py-4 text-center">No organisms match your filters.</p>
@@ -176,26 +220,21 @@ function TaxonomyTable({ profile, clfQc, metavalResults, sampleId }) {
               {pageEntries.map((t, i) => {
                 const pct    = nonHostTotal > 0 ? (t.abundance / nonHostTotal) * 100 : 0
                 const pctStr = pct < 0.001 ? '<0.001%' : `${pct.toFixed(3)}%`
+                const mv     = metavalResults.find(r => r.taxon_id === t.taxon_id && r.classifier === profile.classifier)
                 return (
                   <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
                     <td className="py-2 pr-3 text-xs text-gray-700">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="italic truncate">{t.name}</span>
-                        {(() => {
-                          const mv = metavalResults.find(
-                            r => r.taxon_id === t.taxon_id && r.classifier === profile.classifier
-                          )
-                          if (!mv) return null
-                          return (
-                            <Link
+                        {mv && (
+                          <Link
                               to={`/samples/${sampleId}/metaval/${mv._id}`}
                               onClick={e => e.stopPropagation()}
-                              className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                              className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
                             >
-                              metaval
-                            </Link>
-                          )
-                        })()}
+                              <span className="underline">metaval</span>
+                          </Link>
+                        )}
                       </div>
                     </td>
                     <td className="py-2 pr-3"><KingdomBadge kingdom={t.superkingdom} /></td>
@@ -231,16 +270,16 @@ function TaxonomyTable({ profile, clfQc, metavalResults, sampleId }) {
 
 export default function SampleDetail() {
   const { sampleId } = useParams()
-  const navigate = useNavigate()
+  const navigate     = useNavigate()
 
-  const [sample,     setSample]     = useState(null)
-  const [profile,    setProfile]    = useState(null)
-  const [loading,    setLoading]    = useState(true)
-  const [error,      setError]      = useState(null)
-  const [kronaUrls,  setKronaUrls]  = useState({})
-  const [kronaErrors,setKronaErrors]= useState({})
-  const [kronaTab,   setKronaTab]   = useState(null)
-  const [taxTab,     setTaxTab]     = useState(null)
+  const [sample,         setSample]         = useState(null)
+  const [profile,        setProfile]        = useState(null)
+  const [loading,        setLoading]        = useState(true)
+  const [error,          setError]          = useState(null)
+  const [kronaUrls,      setKronaUrls]      = useState({})
+  const [kronaErrors,    setKronaErrors]    = useState({})
+  const [kronaTab,       setKronaTab]       = useState(null)
+  const [taxTab,         setTaxTab]         = useState(null)
   const [metavalResults, setMetavalResults] = useState([])
 
   useEffect(() => {
@@ -248,8 +287,8 @@ export default function SampleDetail() {
       try {
         const [s, p] = await Promise.all([getSample(sampleId), getProfile(sampleId)])
         setSample(s)
-        getMetavalForSample(sampleId).then(setMetavalResults).catch(() => {})
         setProfile(p)
+        getMetavalForSample(sampleId).then(setMetavalResults).catch(() => {})
         if (s.has_krona && p.profiles?.length) {
           const firstClassifier = p.profiles[0].classifier
           setKronaTab(firstClassifier)
@@ -277,9 +316,9 @@ export default function SampleDetail() {
   if (loading) return <div className="flex items-center justify-center h-full text-sm text-gray-400">Loading…</div>
   if (error)   return <div className="flex items-center justify-center h-full text-sm text-red-500">{error}</div>
 
-  const qc = sample?.taxprofiler
-  const fp = qc?.fastp
-  const bt = qc?.bowtie2
+  const qc          = sample?.taxprofiler
+  const fp          = qc?.fastp
+  const bt          = qc?.bowtie2
   const classifiers = profile?.profiles ?? []
 
   return (
