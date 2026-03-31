@@ -133,19 +133,34 @@ async def list_samples_for_case(
             if e.get("taxon_id") in spike_in_ids
         ]
 
+
+    def host_pct_for(entries: list, clf_qc: dict = None) -> Optional[float]:
+        host_reads = next((e["abundance"] for e in entries if e.get("taxon_id") == 9606), 0)
+        classified_reads = clf_qc.get("classified_reads") if clf_qc else None
+        if classified_reads is None:
+            classified_reads = next((e["abundance"] for e in entries if e.get("taxon_id") == 1), 0)
+        total_reads = host_reads + (clf_qc.get("unclassified_reads") or 0) if clf_qc else classified_reads
+        if not total_reads:
+            return None
+        return round(host_reads / total_reads * 100, 1)
+
+
     result = []
     for doc in docs:
         profiles = doc.get("profiles", [])
         top_taxa_by_clf = {}
         spike_in_by_clf = {}
+        host_pct_by_clf = {}
         for p in profiles:
             clf = p.get("classifier", "unknown")
             entries = p.get("profile", [])
             clf_qc = doc.get("taxprofiler", {}).get("classifiers", {}).get(clf)
             top_taxa_by_clf[clf] = top_taxa_for(entries, clf_qc)
             spike_in_by_clf[clf] = spike_in_for(entries, clf_qc)
+            host_pct_by_clf[clf] = host_pct_for(entries, clf_qc)
         doc["top_taxa"] = top_taxa_by_clf
         doc["spike_in_taxa"] = spike_in_by_clf
+        doc["host_pct"] = host_pct_by_clf
         doc.pop("profiles", None)
         result.append(_serialise_sample(doc))
     return result

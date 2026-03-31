@@ -255,7 +255,7 @@ export default function CaseDetail() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr>
-                      {['Sample', 'Unclassified', 'Species', 'Genera', 'Positive control', 'Top taxa'].map(h => (
+                      {['Sample', 'Unclassified', 'Host', 'Species', 'Genera', 'Positive control', 'Top taxa'].map(h => (
                         <th key={h} className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap">
                           {h}
                         </th>
@@ -275,6 +275,7 @@ export default function CaseDetail() {
                         >
                           <td className="px-4 py-1.5 font-mono text-xs text-gray-700">{s.sample?.sample_id ?? '—'}</td>
                           <td className="px-4 py-1.5 text-xs text-gray-700">{fmtPct(clfQc?.pct_unclassified)}</td>
+                          <td className="px-4 py-1.5 text-xs text-gray-700">{s.host_pct?.[clf.name] != null ? `${s.host_pct[clf.name]}%` : '—'}</td>
                           <td className="px-4 py-1.5 text-xs text-gray-700">{fmt(clfQc?.num_species)}</td>
                           <td className="px-4 py-1.5 text-xs text-gray-700">{fmt(clfQc?.num_genera)}</td>
                           <td className="px-4 py-1.5 text-xs">
