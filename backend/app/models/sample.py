@@ -140,6 +140,9 @@ class SampleDocument(BaseModel):
 # Ingest request models
 # ---------------------------------------------------------------------------
 
+class MetavalIngestRequest(BaseModel):
+    igv_dir: str   # path to the metaval igv/ directory
+
 class ClassifierIngestRequest(BaseModel):
     name: str                    # e.g. "kraken2" or "centrifuge"
     db: str                      # e.g. "k2_pluspf" or "p_compressed+h+v"
@@ -164,3 +167,4 @@ class IngestRequest(BaseModel):
     pipeline_info_path: str
     classifiers: List[ClassifierIngestRequest]
     samples: List[SampleIngestRequest]
+    metaval: Optional[MetavalIngestRequest] = None
