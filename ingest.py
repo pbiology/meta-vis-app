@@ -91,12 +91,11 @@ def parse_sample(raw: str, classifier_names: list) -> dict:
             columns[clf_name] = parts[col_key]
 
     return {
-        "subject_id":  parts.get("subject_id"),
-        "sample_id":   parts["sample_id"],
+        "subject_id": parts.get("subject_id"),
+        "sample_id": parts["sample_id"],
         "sample_type": parts["type"],
-        "material":    parts["material"],
-        "order_date":  parts.get("order_date"),
-        "columns":     columns,
+        "material": parts["material"],
+        "columns": columns,
     }
 
 
@@ -108,8 +107,9 @@ def ingest(args):
     samples = [parse_sample(s, classifier_names) for s in args.sample]
 
     payload = {
-        "case_id":            args.case_id,
-        "multiqc_path":       args.multiqc,
+        "case_id": args.case_id,
+        "order_date": args.order_date,
+        "multiqc_path": args.multiqc,
         "pipeline_info_path": args.pipeline_info,
         "classifiers": classifiers,
         "samples": samples,
@@ -141,8 +141,9 @@ def main():
         description="Ingest a taxprofiler case into meta-vis-app",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--case-id",       required=True)
-    parser.add_argument("--multiqc",       required=True)
+    parser.add_argument("--case-id", required=True)
+    parser.add_argument("--order-date", default=None, help="Case order date (YYYY-MM-DD)")
+    parser.add_argument("--multiqc", required=True)
     parser.add_argument("--pipeline-info", required=True,
                         help="Path to nf_core_*_software_mqc_versions.yml file (or legacy pipeline_info directory)")
     parser.add_argument("--metaval-igv", default=None, help="Path to metaval igv/ directory (optional)")

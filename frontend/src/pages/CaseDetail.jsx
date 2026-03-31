@@ -243,7 +243,7 @@ export default function CaseDetail() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr>
-                {['Sample ID', 'Material', 'Order date', 'Type', 'Total reads'].map(h => (
+                {['Sample ID', 'Material', 'Type', 'Total reads'].map(h => (
                   <th key={h} className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap">
                     {h}
                   </th>
@@ -259,7 +259,6 @@ export default function CaseDetail() {
                 >
                   <td className="px-4 py-3 font-mono text-xs text-gray-700">{s.sample?.sample_id ?? '—'}</td>
                   <td className="px-4 py-3 text-xs text-gray-500">{s.material ?? '—'}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{s.order_date ?? '—'}</td>
                   <td className="px-4 py-3"><Badge type={s.sample_type} /></td>
                   <td className="px-4 py-3 text-xs text-gray-700">
                     {fmt(s.taxprofiler?.fastp?.total_reads_before_filtering)}

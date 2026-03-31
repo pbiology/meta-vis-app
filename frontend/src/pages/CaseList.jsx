@@ -3,11 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { getCases, getCaseSamples } from '../api/cases'
 import Badge from '../components/Badge'
 
-function earliestOrderDate(samples) {
-  const dates = samples.map(s => s.order_date).filter(Boolean).sort()
-  return dates.length > 0 ? dates[0] : null
-}
-
 export default function CaseList() {
   const [cases, setCases] = useState([])
   const [loading, setLoading] = useState(true)
@@ -22,7 +17,7 @@ export default function CaseList() {
           casesData.map(async c => {
             const samples = await getCaseSamples(c.case_id)
             const testSamples = samples.filter(s => s.sample_type === 'test')
-            return { ...c, samples, testSamples, date: earliestOrderDate(samples) }
+            return { ...c, samples, testSamples }
           })
         )
         const sorted = enriched.sort((a, b) => {
@@ -31,8 +26,8 @@ export default function CaseList() {
           const bReviewed = b.review?.reviewed ? 1 : 0
           if (aReviewed !== bReviewed) return aReviewed - bReviewed
           // Then by date descending within each group
-          const aDate = a.date ?? a.ingested_at ?? ''
-          const bDate = b.date ?? b.ingested_at ?? ''
+          const aDate = a.order_date ?? a.ingested_at ?? ''
+          const bDate = b.order_date ?? b.ingested_at ?? ''
           return bDate.localeCompare(aDate)
         })
         setCases(sorted)
@@ -89,7 +84,7 @@ export default function CaseList() {
                     className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
                   >
                     <td className="px-4 py-3 font-mono text-xs text-gray-700">{c.case_id}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{c.date ?? '—'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{c.order_date ?? '—'}</td>
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
                       {c.testSamples.length} test{c.testSamples.length !== 1 ? 's' : ''}
                       {c.samples.length > c.testSamples.length && (
