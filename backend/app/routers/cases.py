@@ -232,6 +232,58 @@ async def unreview_case(
     return {"case_id": case_id, "reviewed": False}
 
 
+class NotePayload(BaseModel):
+    text: str
+
+
+@router.post("/{case_id}/notes", summary="Add a note to a case")
+async def add_note(
+    case_id: str,
+    payload: NotePayload,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: dict = Depends(require_role("writer", "admin")),
+):
+    if not payload.text.strip():
+        raise HTTPException(status_code=422, detail="Note text cannot be empty")
+    note = {
+        "text":       payload.text.strip(),
+        "author":     current_user["username"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    result = await db["cases"].update_one(
+        {"case_id": case_id},
+        {"$push": {"notes": note}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
+    return note
+
+
+@router.delete("/{case_id}/notes/{note_index}", summary="Delete a note from a case")
+async def delete_note(
+    case_id: str,
+    note_index: int,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: dict = Depends(require_role("writer", "admin")),
+):
+    case = await db["cases"].find_one({"case_id": case_id})
+    if not case:
+        raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
+    notes = case.get("notes", [])
+    if note_index < 0 or note_index >= len(notes):
+        raise HTTPException(status_code=404, detail="Note not found")
+    note = notes[note_index]
+    if current_user["role"] != "admin" and note.get("author") != current_user["username"]:
+        raise HTTPException(status_code=403, detail="You can only delete your own notes")
+    # Remove by index using $unset + $pull trick
+    notes.pop(note_index)
+    await db["cases"].update_one(
+        {"case_id": case_id},
+        {"$set": {"notes": notes}},
+    )
+    return {"deleted": True}
+
+
 @router.get("/oid/{case_object_id}/krona", summary="Serve Krona HTML by case ObjectId")
 async def get_krona_by_oid(
     case_object_id: str,

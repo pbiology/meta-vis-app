@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getCase, getCaseSamples, reviewCase, unreviewCase, getCaseKronaUrl } from '../api/cases'
+import { getCase, getCaseSamples, reviewCase, unreviewCase, getCaseKronaUrl, addNote, deleteNote } from '../api/cases'
 import Badge from '../components/Badge'
 import { useAuth } from '../context/AuthContext'
 
@@ -19,7 +19,7 @@ const FILTERS = ['All', 'Test', 'Controls']
 export default function CaseDetail() {
   const { caseId } = useParams()
   const navigate   = useNavigate()
-  const { role }   = useAuth()
+  const { role, user } = useAuth()
 
   const [caseData,        setCaseData]        = useState(null)
   const [samples,         setSamples]         = useState([])
@@ -32,6 +32,9 @@ export default function CaseDetail() {
   const [kronaErrors,     setKronaErrors]     = useState({})
   const [kronaTab,        setKronaTab]        = useState(null)
   const [provenanceOpen,  setProvenanceOpen]  = useState(false)
+  const [notesOpen,    setNotesOpen]    = useState(false)
+  const [noteText,     setNoteText]     = useState('')
+  const [noteSaving,   setNoteSaving]   = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -107,6 +110,35 @@ export default function CaseDetail() {
     }
   }
 
+  async function handleAddNote() {
+    if (!noteText.trim()) return
+    setNoteSaving(true)
+    try {
+      const note = await addNote(caseId, noteText)
+      setCaseData(prev => ({
+        ...prev,
+        notes: [...(prev.notes ?? []), note],
+      }))
+      setNoteText('')
+    } catch {
+      alert('Failed to save note.')
+    } finally {
+      setNoteSaving(false)
+    }
+  }
+
+  async function handleDeleteNote(index) {
+    try {
+      await deleteNote(caseId, index)
+      setCaseData(prev => ({
+        ...prev,
+        notes: prev.notes.filter((_, i) => i !== index),
+      }))
+    } catch {
+      alert('Failed to delete note.')
+    }
+  }
+
   const filtered = useMemo(() => {
     if (filter === 'Test')     return samples.filter(s => s.sample_type === 'test')
     if (filter === 'Controls') return samples.filter(s =>
@@ -138,6 +170,24 @@ export default function CaseDetail() {
         <span className="text-gray-200">/</span>
         <h1 className="text-sm font-medium text-gray-900 font-mono flex-1">{caseId}</h1>
         <Badge type={reviewed ? 'reviewed' : 'pending'} />
+        <button
+          onClick={() => setNotesOpen(o => !o)}
+          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+            notesOpen
+              ? 'border-amber-300 bg-amber-50 text-amber-700'
+              : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+          }`}
+        >
+          <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">
+            <path d="M2 3h12v8H9l-3 2.5V11H2V3z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
+          </svg>
+          Notes
+          {(caseData?.notes?.length ?? 0) > 0 && (
+            <span className="bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full font-medium">
+              {caseData.notes.length}
+            </span>
+          )}
+        </button>
         {!reviewed && role !== 'reader' && (
           <button onClick={handleReview} disabled={reviewing} className="btn-primary disabled:opacity-50">
             {reviewing ? 'Saving…' : 'Mark case as reviewed'}
@@ -169,7 +219,8 @@ export default function CaseDetail() {
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto min-h-0 px-6 py-5 flex flex-col gap-6">
+      <div className="flex-1 flex min-h-0">
+        <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-6">
 
         {/* Samples table — classifier-agnostic */}
         <section className="bg-white border border-gray-100 rounded-xl">
@@ -458,6 +509,79 @@ export default function CaseDetail() {
           </section>
         ) : null}
 
+        </div>
+
+        {/* Notes panel */}
+        {notesOpen && (
+          <div className="w-80 flex-shrink-0 border-l border-gray-100 flex flex-col bg-white">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">Notes</p>
+              <button
+                onClick={() => setNotesOpen(false)}
+                className="text-gray-300 hover:text-gray-500 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+                  <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </button>
+            </div>
+
+            {/* Existing notes */}
+            <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3">
+              {(caseData?.notes?.length ?? 0) === 0 && (
+                <p className="text-xs text-gray-300 text-center py-6">No notes yet.</p>
+              )}
+              {(caseData?.notes ?? []).map((note, i) => (
+                <div key={i} className="bg-gray-50 rounded-lg px-3 py-2.5 flex flex-col gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-medium text-gray-600">{note.author}</span>
+                    <span className="text-gray-200">·</span>
+                    <span className="text-xs text-gray-400">
+                      {new Date(note.created_at).toLocaleDateString('sv-SE', {
+                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                      })}
+                    </span>
+                    {(role === 'admin' || note.author === user?.username) && (
+                      <button
+                        onClick={() => handleDeleteNote(i)}
+                        className="ml-auto text-gray-300 hover:text-red-400 transition-colors"
+                      >
+                        <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">
+                          <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-600 whitespace-pre-wrap">{note.text}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* New note input — writers and admins only */}
+            {role !== 'reader' && (
+              <div className="px-4 py-3 border-t border-gray-100 flex flex-col gap-2">
+                <textarea
+                  value={noteText}
+                  onChange={e => setNoteText(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleAddNote()
+                  }}
+                  placeholder="Write a note…"
+                  rows={3}
+                  className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-300 resize-none"
+                />
+                <button
+                  onClick={handleAddNote}
+                  disabled={noteSaving || !noteText.trim()}
+                  className="btn-primary disabled:opacity-50 text-xs"
+                >
+                  {noteSaving ? 'Saving…' : 'Add note'}
+                </button>
+                <p className="text-xs text-gray-300 text-center">⌘↵ to save</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
