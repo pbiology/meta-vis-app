@@ -64,77 +64,58 @@ def _read_viral_taxids(metaval_dir: Path) -> dict:
     return taxid_map
 
 
-def _read_blast(metaval_dir: Path, sample_name: str, classifier: str, taxon_name: str) -> dict:
+def _read_blast(metaval_dir: Path) -> dict:
     """
-    Read blast filtered hits and summary for a given sample/classifier/taxon.
-    Returns {'hits': [...], 'summary': [...]} or empty dicts if not found.
+    Scan blast/blastn/{classifier}/ for all summary files.
+    Returns a dict keyed by (sample_name, classifier, taxon_name) -> list of hit dicts.
+    Only reads *_blast_filtered_summary.txt files with content.
     """
-    result = {'hits': [], 'summary': []}
+    results = {}
+    blastn_dir = metaval_dir / 'blast' / 'blastn'
+    if not blastn_dir.exists():
+        return results
 
-    for blast_type in ['blastn', 'blastx']:
-        blast_dir = metaval_dir / 'blast' / blast_type / classifier
-        if not blast_dir.exists():
+    for clf_dir in blastn_dir.iterdir():
+        if not clf_dir.is_dir():
             continue
+        classifier = clf_dir.name
 
-        filtered_file = blast_dir / f'{sample_name}_{taxon_name}_blast_filtered.txt'
-        summary_file  = blast_dir / f'{sample_name}_{taxon_name}_blast_filtered_summary.txt'
+        for summary_file in clf_dir.glob('*_blast_filtered_summary.txt'):
+            if summary_file.stat().st_size == 0:
+                continue
 
-        if filtered_file.exists() and blast_type == 'blastn':
-            rows = []
-            with open(filtered_file) as f:
-                lines = f.readlines()
-            if lines:
-                headers = lines[0].strip().split('\t')
-                for line in lines[1:]:
-                    cols = line.strip().split('\t')
-                    if cols:
-                        rows.append(dict(zip(headers, cols)))
-            result['hits'] = rows
-
-        if summary_file.exists() and blast_type == 'blastn':
+            # filename: {sample_name}_{taxon_name}_blast_filtered_summary.txt
+            stem = summary_file.stem  # e.g. SRR13439790_Shigella-virus-Moo19_blast_filtered_summary
+            # strip trailing _blast_filtered_summary
+            name_part = stem.replace('_blast_filtered_summary', '')
+            # split on first underscore to get sample_name
+            # sample names contain underscores too, so we need to match against known samples
+            # store as full name_part and resolve later
             rows = []
             with open(summary_file) as f:
                 lines = f.readlines()
-            if lines:
-                headers = lines[0].strip().split('\t')
-                for line in lines[1:]:
-                    cols = line.strip().split('\t')
-                    if cols:
-                        rows.append(dict(zip(headers, cols)))
-            result['summary'] = rows
+            if len(lines) < 2:
+                continue
+            headers = lines[0].strip().split('\t')
+            for line in lines[1:]:
+                cols = line.strip().split('\t')
+                if cols and len(cols) == len(headers):
+                    rows.append(dict(zip(headers, cols)))
 
-    return result
+            results[(name_part, classifier)] = rows
+
+    return results
 
 
 def read_metaval(metaval_igv_dir: str) -> list[dict]:
-    """
-    Scan the metaval IGV directory and return a list of metaval result dicts,
-    one per (sample_name, classifier, taxon_name) combination.
-
-    Each dict:
-    {
-        sample_name: str,
-        classifier: str,
-        taxon_id: int | None,
-        taxon_name: str,
-        organisms: [
-            {
-                organism_name: str,
-                igv_html: str | None,
-                igv_file_size_bytes: int,
-                igv_too_large: bool,
-            }
-        ],
-        blast: { hits: [...], summary: [...] }
-    }
-    """
-    igv_dir    = Path(metaval_igv_dir)
-    metaval_dir = igv_dir.parent  # assume igv/ is directly under metaval root
+    igv_dir     = Path(metaval_igv_dir)
+    metaval_dir = igv_dir.parent
 
     if not igv_dir.exists():
         raise FileNotFoundError(f"Metaval IGV directory not found: {metaval_igv_dir}")
 
-    taxid_map = _read_viral_taxids(metaval_dir)
+    taxid_map  = _read_viral_taxids(metaval_dir)
+    blast_data = _read_blast(metaval_dir)
 
     # Group IGV files by (sample_name, classifier, taxon_name)
     groups: dict[tuple, list] = {}
@@ -142,36 +123,34 @@ def read_metaval(metaval_igv_dir: str) -> list[dict]:
         parsed = _parse_igv_filename(html_file.name)
         if not parsed:
             continue
-
         key = (parsed['sample_name'], parsed['classifier'], parsed['taxon_name'])
         if key not in groups:
             groups[key] = []
-
         file_size = html_file.stat().st_size
         too_large = file_size > MAX_IGV_SIZE
-
-        igv_html = None
-        if not too_large:
-            igv_html = html_file.read_text(encoding='utf-8')
-
+        igv_html  = None if too_large else html_file.read_text(encoding='utf-8')
         groups[key].append({
-            'organism_name':      parsed['organism_name'],
-            'igv_html':           igv_html,
+            'organism_name':       parsed['organism_name'],
+            'igv_html':            igv_html,
             'igv_file_size_bytes': file_size,
-            'igv_too_large':      too_large,
+            'igv_too_large':       too_large,
         })
 
     results = []
     for (sample_name, classifier, taxon_name), organisms in groups.items():
         taxon_id = taxid_map.get((classifier, taxon_name))
-        blast    = _read_blast(metaval_dir, sample_name, classifier, taxon_name)
+
+        # Match blast summary — name_part is "{sample_name}_{taxon_name}"
+        name_part   = f"{sample_name}_{taxon_name}"
+        blast_hits  = blast_data.get((name_part, classifier), [])
+
         results.append({
             'sample_name': sample_name,
             'classifier':  classifier,
             'taxon_id':    taxon_id,
             'taxon_name':  taxon_name,
             'organisms':   organisms,
-            'blast':       blast,
+            'blast':       blast_hits,
         })
 
     return results
