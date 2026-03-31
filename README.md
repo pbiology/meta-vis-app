@@ -1,4 +1,3 @@
-
 ![meta-vis logo](assets/logo.svg)
 
 A web application for visualising and reviewing the output of [nf-core/taxprofiler](https://github.com/nf-core/taxprofiler) metagenomics runs, with optional integration of [metaval](https://github.com/genomic-medicine-sweden/metaval) post-processing results.
@@ -8,13 +7,16 @@ A web application for visualising and reviewing the output of [nf-core/taxprofil
 meta-vis-app organises taxprofiler output into **cases** — one per pipeline run — each containing one or more **samples**. For each case the app provides:
 
 - A case overview with per-sample general QC metrics (read counts, Q30, host removal)
-- Per-classifier QC tables (unclassified %, species count, genera count, positive control detection, top taxa) with tabs to switch between classifiers
+- Per-classifier QC tables (unclassified %, host %, species count, genera count, top taxa) with tabs to switch between classifiers
 - Krona interactive taxonomy plots, tabbed per classifier
 - A taxonomy table per classifier with search, kingdom filter, and rank display
-- A provenance section showing pipeline and tool versions
+- A provenance section showing pipeline and tool versions (taxprofiler and metaval)
 - Case-level review status (mark as reviewed / unmark)
+- Case-level notes, allowing reviewers to record observations while viewing the data
 
-When metaval output is also ingested, taxa in the taxonomy table that have been verified by metaval gain a clickable pill linking to a details page showing IGV coverage reports.
+When metaval output is also ingested, taxa in the taxonomy table that have been verified by metaval gain a clickable pill linking to a details page showing IGV coverage reports and BLASTN results.
+
+The app also includes an **outbreak detection** feature that monitors viral taxa appearing across multiple cases within a configurable time window.
 
 ---
 
@@ -128,11 +130,12 @@ All ingestion is done via the `ingest.py` script at the repo root. All file path
 ```bash
 python ingest.py \
   --case-id <case_id> \
+  --order-date 2026-02-20 \
   --multiqc /abs/path/to/multiqc_data.json \
   --pipeline-info /abs/path/to/software_versions.yml \
   --classifier "kraken2 db=k2_pluspf taxpasta=/abs/path/kraken2.tsv krona=/abs/path/kraken2.html" \
   --classifier "centrifuge db=p_compressed+h+v taxpasta=/abs/path/centrifuge.tsv krona=/abs/path/centrifuge.html" \
-  --sample "sample_id=PE-04-28 type=test material=DNA order_date=2026-02-20 column_kraken2=PE-04-28_k2_pluspf.kraken2.kraken2.report column_centrifuge=PE-04-28_p_compressed+h+v.centrifuge" \
+  --sample "sample_id=PE-04-28 type=test material=DNA column_kraken2=PE-04-28_k2_pluspf.kraken2.kraken2.report column_centrifuge=PE-04-28_p_compressed+h+v.centrifuge" \
   --sample "sample_id=CTRL-01 type=negative_ctrl material=DNA column_kraken2=CTRL-01_k2_pluspf.kraken2.kraken2.report column_centrifuge=CTRL-01_p_compressed+h+v.centrifuge" \
   --password yourpassword
 ```
@@ -155,11 +158,14 @@ python ingest.py \
 | `material` | yes | `DNA` or `RNA` |
 | `column_<classifier>` | yes (per classifier) | Exact column name in the taxpasta TSV for that classifier |
 | `subject_id` | no | Omit for controls |
-| `order_date` | no | `YYYY-MM-DD` |
+
+#### `--order-date`
+
+The date the samples in this case were ordered (`YYYY-MM-DD`). This is set at the case level and is used by the outbreak detection feature. Cases without an order date are excluded from outbreak analysis.
 
 #### `--pipeline-info`
 
-Accepts the `software_versions.yml` file from the taxprofiler `pipeline_info/` output directory.
+Accepts the `software_versions.yml` or `nf_core_*_software_mqc_versions.yml` file from the taxprofiler `pipeline_info/` output directory.
 
 #### Taxpasta column name format
 
@@ -193,26 +199,47 @@ Each `case_id` must be unique. To re-ingest, first delete the existing case and 
 
 ---
 
+## Outbreak alerts
+
+The app continuously monitors for viral taxa appearing in multiple cases within a rolling time window. This is intended as an early signal for potential outbreak situations.
+
+**How it works:**
+- At render time, the backend queries all cases that have an `order_date` set
+- For each viral taxon at species level (or `no rank`) with more than 1 read, it checks whether the same taxon appears in 2 or more cases whose `order_date` values fall within the configured window (default 14 days)
+- Flagged taxa are surfaced in three places: the **Alerts** page (accessible from the sidebar), a warning indicator on the **case list**, and an amber pill in the **taxonomy table** on the sample page
+- Clicking the pill in the taxonomy table navigates directly to the relevant section of the Alerts page
+
+**Scope and limitations:**
+- Only viruses are considered (superkingdom = Viruses)
+- Only taxa with more than 1 classified read are included
+- Detection is based on `order_date` on the case, not ingestion date — cases without an order date are excluded
+- The time window can be adjusted to 7, 14, or 30 days from the Alerts page
+- Detection runs at query time and is always current — no re-ingestion needed when new cases arrive
+
+---
+
 ## Data model
 
 | Collection | Description |
 |---|---|
-| `cases` | One document per taxprofiler run. Stores classifiers, pipeline info, review status. |
-| `samples` | One document per sample per case. Stores QC metrics, taxonomic profiles, and metaval associations. |
+| `cases` | One document per taxprofiler run. Stores classifiers, pipeline info, order date, review status, and notes. |
+| `samples` | One document per sample per case. Stores QC metrics and taxonomic profiles. |
 | `krona_files` | Krona HTML files, stored as text, keyed by case and classifier. |
 | `metaval_results` | IGV reports and BLAST results from metaval, keyed by sample, classifier, and taxon. |
 | `users` | App users with hashed passwords and roles. |
+
+Outbreak detection does not use a dedicated collection — it is computed at query time from the `cases` and `samples` collections.
 
 ---
 
 ## User management
 
-Users are managed through the Admin panel (top-left sidebar, visible to admins only). Three roles are available:
+Users are managed through the Admin panel (sidebar, visible to admins only). Three roles are available:
 
 | Role | Capabilities |
 |---|---|
 | `reader` | View all cases and samples |
-| `writer` | View + mark/unmark cases as reviewed |
-| `admin` | View + review + manage users |
+| `writer` | View + mark/unmark cases as reviewed + add notes |
+| `admin` | View + review + add notes + manage users |
 
 The first user must be created via the command line using `create_user.py` as described above. Subsequent users can be added through the Admin panel in the UI.
