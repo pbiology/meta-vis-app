@@ -2,7 +2,7 @@ export default function Badge({ type }) {
   const variants = {
     reviewed:      'bg-green-50 text-green-700',
     pending:       'bg-amber-50 text-amber-700',
-    test:          'bg-blue-50 text-blue-700',
+    sample:          'bg-blue-50 text-blue-700',
     negative_ctrl: 'bg-gray-100 text-gray-600',
     positive_ctrl: 'bg-purple-50 text-purple-700',
   }
@@ -10,7 +10,7 @@ export default function Badge({ type }) {
   const labels = {
     reviewed:      'Reviewed',
     pending:       'Pending',
-    test:          'test',
+    sample:          'sample',
     negative_ctrl: 'neg ctrl',
     positive_ctrl: 'pos ctrl',
   }

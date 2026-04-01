@@ -1,7 +1,7 @@
 # app/models/sample.py
 
 from datetime import datetime, date
-from typing import Optional, List
+from typing import Optional, List, Literal
 from pydantic import BaseModel
 from bson import ObjectId
 
@@ -120,8 +120,8 @@ class ReviewStatus(BaseModel):
 class SampleDocument(BaseModel):
     case_id: ObjectId
     subject_id: Optional[ObjectId] = None   # null for controls
-    sample_type: str                         # test | positive_ctrl | negative_ctrl
-    material: str                            # DNA | RNA
+    sample_type: Literal["sample", "positive_ctrl", "negative_ctrl"]
+    material: Literal["DNA", "RNA"]                            # DNA | RNA
     order_date: Optional[date] = None
     sample: SampleMetadata
     library_preparation: Optional[LibraryPreparation] = None
@@ -153,8 +153,9 @@ class ClassifierIngestRequest(BaseModel):
 class SampleIngestRequest(BaseModel):
     subject_id: Optional[str] = None
     sample_id: str
-    sample_type: str = "test"
-    material: str = "DNA"
+    sample_type: Literal["sample", "positive_ctrl", "negative_ctrl"]
+    material: Literal["DNA", "RNA"]
+    sample_source: str = "N/A"
     columns: dict
 
 

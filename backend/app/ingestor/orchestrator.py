@@ -148,10 +148,11 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             "sample_type": s.sample_type,
             "material":    s.material,
             "sample": {
-                "sample_id":   s.sample_id,
-                "material":    s.material,
-                "sample_type": s.sample_type,
-                "subject_id":  s.subject_id,
+                "sample_id":     s.sample_id,
+                "material":      s.material,
+                "sample_type":   s.sample_type,
+                "subject_id":    s.subject_id,
+                "sample_source": s.sample_source,
             },
             "taxprofiler": {
                 **base_qc,

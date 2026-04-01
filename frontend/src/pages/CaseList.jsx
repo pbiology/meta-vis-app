@@ -18,7 +18,7 @@ export default function CaseList() {
         const enriched = await Promise.all(
           casesData.map(async c => {
             const samples = await getCaseSamples(c.case_id)
-            const testSamples = samples.filter(s => s.sample_type === 'test')
+            const testSamples = samples.filter(s => s.sample_type === 'sample')
             return { ...c, samples, testSamples }
           })
         )
@@ -104,7 +104,7 @@ export default function CaseList() {
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{c.order_date ?? '—'}</td>
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                      {c.testSamples.length} test{c.testSamples.length !== 1 ? 's' : ''}
+                      {c.testSamples.length} sample{c.testSamples.length !== 1 ? 's' : ''}
                       {c.samples.length > c.testSamples.length && (
                         <span className="text-gray-300 ml-1">+{c.samples.length - c.testSamples.length} ctrl</span>
                       )}

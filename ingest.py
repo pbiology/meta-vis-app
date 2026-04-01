@@ -10,7 +10,7 @@ Usage:
         --pipeline-info /path/to/pipeline_info \
         --classifier "kraken2 db=k2_pluspf taxpasta=/path/kraken2.tsv krona=/path/kraken2.html" \
         --classifier "centrifuge db=p_compressed+h+v taxpasta=/path/centrifuge.tsv krona=/path/centrifuge.html" \
-        --sample "subject_id=S-001 sample_id=PE-04-28 type=test material=DNA order_date=2026-02-20 column_kraken2=PE-04-28_k2_pluspf.kraken2.kraken2.report column_centrifuge=PE-04-28_p_compressed+h+v.centrifuge" \
+        --sample "subject_id=S-001 sample_id=PE-04-28 type=sample material=DNA order_date=2026-02-20 column_kraken2=PE-04-28_k2_pluspf.kraken2.kraken2.report column_centrifuge=PE-04-28_p_compressed+h+v.centrifuge" \
         --password yourpassword
 """
 
@@ -95,6 +95,7 @@ def parse_sample(raw: str, classifier_names: list) -> dict:
         "sample_id": parts["sample_id"],
         "sample_type": parts["type"],
         "material": parts["material"],
+        "sample_source": parts.get("sample_source", "N/A"),
         "columns": columns,
     }
 

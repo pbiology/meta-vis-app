@@ -81,8 +81,8 @@ async def list_samples_for_case(
     query: dict = {"case_id": case["_id"]}
     if type == "controls":
         query["sample_type"] = {"$in": ["positive_ctrl", "negative_ctrl"]}
-    elif type == "test":
-        query["sample_type"] = "test"
+    elif type == "sample":
+        query["sample_type"] = "sample"
 
     docs = await db["samples"].find(query).to_list(length=200)
 
