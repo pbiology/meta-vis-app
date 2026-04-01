@@ -76,10 +76,13 @@ function TaxonomyTable({ profile, clfQc, metavalResults, sampleId, outbreakTaxon
     return true
   })
 
+  const ntcSum = (taxon_id) => ntcForClassifier.reduce((sum, ntc) => sum + (ntc.abundanceMap[taxon_id] ?? 0), 0)
+
   const sorted = [...filtered].sort((a, b) => {
     if (taxSort.col === 'name')         return taxSort.dir * a.name.localeCompare(b.name)
     if (taxSort.col === 'rank')         return taxSort.dir * (a.rank ?? '').localeCompare(b.rank ?? '')
     if (taxSort.col === 'superkingdom') return taxSort.dir * (a.superkingdom ?? '').localeCompare(b.superkingdom ?? '')
+    if (taxSort.col === 'ntc')          return taxSort.dir * (ntcSum(a.taxon_id) - ntcSum(b.taxon_id))
     return taxSort.dir * (a.abundance - b.abundance)
   })
 
@@ -216,7 +219,7 @@ function TaxonomyTable({ profile, clfQc, metavalResults, sampleId, outbreakTaxon
                   { label: 'Rank',       col: 'rank'         },
                   { label: 'Kingdom',    col: 'superkingdom' },
                   { label: 'Reads',      col: 'abundance'    },
-                  { label: 'Reads in NTC', col: null         },
+                  { label: 'Reads in NTC', col: hasNtc ? 'ntc' : null },
                   { label: '% of non-host', col: null           },
                 ].map(({ label, col }) => (
                   <th
