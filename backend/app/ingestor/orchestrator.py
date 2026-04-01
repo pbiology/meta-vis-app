@@ -63,10 +63,6 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     # Store Krona files per classifier and build classifier metadata
     classifier_docs = []
     for clf in request.classifiers:
-        krona_id = None
-        if clf.krona:
-            # Temporarily insert case to get ObjectId, then update
-            pass
         classifier_docs.append({
             "name":  clf.name,
             "db":    clf.db,
