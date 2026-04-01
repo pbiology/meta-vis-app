@@ -30,4 +30,5 @@ frontend/package-lock.json
 # IDE
 .idea/
 
-
+# macOS
+.DS_Store
