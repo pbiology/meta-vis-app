@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { getSample, getProfile, getKronaUrl } from '../api/samples'
+import { getSample, getProfile, getKronaUrl, getNtcProfiles } from '../api/samples'
 import Badge from '../components/Badge'
 import MetricCard from '../components/MetricCard'
 import { getMetavalForSample } from '../api/metaval'
@@ -39,7 +39,7 @@ function KingdomBadge({ kingdom }) {
 
 const HOST_IDS = new Set([9606, 1, 0, 131567])
 
-function TaxonomyTable({ profile, clfQc, metavalResults, sampleId, outbreakTaxonIds }) {
+function TaxonomyTable({ profile, clfQc, metavalResults, sampleId, outbreakTaxonIds, ntcProfiles }) {
   const [taxSearch,   setTaxSearch]   = useState('')
   const [taxKingdoms, setTaxKingdoms] = useState([])
   const [taxSort,     setTaxSort]     = useState({ col: 'abundance', dir: -1 })
@@ -55,6 +55,13 @@ function TaxonomyTable({ profile, clfQc, metavalResults, sampleId, outbreakTaxon
     ?? (allEntries.find(t => t.taxon_id === 1)?.abundance ?? 0)
   const totalReads   = unclassReads + classifiedReads
   const nonHostTotal = classifiedReads - hostReads
+
+// NTC profiles for this classifier — list of {sample_id, abundanceMap}
+  const ntcForClassifier = ntcProfiles.map(ntc => ({
+    sample_id:    ntc.sample_id,
+    abundanceMap: ntc.classifiers?.[profile.classifier] ?? {},
+  }))
+  const hasNtc = ntcForClassifier.length > 0
 
   const tableEntries = allEntries.filter(t =>
     !HOST_IDS.has(t.taxon_id) &&
@@ -195,11 +202,12 @@ function TaxonomyTable({ profile, clfQc, metavalResults, sampleId, outbreakTaxon
         <div className="overflow-x-auto">
           <table className="w-full text-left" style={{ tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: '38%' }} />
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '12%' }} />
-              <col style={{ width: '26%' }} />
+              <col style={{ width: '34%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '22%' }} />
             </colgroup>
             <thead>
               <tr>
@@ -208,6 +216,7 @@ function TaxonomyTable({ profile, clfQc, metavalResults, sampleId, outbreakTaxon
                   { label: 'Rank',       col: 'rank'         },
                   { label: 'Kingdom',    col: 'superkingdom' },
                   { label: 'Reads',      col: 'abundance'    },
+                  { label: 'Reads in NTC', col: null         },
                   { label: '% of non-host', col: null           },
                 ].map(({ label, col }) => (
                   <th
@@ -257,6 +266,27 @@ function TaxonomyTable({ profile, clfQc, metavalResults, sampleId, outbreakTaxon
                     <td className="py-2 pr-3 text-xs text-gray-400">{t.rank ?? '—'}</td>
                     <td className="py-2 pr-3"><KingdomBadge kingdom={t.superkingdom} /></td>
                     <td className="py-2 pr-3 text-xs text-gray-500 tabular-nums">{fmt(t.abundance)}</td>
+                    <td className="py-2 pr-3 text-xs tabular-nums">
+                      {!hasNtc ? (
+                        <span className="text-gray-300">N/A</span>
+                      ) : (
+                        (() => {
+                          const vals = ntcForClassifier.map(ntc => ({
+                            sample_id: ntc.sample_id,
+                            count:     ntc.abundanceMap[t.taxon_id] ?? 0,
+                          }))
+                          const allZero = vals.every(v => v.count === 0)
+                          return (
+                            <span
+                              className={allZero ? 'text-gray-300' : 'text-amber-600 font-medium'}
+                              title={vals.map(v => `${v.sample_id}: ${v.count.toLocaleString()}`).join('\n')}
+                            >
+                              {vals.map(v => v.count.toLocaleString()).join(', ')}
+                            </span>
+                          )
+                        })()
+                      )}
+                    </td>
                     <td className="py-2">
                       <div className="flex items-center gap-2">
                         <div className="flex-1 bg-gray-100 rounded-full h-1.5 min-w-0">
@@ -299,6 +329,7 @@ export default function SampleDetail() {
   const [activeTab, setActiveTab] = useState(null)
   const [metavalResults,    setMetavalResults]    = useState([])
   const [outbreakTaxonIds,  setOutbreakTaxonIds]  = useState(new Set())
+  const [ntcProfiles, setNtcProfiles] = useState([])
 
   useEffect(() => {
     async function load() {
@@ -307,6 +338,7 @@ export default function SampleDetail() {
         setSample(s)
         setProfile(p)
         getMetavalForSample(sampleId).then(setMetavalResults).catch(() => {})
+        getNtcProfiles(sampleId).then(setNtcProfiles).catch(() => {})
         getOutbreaks(14).then(data => {
           const ids = new Set(data.outbreaks.map(o => o.taxon_id))
           setOutbreakTaxonIds(ids)
@@ -488,6 +520,7 @@ export default function SampleDetail() {
                 metavalResults={metavalResults}
                 sampleId={sampleId}
                 outbreakTaxonIds={outbreakTaxonIds}
+                ntcProfiles={ntcProfiles}
               />
             ) : null)}
           </section>

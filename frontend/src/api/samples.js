@@ -47,3 +47,8 @@ export async function getKronaUrl(sampleId, classifier = 'kraken2') {
   })
   return URL.createObjectURL(resp.data)
 }
+
+export async function getNtcProfiles(sampleId) {
+  const res = await client.get(`/samples/${sampleId}/ntc_profiles`)
+  return res.data
+}
