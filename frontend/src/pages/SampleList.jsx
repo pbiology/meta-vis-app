@@ -140,10 +140,10 @@ export default function SampleList() {
                       <Badge type={s.sample_type} />
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-700">
-                      {fmtPct(s.taxprofiler?.kraken2?.pct_unclassified)}
+                      {fmtPct(s.taxprofiler?.classifiers?.kraken2?.pct_unclassified)}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-700">
-                      {fmt(s.taxprofiler?.kraken2?.num_species)}
+                      {fmt(s.taxprofiler?.classifiers?.kraken2?.num_species)}
                     </td>
                     <td className="px-4 py-3">
                       <Badge type={reviewed ? 'reviewed' : 'pending'} />
