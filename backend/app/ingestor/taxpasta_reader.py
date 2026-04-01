@@ -25,7 +25,6 @@ def _superkingdom_from_lineage(lineage: str) -> Optional[str]:
 def read_taxpasta(
     file_path: str,
     sample_column: str,
-    superkingdom_map: Optional[dict] = None,  # kept for API compatibility, no longer used
 ) -> list[dict]:
     path = Path(file_path)
 

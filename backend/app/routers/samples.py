@@ -2,12 +2,10 @@
 
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 from pydantic import BaseModel
 from typing import Optional
-import os
 from app.models.sample import SampleResponse
 
 from app.database import get_db
