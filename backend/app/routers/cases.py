@@ -282,21 +282,3 @@ async def delete_note(
         {"$set": {"notes": notes}},
     )
     return {"deleted": True}
-
-
-@router.get("/oid/{case_object_id}/krona", summary="Serve Krona HTML by case ObjectId")
-async def get_krona_by_oid(
-    case_object_id: str,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(get_current_user),
-):
-    try:
-        oid = ObjectId(case_object_id)
-    except Exception:
-        raise HTTPException(status_code=422, detail="Invalid case ObjectId")
-
-    doc = await db["krona_files"].find_one({"case_id": oid})
-    if not doc:
-        raise HTTPException(status_code=404, detail="No Krona file stored for this case")
-
-    return HTMLResponse(content=doc["html"])

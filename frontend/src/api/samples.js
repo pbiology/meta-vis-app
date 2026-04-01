@@ -35,11 +35,6 @@ export async function getProfile(sampleId) {
   return res.data
 }
 
-export async function reviewSample(sampleId, notes = null) {
-  const res = await client.patch(`/samples/${sampleId}/review`, { notes })
-  return res.data
-}
-
 export async function getKronaUrl(sampleId, classifier = 'kraken2') {
   const resp = await client.get(`/samples/${sampleId}/krona`, {
     params: { classifier },
