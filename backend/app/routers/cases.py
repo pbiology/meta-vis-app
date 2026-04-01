@@ -7,6 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 from pydantic import BaseModel
 from typing import Optional
+from app.models.sample import CaseResponse
 
 import json
 from pathlib import Path
@@ -52,7 +53,7 @@ async def list_cases(
     _user: dict = Depends(get_current_user),
 ):
     docs = await db["cases"].find().sort("ingested_at", -1).to_list(length=200)
-    return [_serialise_case(d) for d in docs]
+    return [CaseResponse.model_validate(_serialise_case(d)).model_dump(mode="json") for d in docs]
 
 
 @router.get("/{case_id}", summary="Get a single case")
@@ -64,7 +65,8 @@ async def get_case(
     doc = await db["cases"].find_one({"case_id": case_id})
     if not doc:
         raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
-    return _serialise_case(doc)
+    doc = _serialise_case(doc)
+    return CaseResponse.model_validate(doc).model_dump(mode="json")
 
 
 @router.get("/{case_id}/samples", summary="List samples for a case")

@@ -1,10 +1,11 @@
 # app/models/sample.py
 
 from datetime import datetime, date
-from typing import Optional, List, Literal
-from pydantic import BaseModel
-from bson import ObjectId
+from typing import Optional, List, Literal, Dict, Any
+from pydantic import BaseModel, ConfigDict
 
+class _Base(BaseModel):
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
 # ---------------------------------------------------------------------------
 # Taxonomic profile
@@ -28,7 +29,7 @@ class ClassifierProfile(BaseModel):
 # QC blocks
 # ---------------------------------------------------------------------------
 
-class FastQCStats(BaseModel):
+class FastQCStats(_Base):
     total_sequences: Optional[int] = None
     avg_sequence_length: Optional[float] = None
     pct_gc_forward: Optional[float] = None
@@ -37,7 +38,7 @@ class FastQCStats(BaseModel):
     pct_poor_quality_reverse: Optional[float] = None
 
 
-class FastpStats(BaseModel):
+class FastpStats(_Base):
     total_reads_before_filtering: Optional[int] = None
     total_reads_after_filtering: Optional[int] = None
     passed_filter_reads: Optional[int] = None
@@ -48,16 +49,16 @@ class FastpStats(BaseModel):
     gc_content: Optional[float] = None
 
 
-class Kraken2Stats(BaseModel):
-    pct_unclassified: Optional[float] = None
-    pct_top_one: Optional[float] = None
-    pct_top_n: Optional[float] = None
-    unclassified_reads: Optional[int] = None
-    num_species: Optional[int] = None
-    num_genera: Optional[int] = None
+class ClassifierQcStats(_Base):
+    pct_unclassified:   Optional[float] = None
+    unclassified_reads: Optional[int]   = None
+    classified_reads:   Optional[int]   = None
+    total_reads:        Optional[int]   = None
+    num_species:        Optional[int]   = None
+    num_genera:         Optional[int]   = None
 
 
-class Bowtie2Stats(BaseModel):
+class Bowtie2Stats(_Base):
     total_reads: Optional[int] = None
     aligned_exactly_one: Optional[int] = None
     aligned_multi: Optional[int] = None
@@ -65,36 +66,45 @@ class Bowtie2Stats(BaseModel):
     overall_alignment_rate: Optional[float] = None
 
 
-class PipelineInfo(BaseModel):
-    software_used: Optional[dict] = None
-    pipeline_configuration: Optional[dict] = None
+class PipelineConfiguration(_Base):
+    pipeline_name:    Optional[str] = None
+    pipeline_version: Optional[str] = None
+    nextflow:         Optional[str] = None
 
 
-class TaxprofilerStats(BaseModel):
-    kraken2: Optional[Kraken2Stats] = None
-    fastqc: Optional[FastQCStats] = None
-    fastp: Optional[FastpStats] = None
-    bowtie2: Optional[Bowtie2Stats] = None
-    pipeline_info: Optional[PipelineInfo] = None
+class PipelineInfo(_Base):
+    software_used:          Optional[Dict[str, Any]] = None
+    pipeline_configuration: Optional[PipelineConfiguration] = None
+
+
+class TaxprofilerStats(_Base):
+    fastp:         Optional[FastpStats]                          = None
+    fastqc:        Optional[FastQCStats]                         = None
+    bowtie2:       Optional[Bowtie2Stats]                        = None
+    classifiers:   Optional[Dict[str, ClassifierQcStats]]        = None
+    pipeline_info: Optional[PipelineInfo]                        = None
 
 
 # ---------------------------------------------------------------------------
 # Sample metadata
 # ---------------------------------------------------------------------------
 
-class SampleMetadata(BaseModel):
-    sample_id: str
+class SampleMetadata(_Base):
+    sample_id:     str
     sample_source: Optional[str] = None
-    biopsy_id: Optional[str] = None
+    material:      Optional[str] = None
+    sample_type:   Optional[str] = None
+    subject_id:    Optional[str] = None
+    biopsy_id:     Optional[str] = None
 
 
-class LibraryPreparation(BaseModel):
+class LibraryPreparation(_Base):
     library_name: Optional[str] = None
     batch_id: Optional[str] = None
     sample_type: Optional[str] = None
 
 
-class SequencingMetadata(BaseModel):
+class SequencingMetadata(_Base):
     platform: Optional[str] = None
     flowcell_id: Optional[str] = None
     date: Optional[str] = None
@@ -106,7 +116,7 @@ class SequencingMetadata(BaseModel):
 # Review subdocument
 # ---------------------------------------------------------------------------
 
-class ReviewStatus(BaseModel):
+class ReviewStatus(_Base):
     reviewed: bool = False
     reviewed_by: Optional[str] = None
     reviewed_at: Optional[datetime] = None
@@ -117,23 +127,52 @@ class ReviewStatus(BaseModel):
 # Full sample document (stored in MongoDB)
 # ---------------------------------------------------------------------------
 
-class SampleDocument(BaseModel):
-    case_id: ObjectId
-    subject_id: Optional[ObjectId] = None   # null for controls
+class SampleResponse(_Base):
+    """Validated response model for sample documents read from MongoDB."""
+    case_id:     str
+    subject_id:  Optional[str]       = None
     sample_type: Literal["sample", "positive_ctrl", "negative_ctrl"]
-    material: Literal["DNA", "RNA"]                            # DNA | RNA
-    order_date: Optional[date] = None
-    sample: SampleMetadata
-    library_preparation: Optional[LibraryPreparation] = None
-    sequencing: Optional[SequencingMetadata] = None
-    taxprofiler: Optional[TaxprofilerStats] = None
-    profiles: List[ClassifierProfile] = []
-    has_krona: bool = False                  # krona stored at case level
-    review: ReviewStatus = ReviewStatus()
-    ingested_at: datetime
+    material:    Literal["DNA", "RNA"]
+    sample:      Optional[SampleMetadata]    = None
+    taxprofiler: Optional[TaxprofilerStats]  = None
+    profiles:    List[ClassifierProfile]     = []
+    has_krona:   bool                        = False
+    review:      ReviewStatus                = ReviewStatus()
+    ingested_at: Optional[datetime]          = None
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+
+# ---------------------------------------------------------------------------
+# Case document (read from MongoDB)
+# ---------------------------------------------------------------------------
+
+class CaseClassifier(_Base):
+    name:     str
+    db:       str
+    krona_id: Optional[str] = None
+
+
+class CaseNote(_Base):
+    text:       str
+    author:     str
+    created_at: str
+
+
+class CaseResponse(_Base):
+    """Validated response model for case documents read from MongoDB."""
+    case_id:               str
+    order_date:            Optional[str]          = None
+    ingested_at:           Optional[datetime]      = None
+    classifiers:           List[CaseClassifier]    = []
+    has_krona:             bool                    = False
+    pipeline_info:         Optional[PipelineInfo]  = None
+    metaval_pipeline_info: Optional[PipelineInfo]  = None
+    review:                ReviewStatus            = ReviewStatus()
+    notes:                 List[CaseNote]          = []
+    sample_ids:            List[str]               = []
+
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
 
 
 # ---------------------------------------------------------------------------

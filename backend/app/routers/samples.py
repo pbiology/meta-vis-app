@@ -8,6 +8,7 @@ from bson import ObjectId
 from pydantic import BaseModel
 from typing import Optional
 import os
+from app.models.sample import SampleResponse
 
 from app.database import get_db
 from app.auth.utils import get_current_user
@@ -44,7 +45,8 @@ async def get_sample(
     doc = await db["samples"].find_one({"_id": _oid(sample_id)})
     if not doc:
         raise HTTPException(status_code=404, detail=f"Sample '{sample_id}' not found")
-    return _serialise(doc)
+    doc = _serialise(doc)
+    return SampleResponse.model_validate(doc).model_dump(mode="json")
 
 
 @router.get("/{sample_id}/profile", summary="Get taxonomic profile(s) for a sample")
