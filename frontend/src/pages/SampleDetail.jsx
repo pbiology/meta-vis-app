@@ -208,7 +208,7 @@ function TaxonomyTable({ profile, clfQc, metavalResults, sampleId, outbreakTaxon
                   { label: 'Rank',       col: 'rank'         },
                   { label: 'Kingdom',    col: 'superkingdom' },
                   { label: 'Reads',      col: 'abundance'    },
-                  { label: '% non-host', col: null           },
+                  { label: '% of non-host', col: null           },
                 ].map(({ label, col }) => (
                   <th
                     key={label}
