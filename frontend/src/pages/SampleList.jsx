@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { getSamples } from '../api/samples'
 import Badge from '../components/Badge'
 
-const FILTERS = ['All', 'Pending', 'Reviewed', 'Test', 'Controls']
+const FILTERS = ['All', 'Pending', 'Reviewed', 'Samples', 'Controls']
 
 function fmt(n) {
   if (n === undefined || n === null) return '—'
@@ -35,7 +35,7 @@ export default function SampleList() {
 
     if (filter === 'Pending')  list = list.filter(s => !s.case_review?.reviewed)
     if (filter === 'Reviewed') list = list.filter(s =>  s.case_review?.reviewed)
-    if (filter === 'Test')     list = list.filter(s => s.sample_type === 'test')
+    if (filter === 'Test')     list = list.filter(s => s.sample_type === 'sample')
     if (filter === 'Controls') list = list.filter(s =>
       s.sample_type === 'negative_ctrl' || s.sample_type === 'positive_ctrl'
     )

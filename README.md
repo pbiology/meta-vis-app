@@ -135,7 +135,7 @@ python ingest.py \
   --pipeline-info /abs/path/to/software_versions.yml \
   --classifier "kraken2 db=k2_pluspf taxpasta=/abs/path/kraken2.tsv krona=/abs/path/kraken2.html" \
   --classifier "centrifuge db=p_compressed+h+v taxpasta=/abs/path/centrifuge.tsv krona=/abs/path/centrifuge.html" \
-  --sample "sample_id=PE-04-28 type=test material=DNA column_kraken2=PE-04-28_k2_pluspf.kraken2.kraken2.report column_centrifuge=PE-04-28_p_compressed+h+v.centrifuge" \
+  --sample "sample_id=PE-04-28 type=sample material=DNA column_kraken2=PE-04-28_k2_pluspf.kraken2.kraken2.report column_centrifuge=PE-04-28_p_compressed+h+v.centrifuge" \
   --sample "sample_id=CTRL-01 type=negative_ctrl material=DNA column_kraken2=CTRL-01_k2_pluspf.kraken2.kraken2.report column_centrifuge=CTRL-01_p_compressed+h+v.centrifuge" \
   --password yourpassword
 ```

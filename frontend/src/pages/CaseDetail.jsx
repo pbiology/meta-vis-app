@@ -14,7 +14,7 @@ function fmtPct(n) {
   return `${n.toFixed(1)}%`
 }
 
-const FILTERS = ['All', 'Test', 'Controls']
+const FILTERS = ['All', 'Sample', 'Controls']
 
 export default function CaseDetail() {
   const { caseId } = useParams()
@@ -140,7 +140,7 @@ export default function CaseDetail() {
   }
 
   const filtered = useMemo(() => {
-    if (filter === 'Test')     return samples.filter(s => s.sample_type === 'test')
+    if (filter === 'Sample')     return samples.filter(s => s.sample_type === 'sample<td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">No samples match this filter.</td>FILTERS')
     if (filter === 'Controls') return samples.filter(s =>
       s.sample_type === 'negative_ctrl' || s.sample_type === 'positive_ctrl'
     )
@@ -243,7 +243,7 @@ export default function CaseDetail() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr>
-                {['Sample ID', 'Material', 'Type', 'Total reads'].map(h => (
+                {['Sample ID', 'Material', 'Type', 'Source', 'Total reads'].map(h => (
                   <th key={h} className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap">
                     {h}
                   </th>
@@ -260,6 +260,7 @@ export default function CaseDetail() {
                   <td className="px-4 py-3 font-mono text-xs text-gray-700">{s.sample?.sample_id ?? '—'}</td>
                   <td className="px-4 py-3 text-xs text-gray-500">{s.material ?? '—'}</td>
                   <td className="px-4 py-3"><Badge type={s.sample_type} /></td>
+                  <td className="px-4 py-3 text-xs text-gray-500">{s.sample?.sample_source ?? '—'}</td>
                   <td className="px-4 py-3 text-xs text-gray-700">
                     {fmt(s.taxprofiler?.fastp?.total_reads_before_filtering)}
                   </td>
@@ -267,7 +268,7 @@ export default function CaseDetail() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-400">No samples match this filter.</td>
+                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">No samples match this filter.</td>
                 </tr>
               )}
             </tbody>
