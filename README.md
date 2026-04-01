@@ -106,7 +106,7 @@ Roles are `reader`, `writer`, or `admin`. Only admins can manage users. Only wri
 ```bash
 cd backend
 conda activate meta-vis-app
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --host 127.0.0.1
 ```
 
 The API will be available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
