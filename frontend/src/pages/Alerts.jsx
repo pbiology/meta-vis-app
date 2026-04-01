@@ -1,25 +1,35 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
-import { getOutbreaks } from '../api/alerts'
-
+import { useNavigate, useLocation, Link } from 'react-router-dom'
+import { getOutbreaks, getIgnorelist, addToIgnorelist } from '../api/alerts'
+import { useAuth } from '../context/AuthContext'
 
 export default function Alerts() {
   const navigate  = useNavigate()
-  const [data,        setData]        = useState(null)
-  const [loading,     setLoading]     = useState(true)
-  const [error,       setError]       = useState(null)
-  const [windowDays,  setWindowDays]  = useState(14)
-  const location = useLocation()
-  const [highlightedId, setHighlightedId] = useState(null)
+  const { role }  = useAuth()
+  const location  = useLocation()
+
+  const [data,           setData]           = useState(null)
+  const [loading,        setLoading]        = useState(true)
+  const [error,          setError]          = useState(null)
+  const [windowDays,     setWindowDays]     = useState(14)
+  const [ignorelist, setIgnorelist] = useState([])
+  const [ignorelistOpen, setIgnorelistOpen] = useState(false)
+  const [ignoring,       setIgnoring]       = useState(null)  // taxon_id currently being ignored
+  const [highlightedId,  setHighlightedId]  = useState(null)
   const sectionRefs = useRef({})
 
-  useEffect(() => {
+function load() {
     setLoading(true)
-    getOutbreaks(windowDays)
-      .then(setData)
+    Promise.all([getOutbreaks(windowDays), getIgnorelist()])
+      .then(([outbreakData, ignoreData]) => {
+        setData(outbreakData)
+        setIgnorelist(ignoreData)
+      })
       .catch(() => setError('Failed to load outbreak alerts.'))
       .finally(() => setLoading(false))
-  }, [windowDays])
+  }
+
+  useEffect(() => { load() }, [windowDays])
 
   useEffect(() => {
     if (!data || !location.hash) return
@@ -32,10 +42,46 @@ export default function Alerts() {
     }, 100)
   }, [data, location.hash])
 
+  async function handleIgnore(outbreak) {
+    setIgnoring(outbreak.taxon_id)
+    try {
+      await addToIgnorelist(outbreak.taxon_id, outbreak.taxon_name)
+      load()
+    } catch {
+      alert('Failed to add taxon to ignorelist.')
+    } finally {
+      setIgnoring(null)
+    }
+  }
+
+  async function handleUnignore(taxonId) {
+    try {
+      await removeFromIgnorelist(taxonId)
+      load()
+    } catch {
+      alert('Failed to remove taxon from ignorelist.')
+    }
+  }
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 px-6 py-4 bg-white border-b border-gray-100 flex-shrink-0">
         <h1 className="text-sm font-medium text-gray-900 flex-1">Outbreak alerts</h1>
+        <Link
+          to="/alerts/ignorelist"
+          className="flex items-center gap-1.5 text-xs border border-gray-200 rounded-lg px-3 py-1.5 text-gray-500 hover:bg-gray-50 transition-colors"
+        >
+          <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3"/>
+            <path d="M5 8h6M8 5v6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+          </svg>
+          Ignored taxa
+          {ignorelist.length > 0 && (
+            <span className="bg-gray-100 text-gray-500 text-xs px-1.5 py-0.5 rounded-full font-medium">
+              {ignorelist.length}
+            </span>
+          )}
+        </Link>
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-400">Window</span>
           {[7, 14, 30].map(d => (
@@ -70,6 +116,7 @@ export default function Alerts() {
             <p className="text-sm text-gray-400">No outbreak signals detected in the last {windowDays} days.</p>
           </div>
         )}
+
         {!loading && !error && data?.outbreaks.map(outbreak => (
           <section
             key={outbreak.taxon_id}
@@ -87,17 +134,24 @@ export default function Alerts() {
                 <path d="M8 6v3M8 11v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
               </svg>
               <p className="text-xs font-medium text-gray-700 italic flex-1">{outbreak.taxon_name.replace(/-/g, ' ')}</p>
-              <span className="text-xs text-amber-600 font-medium">
+              <span className="text-xs text-amber-600 font-medium mr-2">
                 {outbreak.case_ids.length} cases · {windowDays}d window
               </span>
+              {role !== 'reader' && (
+                <button
+                  onClick={() => handleIgnore(outbreak)}
+                  disabled={ignoring === outbreak.taxon_id}
+                  className="text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-50"
+                >
+                  {ignoring === outbreak.taxon_id ? 'Ignoring…' : 'Ignore'}
+                </button>
+              )}
             </div>
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr>
                   {['Case', 'Order date'].map(h => (
-                    <th key={h} className="px-4 py-2 text-xs font-medium text-gray-400 border-b border-gray-50">
-                      {h}
-                    </th>
+                    <th key={h} className="px-4 py-2 text-xs font-medium text-gray-400 border-b border-gray-50">{h}</th>
                   ))}
                 </tr>
               </thead>
