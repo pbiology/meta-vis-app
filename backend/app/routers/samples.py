@@ -88,6 +88,46 @@ async def review_sample(
         raise HTTPException(status_code=404, detail=f"Sample '{sample_id}' not found")
     return {"sample_id": sample_id, "reviewed": True, "reviewed_by": current_user["username"]}
 
+@router.get("/{sample_id}/ntc_profiles", summary="Get negative control profiles matching this sample's material")
+async def get_ntc_profiles(
+    sample_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
+    sample = await db["samples"].find_one(
+        {"_id": _oid(sample_id)},
+        {"case_id": 1, "material": 1},
+    )
+    if not sample:
+        raise HTTPException(status_code=404, detail=f"Sample '{sample_id}' not found")
+
+    ntc_docs = await db["samples"].find(
+        {
+            "case_id":     sample["case_id"],
+            "sample_type": "negative_ctrl",
+            "material":    sample["material"],
+        },
+        {"profiles": 1, "sample": 1},
+    ).to_list(length=50)
+
+    result = []
+    for ntc in ntc_docs:
+        ntc_sample_id = ntc.get("sample", {}).get("sample_id", str(ntc["_id"]))
+        classifiers = {}
+        for p in ntc.get("profiles", []):
+            clf = p.get("classifier")
+            abundance_map = {
+                e["taxon_id"]: e["abundance"]
+                for e in p.get("profile", [])
+                if e.get("abundance", 0) > 0
+            }
+            classifiers[clf] = abundance_map
+        result.append({
+            "sample_id":   ntc_sample_id,
+            "classifiers": classifiers,
+        })
+
+    return result
 
 @router.get("/{sample_id}/krona", summary="Serve Krona HTML for the case this sample belongs to")
 async def get_krona(
