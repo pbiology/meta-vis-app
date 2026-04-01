@@ -1,14 +1,92 @@
 # app/routers/alerts.py
 
-from datetime import datetime, date, timedelta
-from fastapi import APIRouter, Depends, Query
+from datetime import datetime, date
+from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pydantic import BaseModel
 from collections import defaultdict
+from typing import Optional
 
 from app.database import get_db
-from app.auth.utils import get_current_user
+from app.auth.utils import get_current_user, require_role
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
+
+
+class IgnorePayload(BaseModel):
+    taxon_id:   int
+    taxon_name: str
+    reason:     Optional[str] = None
+
+
+def parse_date(d):
+    if isinstance(d, str):
+        return date.fromisoformat(d)
+    return d
+
+
+@router.get("/ignorelist", summary="List ignored taxa")
+async def get_ignorelist(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
+    docs = await db["outbreak_ignorelist"].find().sort("added_at", -1).to_list(length=None)
+    for doc in docs:
+        doc["_id"] = str(doc["_id"])
+    return docs
+
+
+@router.post("/ignorelist", summary="Add a taxon to the outbreak ignorelist")
+async def add_to_ignorelist(
+    payload: IgnorePayload,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: dict = Depends(require_role("writer", "admin")),
+):
+    existing = await db["outbreak_ignorelist"].find_one({"taxon_id": payload.taxon_id})
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Taxon {payload.taxon_id} is already ignored")
+    doc = {
+        "taxon_id":   payload.taxon_id,
+        "taxon_name": payload.taxon_name,
+        "reason":     payload.reason,
+        "added_by":   current_user["username"],
+        "added_at":   datetime.utcnow().isoformat(),
+    }
+    await db["outbreak_ignorelist"].insert_one(doc)
+    doc["_id"] = str(doc["_id"])
+    return doc
+
+
+@router.delete("/ignorelist/{taxon_id}", summary="Remove a taxon from the outbreak ignorelist")
+async def remove_from_ignorelist(
+    taxon_id: int,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _user: dict = Depends(require_role("admin")),
+):
+    result = await db["outbreak_ignorelist"].delete_one({"taxon_id": taxon_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail=f"Taxon {taxon_id} not found in ignorelist")
+    return {"deleted": True, "taxon_id": taxon_id}
+
+
+class IgnoreNotePayload(BaseModel):
+    reason: Optional[str] = None
+
+
+@router.patch("/ignorelist/{taxon_id}", summary="Update the reason/notes for an ignored taxon")
+async def update_ignorelist_note(
+    taxon_id: int,
+    payload: IgnoreNotePayload,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _user: dict = Depends(require_role("writer", "admin")),
+):
+    result = await db["outbreak_ignorelist"].update_one(
+        {"taxon_id": taxon_id},
+        {"$set": {"reason": payload.reason}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail=f"Taxon {taxon_id} not found in ignorelist")
+    return {"updated": True, "taxon_id": taxon_id}
 
 
 @router.get("/outbreaks", summary="Detect viral OTUs appearing in multiple cases within a time window")
@@ -17,22 +95,24 @@ async def get_outbreaks(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
+    # Load ignorelist
+    ignored = await db["outbreak_ignorelist"].find({}, {"taxon_id": 1}).to_list(length=None)
+    ignored_ids = {doc["taxon_id"] for doc in ignored}
+
     # Fetch all cases with order_date
     cases = await db["cases"].find(
         {"order_date": {"$ne": None}},
         {"_id": 1, "case_id": 1, "order_date": 1}
     ).to_list(length=None)
 
-    case_map = {str(c["_id"]): c for c in cases}
+    case_map   = {str(c["_id"]): c for c in cases}
     case_dates = {str(c["_id"]): c["order_date"] for c in cases}
 
-    # Fetch all samples, projecting only what we need
     samples = await db["samples"].find(
         {},
         {"_id": 1, "case_id": 1, "profiles": 1}
     ).to_list(length=None)
 
-    # Build taxon -> [(case_id_str, order_date, case_name)] index
     taxon_cases: dict[tuple, list] = defaultdict(list)
 
     for sample in samples:
@@ -40,18 +120,19 @@ async def get_outbreaks(
         order_date  = case_dates.get(case_id_str)
         if not order_date:
             continue
-
         case_name = case_map.get(case_id_str, {}).get("case_id", case_id_str)
 
         for profile in sample.get("profiles", []):
             for entry in profile.get("profile", []):
+                taxon_id = entry["taxon_id"]
+                if taxon_id in ignored_ids:
+                    continue
                 if (
                     entry.get("superkingdom") == "Viruses"
                     and entry.get("rank") in ("species", "no rank", "serotype", None)
                     and (entry.get("abundance") or 0) > 1
                 ):
-                    key = (entry["taxon_id"], entry.get("name", str(entry["taxon_id"])))
-                    # Avoid adding same case twice for same taxon
+                    key = (taxon_id, entry.get("name", str(taxon_id)))
                     existing_case_ids = {x["case_id"] for x in taxon_cases[key]}
                     if case_id_str not in existing_case_ids:
                         taxon_cases[key].append({
@@ -60,29 +141,20 @@ async def get_outbreaks(
                             "order_date": order_date,
                         })
 
-    # Find clusters — cases within window_days of each other
     outbreaks = []
 
     for (taxon_id, taxon_name), case_entries in taxon_cases.items():
         if len(case_entries) < 2:
             continue
 
-        # Sort by order_date
-        def parse_date(d):
-            if isinstance(d, str):
-                return date.fromisoformat(d)
-            return d
-
         sorted_entries = sorted(case_entries, key=lambda x: parse_date(x["order_date"]))
 
-        # Sliding window — find any group of 2+ cases within window_days
         flagged = set()
         for i, anchor in enumerate(sorted_entries):
             anchor_date = parse_date(anchor["order_date"])
             cluster = [anchor]
             for other in sorted_entries[i + 1:]:
-                other_date = parse_date(other["order_date"])
-                if (other_date - anchor_date).days <= window_days:
+                if (parse_date(other["order_date"]) - anchor_date).days <= window_days:
                     cluster.append(other)
                 else:
                     break
@@ -98,7 +170,6 @@ async def get_outbreaks(
                 "cases":      [e for e in case_entries if e["case_id"] in flagged],
             })
 
-    # Sort by number of flagged cases descending
     outbreaks.sort(key=lambda x: len(x["case_ids"]), reverse=True)
 
     return {
