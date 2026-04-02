@@ -4,6 +4,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.database import get_db
 from app.models.sample import IngestRequest
 from app.ingestor.orchestrator import ingest_case
+from app.auth.utils import require_role
 
 router = APIRouter()
 
@@ -12,6 +13,7 @@ router = APIRouter()
 async def ingest(
     request: IngestRequest,
     db: AsyncIOMotorDatabase = Depends(get_db),
+    _user: dict = Depends(require_role("writer", "admin")),  # ← add this line
 ):
     try:
         result = await ingest_case(request, db)
