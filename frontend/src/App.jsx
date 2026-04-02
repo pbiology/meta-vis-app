@@ -12,8 +12,8 @@ import IgnoreList from './pages/IgnoreList'
 import Layout from './components/Layout'
 
 function ProtectedRoute({ children }) {
-  const { token } = useAuth()
-  return token ? children : <Navigate to="/login" replace />
+  const { user } = useAuth()
+  return user ? children : <Navigate to="/login" replace />
 }
 
 export default function App() {
