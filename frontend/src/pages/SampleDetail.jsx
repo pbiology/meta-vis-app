@@ -487,7 +487,7 @@ export default function SampleDetail() {
                   title={`Krona — ${activeTab}`}
                   className="w-full rounded-lg border border-gray-100"
                   style={{ height: '85vh' }}
-                  sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                  sandbox="allow-scripts allow-popups allow-forms"
                 />
               )}
             </div>

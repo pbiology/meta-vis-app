@@ -183,7 +183,7 @@ export default function MetavalDetails() {
                 title="IGV report"
                 className="w-full rounded-lg border border-gray-100"
                 style={{ height: '75vh' }}
-                sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                sandbox="allow-scripts allow-popups allow-forms"
               />
             )}
             {!igvUrl && !igvLoading && !igvError && (
