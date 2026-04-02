@@ -9,7 +9,6 @@ class Settings(BaseSettings):
     mongodb_username: Optional[str] = None
     mongo_app_password: Optional[str] = None
     mongodb_auth_source: str = "admin"
-    static_files_root: str
     app_env: str = "development"
     log_level: str = "info"
     jwt_secret: str
