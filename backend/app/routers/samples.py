@@ -1,21 +1,14 @@
 # app/routers/samples.py
 
-from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
-from pydantic import BaseModel
-from typing import Optional
 from app.models.sample import SampleResponse
 
 from app.database import get_db
 from app.auth.utils import get_current_user
 
 router = APIRouter(prefix="/samples", tags=["samples"])
-
-
-class ReviewPayload(BaseModel):
-    notes: Optional[str] = None
 
 
 def _oid(sample_id: str) -> ObjectId:
@@ -65,28 +58,6 @@ async def get_profile(
         "profiles": doc.get("profiles", []),
     }
 
-
-@router.patch("/{sample_id}/review", summary="Mark a sample as reviewed by the current user")
-async def review_sample(
-    sample_id: str,
-    payload: ReviewPayload,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
-):
-    result = await db["samples"].update_one(
-        {"_id": _oid(sample_id)},
-        {
-            "$set": {
-                "review.reviewed": True,
-                "review.reviewed_by": current_user["username"],
-                "review.reviewed_at": datetime.now(timezone.utc),
-                "review.notes": payload.notes,
-            }
-        },
-    )
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail=f"Sample '{sample_id}' not found")
-    return {"sample_id": sample_id, "reviewed": True, "reviewed_by": current_user["username"]}
 
 @router.get("/{sample_id}/ntc_profiles", summary="Get negative control profiles matching this sample's material")
 async def get_ntc_profiles(
