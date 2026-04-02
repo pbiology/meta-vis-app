@@ -47,6 +47,64 @@ def _serialise_sample(doc: dict) -> dict:
     return doc
 
 
+HOST_TAXON_IDS = {9606, 1, 0, 131567}
+
+
+def _non_host_total(entries: list, clf_qc: dict = None) -> float:
+    host_reads = next((e["abundance"] for e in entries if e.get("taxon_id") == 9606), 0)
+    if clf_qc and clf_qc.get("classified_reads") is not None:
+        return clf_qc["classified_reads"] - host_reads
+    root_reads = next((e["abundance"] for e in entries if e.get("taxon_id") == 1), 0)
+    return root_reads - host_reads
+
+
+def _top_taxa_for(entries: list, clf_qc: dict = None, n: int = 3) -> list:
+    non_host_total = _non_host_total(entries, clf_qc)
+    non_host_entries = [
+        e for e in entries
+        if e.get("taxon_id") not in HOST_TAXON_IDS
+           and e.get("name") != "unclassified"
+           and not (e.get("name") or "").startswith("unclassified ")
+    ]
+    non_host_entries.sort(key=lambda e: e.get("abundance", 0), reverse=True)
+    return [
+        {
+            "name":         e["name"],
+            "superkingdom": e.get("superkingdom"),
+            "abundance":    e["abundance"],
+            "pct":          round(e["abundance"] / non_host_total * 100, 3) if non_host_total else None,
+        }
+        for e in non_host_entries[:n]
+    ]
+
+
+def _spike_in_for(entries: list, spike_in_ids: set, clf_qc: dict = None) -> list:
+    if not spike_in_ids:
+        return []
+    non_host_total = _non_host_total(entries, clf_qc)
+    return [
+        {
+            "name":      e["name"],
+            "taxon_id":  e["taxon_id"],
+            "abundance": e["abundance"],
+            "pct":       round(e["abundance"] / non_host_total * 100, 3) if non_host_total else None,
+        }
+        for e in entries
+        if e.get("taxon_id") in spike_in_ids
+    ]
+
+
+def _host_pct_for(entries: list, clf_qc: dict = None) -> Optional[float]:
+    host_reads = next((e["abundance"] for e in entries if e.get("taxon_id") == 9606), 0)
+    classified_reads = clf_qc.get("classified_reads") if clf_qc else None
+    if classified_reads is None:
+        classified_reads = next((e["abundance"] for e in entries if e.get("taxon_id") == 1), 0)
+    total_reads = host_reads + (clf_qc.get("unclassified_reads") or 0) if clf_qc else classified_reads
+    if not total_reads:
+        return None
+    return round(host_reads / total_reads * 100, 1)
+
+
 @router.get("", summary="List all cases")
 async def list_cases(
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -88,64 +146,8 @@ async def list_samples_for_case(
 
     docs = await db["samples"].find(query).to_list(length=200)
 
-    HOST_TAXON_IDS = {9606, 1, 0, 131567}
     controls_taxa = _load_controls_taxa()
     spike_in_ids = set(controls_taxa.get("spike_in", []))
-
-    def _non_host_total(entries: list, clf_qc: dict = None) -> float:
-        host_reads = next((e["abundance"] for e in entries if e.get("taxon_id") == 9606), 0)
-        if clf_qc and clf_qc.get("classified_reads") is not None:
-            # Use multiqc-derived classified reads as the reliable total
-            return clf_qc["classified_reads"] - host_reads
-        # Fallback: use root rooted count from taxpasta
-        root_reads = next((e["abundance"] for e in entries if e.get("taxon_id") == 1), 0)
-        return root_reads - host_reads
-
-    def top_taxa_for(entries: list, clf_qc: dict = None, n: int = 3) -> list:
-        non_host_total = _non_host_total(entries, clf_qc)
-        non_host_entries = [
-            e for e in entries
-            if e.get("taxon_id") not in HOST_TAXON_IDS
-               and e.get("name") != "unclassified"
-               and not (e.get("name") or "").startswith("unclassified ")
-        ]
-        non_host_entries.sort(key=lambda e: e.get("abundance", 0), reverse=True)
-        return [
-            {
-                "name": e["name"],
-                "superkingdom": e.get("superkingdom"),
-                "abundance": e["abundance"],
-                "pct": round(e["abundance"] / non_host_total * 100, 3) if non_host_total else None,
-            }
-            for e in non_host_entries[:n]
-        ]
-
-    def spike_in_for(entries: list, clf_qc: dict = None) -> list:
-        if not spike_in_ids:
-            return []
-        non_host_total = _non_host_total(entries, clf_qc)
-        return [
-            {
-                "name": e["name"],
-                "taxon_id": e["taxon_id"],
-                "abundance": e["abundance"],
-                "pct": round(e["abundance"] / non_host_total * 100, 3) if non_host_total else None,
-            }
-            for e in entries
-            if e.get("taxon_id") in spike_in_ids
-        ]
-
-
-    def host_pct_for(entries: list, clf_qc: dict = None) -> Optional[float]:
-        host_reads = next((e["abundance"] for e in entries if e.get("taxon_id") == 9606), 0)
-        classified_reads = clf_qc.get("classified_reads") if clf_qc else None
-        if classified_reads is None:
-            classified_reads = next((e["abundance"] for e in entries if e.get("taxon_id") == 1), 0)
-        total_reads = host_reads + (clf_qc.get("unclassified_reads") or 0) if clf_qc else classified_reads
-        if not total_reads:
-            return None
-        return round(host_reads / total_reads * 100, 1)
-
 
     result = []
     for doc in docs:
@@ -157,9 +159,9 @@ async def list_samples_for_case(
             clf = p.get("classifier", "unknown")
             entries = p.get("profile", [])
             clf_qc = doc.get("taxprofiler", {}).get("classifiers", {}).get(clf)
-            top_taxa_by_clf[clf] = top_taxa_for(entries, clf_qc)
-            spike_in_by_clf[clf] = spike_in_for(entries, clf_qc)
-            host_pct_by_clf[clf] = host_pct_for(entries, clf_qc)
+            top_taxa_by_clf[clf] = _top_taxa_for(entries, clf_qc)
+            spike_in_by_clf[clf] = _spike_in_for(entries, spike_in_ids, clf_qc)
+            host_pct_by_clf[clf] = _host_pct_for(entries, clf_qc)
         doc["top_taxa"] = top_taxa_by_clf
         doc["spike_in_taxa"] = spike_in_by_clf
         doc["host_pct"] = host_pct_by_clf
