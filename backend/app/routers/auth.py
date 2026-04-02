@@ -1,17 +1,19 @@
 # app/routers/auth.py
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.database import get_db
 from app.auth.utils import verify_password, create_access_token, get_current_user
+from app.config import settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/login", summary="Obtain a JWT (placeholder for Keycloak)")
+@router.post("/login", summary="Obtain a JWT via httpOnly cookie")
 async def login(
+        response: Response,
         form_data: OAuth2PasswordRequestForm = Depends(),
         db: AsyncIOMotorDatabase = Depends(get_db),
 ):
@@ -23,11 +25,24 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     token = create_access_token(subject=user["username"])
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        secure=settings.app_env != "development",
+        samesite="lax",
+        max_age=60 * 60 * 8,
+    )
     return {
-        "access_token": token,
-        "token_type": "bearer",
+        "username": user["username"],
         "role": (user.get("role") or "reader").lower(),
     }
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    response.delete_cookie("access_token")
+    return {"logged_out": True}
 
 
 @router.get("/me", summary="Return the current authenticated user")

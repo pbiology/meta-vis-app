@@ -4,15 +4,14 @@ from datetime import datetime, timedelta, timezone
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, status, Cookie
+from typing import Optional
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.config import settings
 from app.database import get_db
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 ALGORITHM = "HS256"
 
@@ -43,10 +42,16 @@ def decode_token(token: str) -> dict:
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    access_token: Optional[str] = Cookie(default=None),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ) -> dict:
-    payload = decode_token(token)
+    if not access_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    payload = decode_token(access_token)
     user = await db["users"].find_one({"username": payload["sub"]}, {"role": 1})
     role = (user.get("role") or "reader").lower() if user else "reader"
     return {"username": payload["sub"], "role": role}
