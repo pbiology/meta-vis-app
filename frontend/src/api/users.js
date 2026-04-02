@@ -24,3 +24,8 @@ export async function deleteUser(username) {
   const res = await client.delete(`/users/${username}`)
   return res.data
 }
+
+export async function getMyStats() {
+  const res = await client.get('/users/me/stats')
+  return res.data
+}

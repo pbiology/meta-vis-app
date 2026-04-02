@@ -1,5 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { getMyStats } from '../api/users'
 
 function NavItem({ to, icon, label }) {
   return (
@@ -22,6 +24,11 @@ function NavItem({ to, icon, label }) {
 export default function Layout() {
   const { user, role, logout } = useAuth()
   const navigate = useNavigate()
+  const [stats, setStats] = useState(null)
+
+  useEffect(() => {
+    getMyStats().then(setStats).catch(() => {})
+  }, [])
 
   function handleLogout() {
     logout()
@@ -108,14 +115,22 @@ export default function Layout() {
               />
             </div>
           )}
-          <div className="px-4 py-4 flex items-center justify-between">
-            <span className="text-xs text-gray-400">{user}</span>
-            <button
-              onClick={handleLogout}
-              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              Sign out
-            </button>
+          <div className="px-4 py-4 flex flex-col gap-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-500 font-medium">{user}</span>
+              <button
+                onClick={handleLogout}
+                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                Sign out
+              </button>
+            </div>
+            {stats && (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-400 italic">{stats.reviewer_title}</span>
+                <span className="text-xs text-gray-300">{stats.reviews} cases reviews</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
