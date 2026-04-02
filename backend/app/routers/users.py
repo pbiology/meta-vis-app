@@ -3,7 +3,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
-from typing import Optional
 from bson import ObjectId
 
 from app.database import get_db
