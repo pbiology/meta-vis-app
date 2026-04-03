@@ -45,3 +45,8 @@ export async function deleteNote(caseId, noteIndex) {
   const res = await client.delete(`/cases/${caseId}/notes/${noteIndex}`)
   return res.data
 }
+
+export async function deleteCase(caseId) {
+  const res = await client.delete(`/cases/${caseId}`)
+  return res.data
+}

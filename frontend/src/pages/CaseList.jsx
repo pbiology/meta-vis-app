@@ -1,15 +1,33 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getCases, getCaseSamples } from '../api/cases'
+import { getCases, getCaseSamples, deleteCase } from '../api/cases'
 import Badge from '../components/Badge'
 import { getOutbreaks } from '../api/alerts'
+import { useAuth } from '../context/AuthContext'
+
 
 export default function CaseList() {
   const [cases, setCases] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const navigate = useNavigate()
+  const { role } = useAuth()
+  const [deleteTarget, setDeleteTarget] = useState(null)  // case_id string
+  const [deleting,     setDeleting]     = useState(false)
   const [outbreakCaseIds, setOutbreakCaseIds] = useState(new Set())
+
+  async function handleDelete() {
+    setDeleting(true)
+    try {
+      await deleteCase(deleteTarget)
+      setCases(prev => prev.filter(c => c.case_id !== deleteTarget))
+      setDeleteTarget(null)
+    } catch {
+      alert('Failed to delete case.')
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   useEffect(() => {
     async function load() {
@@ -74,7 +92,7 @@ export default function CaseList() {
           <table className="w-full text-left border-collapse">
             <thead className="sticky top-0 bg-white z-10">
               <tr>
-                {['Case name', 'Date', 'Samples', 'Sample names', 'Notes', 'Status', 'Reviewed by'].map(h => (
+                {['Case name', 'Date', 'Samples', 'Sample names', 'Notes', 'Status', 'Reviewed by', ''].map(h => (
                   <th key={h} className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap">
                     {h}
                   </th>
@@ -128,12 +146,22 @@ export default function CaseList() {
                     <td className="px-4 py-3 text-xs text-gray-400">
                       {c.review?.reviewed_by ?? '—'}
                     </td>
+                    {role === 'admin' && (
+                      <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                        <button
+                          onClick={() => setDeleteTarget(c.case_id)}
+                          className="text-xs text-gray-300 hover:text-red-500 transition-colors"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 )
               })}
               {cases.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">
+                  <td colSpan={role === 'admin' ? 8 : 7} className="px-4 py-10 text-center text-sm text-gray-400">
                     No cases found.
                   </td>
                 </tr>
@@ -142,6 +170,32 @@ export default function CaseList() {
           </table>
         )}
       </div>
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl border border-gray-100 shadow-lg p-6 w-80 flex flex-col gap-4">
+            <p className="text-sm font-medium text-gray-900">Delete case?</p>
+            <p className="text-xs text-gray-500">
+              This will permanently delete <span className="font-mono font-medium">{deleteTarget}</span> and all
+              associated samples, Krona files, and metaval results. This cannot be undone.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="px-3 py-1.5 text-xs font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {deleting ? 'Deleting…' : 'Delete case'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
