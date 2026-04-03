@@ -10,7 +10,10 @@ from typing import Optional
 # Simple in-memory cache — keyed by window_days
 _cache: dict[int, dict] = {}
 _cache_computed_at: datetime | None = None
-CACHE_TTL_SECONDS = 300  # 5 minutes
+
+# Cache is explicitly cleared on ingest and ignorelist changes.
+# TTL is a safety net only — set high since data changes infrequently.
+CACHE_TTL_SECONDS = 3600
 
 from app.database import get_db
 from app.auth.utils import get_current_user, require_role
@@ -58,6 +61,7 @@ async def add_to_ignorelist(
         "added_at":   datetime.utcnow().isoformat(),
     }
     await db["outbreak_ignorelist"].insert_one(doc)
+    _cache.clear()  # ignorelist change affects outbreak results
     doc["_id"] = str(doc["_id"])
     return doc
 
@@ -69,6 +73,7 @@ async def remove_from_ignorelist(
     _user: dict = Depends(require_role("admin")),
 ):
     result = await db["outbreak_ignorelist"].delete_one({"taxon_id": taxon_id})
+    _cache.clear()  # ignorelist change affects outbreak results
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail=f"Taxon {taxon_id} not found in ignorelist")
     return {"deleted": True, "taxon_id": taxon_id}
@@ -89,6 +94,7 @@ async def update_ignorelist_note(
         {"taxon_id": taxon_id},
         {"$set": {"reason": payload.reason}},
     )
+    _cache.clear()  # ignorelist change affects outbreak results
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail=f"Taxon {taxon_id} not found in ignorelist")
     return {"updated": True, "taxon_id": taxon_id}
