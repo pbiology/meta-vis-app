@@ -52,32 +52,16 @@ async def list_samples(
 
     docs = await db["samples"].find(
         query,
-        {"profiles": 0},  # exclude heavy profile arrays
+        {"profiles": 0},
     ).sort(
         [("order_date", -1), ("ingested_at", -1)]
     ).skip(skip).limit(PAGE_SIZE).to_list(length=PAGE_SIZE)
-
-    # Attach case review status and case_id string in one batch lookup
-    case_oids = list({d["case_id"] for d in docs})
-    cases     = await db["cases"].find(
-        {"_id": {"$in": case_oids}},
-        {"_id": 1, "case_id": 1, "order_date": 1, "review": 1},
-    ).to_list(length=None)
-    case_map = {str(c["_id"]): c for c in cases}
-
-    result = []
-    for doc in docs:
-        case_info = case_map.get(str(doc["case_id"]), {})
-        doc["case_id_str"]  = case_info.get("case_id", "")
-        doc["order_date"]   = case_info.get("order_date")
-        doc["case_review"]  = case_info.get("review", {})
-        result.append(_serialise(doc))
 
     return {
         "total": total,
         "page":  page,
         "pages": max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE),
-        "items": result,
+        "items": [_serialise(doc) for doc in docs],
     }
 
 

@@ -139,10 +139,12 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
         base_qc = _extract_base_qc(qc_data, s.sample_id)
 
         sample_doc = {
-            "case_id":     case_object_id,
-            "subject_id":  subject_object_id,
+            "case_id": case_object_id,
+            "case_id_str": request.case_id,
+            "order_date": request.order_date.isoformat() if request.order_date else None,
+            "subject_id": subject_object_id,
             "sample_type": s.sample_type,
-            "material":    s.material,
+            "material": s.material,
             "sample": {
                 "sample_id":     s.sample_id,
                 "material":      s.material,
