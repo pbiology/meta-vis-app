@@ -27,6 +27,11 @@ async def _ensure_indexes():
     await db["cases"].create_index("case_id", unique=True)
     await db["cases"].create_index("ingested_at")
     await db["cases"].create_index("order_date")
+    await db["cases"].create_index([
+        ("review.reviewed", 1),
+        ("order_date", -1),
+        ("ingested_at", -1),
+    ])
 
     # samples — fast lookup by case, by case+type+material (NTC profiles),
     # and by viral taxa fields used in the outbreak aggregation pipeline
@@ -34,6 +39,8 @@ async def _ensure_indexes():
     await db["samples"].create_index([("case_id", 1), ("sample_type", 1), ("material", 1)])
     await db["samples"].create_index("profiles.profile.superkingdom")
     await db["samples"].create_index("profiles.profile.taxon_id")
+    await db["samples"].create_index([("order_date", -1), ("ingested_at", -1)])
+    await db["samples"].create_index("sample.sample_id")
 
     # krona_files — fast lookup by case+classifier
     await db["krona_files"].create_index(
