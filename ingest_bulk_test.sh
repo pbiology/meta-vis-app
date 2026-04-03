@@ -15,7 +15,7 @@ PASSWORD="yourpassword"
 URL="http://localhost:8000"
 COUNT="${1:-10}"
 
-START_DATE="2026-02-01"
+START_DATE="2025-01-01"
 END_DATE="2026-04-03"
 
 start_epoch=$(date -j -f "%Y-%m-%d" "$START_DATE" "+%s")
