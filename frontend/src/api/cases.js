@@ -2,8 +2,8 @@
 
 import client from './client'
 
-export async function getCases() {
-  const res = await client.get('/cases')
+export async function getCases({ page = 1, search = '' } = {}) {
+  const res = await client.get('/cases', { params: { page, search } })
   return res.data
 }
 
