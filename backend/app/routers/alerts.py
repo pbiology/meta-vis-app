@@ -1,11 +1,16 @@
 # app/routers/alerts.py
 
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
 from collections import defaultdict
 from typing import Optional
+
+# Simple in-memory cache — keyed by window_days
+_cache: dict[int, dict] = {}
+_cache_computed_at: datetime | None = None
+CACHE_TTL_SECONDS = 300  # 5 minutes
 
 from app.database import get_db
 from app.auth.utils import get_current_user, require_role
@@ -95,21 +100,44 @@ async def get_outbreaks(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
+    global _cache_computed_at
+
+    # Return cached result if still fresh
+    now = datetime.utcnow()
+    if (
+        window_days in _cache
+        and _cache_computed_at is not None
+        and (now - _cache_computed_at).total_seconds() < CACHE_TTL_SECONDS
+    ):
+        return _cache[window_days]
+
+    result = await _compute_outbreaks(window_days, db)
+
+    _cache[window_days] = result
+    _cache_computed_at = now
+    return result
+
+
+async def _compute_outbreaks(window_days: int, db: AsyncIOMotorDatabase) -> dict:
     # Load ignorelist
     ignored = await db["outbreak_ignorelist"].find({}, {"taxon_id": 1}).to_list(length=None)
     ignored_ids = {doc["taxon_id"] for doc in ignored}
 
-    # Fetch all cases with order_date
+    # Only fetch cases within 2× the window — bounds query regardless of total DB size
+    cutoff = (date.today() - timedelta(days=window_days * 2)).isoformat()
     cases = await db["cases"].find(
-        {"order_date": {"$ne": None}},
+        {"order_date": {"$gte": cutoff}},
         {"_id": 1, "case_id": 1, "order_date": 1}
     ).to_list(length=None)
 
     case_map   = {str(c["_id"]): c for c in cases}
     case_dates = {str(c["_id"]): c["order_date"] for c in cases}
 
+    if not case_dates:
+        return {"window_days": window_days, "outbreaks": []}
+
     samples = await db["samples"].find(
-        {},
+        {"case_id": {"$in": [c["_id"] for c in cases]}},
         {"_id": 1, "case_id": 1, "profiles": 1}
     ).to_list(length=None)
 
@@ -172,7 +200,4 @@ async def get_outbreaks(
 
     outbreaks.sort(key=lambda x: len(x["case_ids"]), reverse=True)
 
-    return {
-        "window_days": window_days,
-        "outbreaks":   outbreaks,
-    }
+    return {"window_days": window_days, "outbreaks": outbreaks}
