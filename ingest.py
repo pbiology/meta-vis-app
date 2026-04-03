@@ -19,8 +19,9 @@ import sys
 import requests
 
 
-def get_token(base_url: str, username: str, password: str) -> str:
-    resp = requests.post(
+def get_session(base_url: str, username: str, password: str) -> requests.Session:
+    session = requests.Session()
+    resp = session.post(
         f"{base_url}/api/v1/auth/login",
         data={"username": username, "password": password},
         headers={"Content-Type": "application/x-www-form-urlencoded"},
@@ -28,7 +29,9 @@ def get_token(base_url: str, username: str, password: str) -> str:
     if resp.status_code != 200:
         print(f"Login failed ({resp.status_code}): {resp.text}")
         sys.exit(1)
-    return resp.json()["access_token"]
+    data = resp.json()
+    print(f"Logged in as {data['username']} ({data['role']})")
+    return session
 
 
 def parse_classifier(raw: str) -> dict:
@@ -101,7 +104,7 @@ def parse_sample(raw: str, classifier_names: list) -> dict:
 
 
 def ingest(args):
-    token = get_token(args.url, args.username, args.password)
+    session = get_session(args.url, args.username, args.password)
 
     classifiers = [parse_classifier(c) for c in args.classifier]
     classifier_names = [c["name"] for c in classifiers]
@@ -119,10 +122,9 @@ def ingest(args):
 
     print(f"Ingesting {len(samples)} sample(s) for case '{args.case_id}' ...")
 
-    resp = requests.post(
+    resp = session.post(
         f"{args.url}/api/v1/ingest",
         json=payload,
-        headers={"Authorization": f"Bearer {token}"},
     )
 
     if resp.status_code == 200:
