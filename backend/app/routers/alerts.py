@@ -127,54 +127,76 @@ async def get_outbreaks(
 async def _compute_outbreaks(window_days: int, db: AsyncIOMotorDatabase) -> dict:
     # Load ignorelist
     ignored = await db["outbreak_ignorelist"].find({}, {"taxon_id": 1}).to_list(length=None)
-    ignored_ids = {doc["taxon_id"] for doc in ignored}
+    ignored_ids = [doc["taxon_id"] for doc in ignored]
 
-    # Only fetch cases within 2× the window — bounds query regardless of total DB size
+    # Only fetch cases within 2× the window
     cutoff = (date.today() - timedelta(days=window_days * 2)).isoformat()
     cases = await db["cases"].find(
         {"order_date": {"$gte": cutoff}},
         {"_id": 1, "case_id": 1, "order_date": 1}
     ).to_list(length=None)
 
-    case_map   = {str(c["_id"]): c for c in cases}
-    case_dates = {str(c["_id"]): c["order_date"] for c in cases}
-
-    if not case_dates:
+    if not cases:
         return {"window_days": window_days, "outbreaks": []}
 
-    samples = await db["samples"].find(
-        {"case_id": {"$in": [c["_id"] for c in cases]}},
-        {"_id": 1, "case_id": 1, "profiles": 1}
-    ).to_list(length=None)
+    case_map   = {str(c["_id"]): c for c in cases}
+    case_oids  = [c["_id"] for c in cases]
 
-    taxon_cases: dict[tuple, list] = defaultdict(list)
+    # Aggregation pipeline — filtering happens inside MongoDB
+    pipeline = [
+        # Only samples belonging to windowed cases
+        {"$match": {"case_id": {"$in": case_oids}}},
 
-    for sample in samples:
-        case_id_str = str(sample["case_id"])
-        order_date  = case_dates.get(case_id_str)
-        if not order_date:
-            continue
-        case_name = case_map.get(case_id_str, {}).get("case_id", case_id_str)
+        # Unwind classifiers, then individual taxon entries
+        {"$unwind": "$profiles"},
+        {"$unwind": "$profiles.profile"},
 
-        for profile in sample.get("profiles", []):
-            for entry in profile.get("profile", []):
-                taxon_id = entry["taxon_id"]
-                if taxon_id in ignored_ids:
-                    continue
-                if (
-                    entry.get("superkingdom") == "Viruses"
-                    and entry.get("rank") in ("species", "no rank", "serotype", None)
-                    and (entry.get("abundance") or 0) > 1
-                ):
-                    key = (taxon_id, entry.get("name", str(taxon_id)))
-                    existing_case_ids = {x["case_id"] for x in taxon_cases[key]}
-                    if case_id_str not in existing_case_ids:
-                        taxon_cases[key].append({
-                            "case_id":    case_id_str,
-                            "case_name":  case_name,
-                            "order_date": order_date,
-                        })
+        # Filter to qualifying viral taxa inside MongoDB
+        {"$match": {
+            "profiles.profile.superkingdom": "Viruses",
+            "profiles.profile.rank":         {"$in": ["species", "no rank", "serotype", None]},
+            "profiles.profile.abundance":    {"$gt": 1},
+            "profiles.profile.taxon_id":     {"$nin": ignored_ids},
+        }},
 
+        # Group by taxon — collect distinct case_ids
+        {"$group": {
+            "_id": {
+                "taxon_id":   "$profiles.profile.taxon_id",
+                "taxon_name": "$profiles.profile.name",
+            },
+            "case_ids": {"$addToSet": "$case_id"},
+        }},
+
+        # Only taxa seen in 2+ cases
+        {"$match": {"case_ids.1": {"$exists": True}}},
+    ]
+
+    # Note: $match on array length requires checking second element exists.
+    # Motor returns a CommandCursor so we iterate it.
+    raw_results = await db["samples"].aggregate(pipeline).to_list(length=None)
+
+    # Build taxon_cases from aggregation results — attach order_dates from case_map
+    taxon_cases: dict[tuple, list] = {}
+
+    for doc in raw_results:
+        taxon_id   = doc["_id"]["taxon_id"]
+        taxon_name = doc["_id"]["taxon_name"]
+        key = (taxon_id, taxon_name)
+
+        case_entries = []
+        for oid in doc["case_ids"]:
+            case_id_str = str(oid)
+            case_info   = case_map.get(case_id_str)
+            if case_info:
+                case_entries.append({
+                    "case_id":    case_id_str,
+                    "case_name":  case_info["case_id"],
+                    "order_date": case_info["order_date"],
+                })
+        taxon_cases[key] = case_entries
+
+    # Time-window clustering — Python only sees one entry per taxon now
     outbreaks = []
 
     for (taxon_id, taxon_name), case_entries in taxon_cases.items():

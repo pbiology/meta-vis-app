@@ -151,13 +151,13 @@ python ingest.py \
 
 #### `--sample` keys
 
-| Key | Required | Notes |
-|---|---|---|
-| `sample_id` | yes | Must match the prefix in the taxpasta column name |
-| `type` | yes | `test`, `positive_ctrl`, or `negative_ctrl` |
-| `material` | yes | `DNA` or `RNA` |
+| Key | Required | Notes                                                     |
+|---|---|-----------------------------------------------------------|
+| `sample_id` | yes | Must match the prefix in the taxpasta column name         |
+| `type` | yes | `sample`, `positive_ctrl`, or `negative_ctrl`             |
+| `material` | yes | `DNA` or `RNA`                                            |
 | `column_<classifier>` | yes (per classifier) | Exact column name in the taxpasta TSV for that classifier |
-| `subject_id` | no | Omit for controls |
+| `subject_id` | no | Omit for controls                                         |
 
 #### `--order-date`
 
@@ -204,8 +204,10 @@ Each `case_id` must be unique. To re-ingest, first delete the existing case and 
 The app continuously monitors for viral taxa appearing in multiple cases within a rolling time window. This is intended as an early signal for potential outbreak situations.
 
 **How it works:**
-- At render time, the backend queries all cases that have an `order_date` set
-- For each viral taxon at species level (or `no rank`) with more than 1 read, it checks whether the same taxon appears in 2 or more cases whose `order_date` values fall within the configured window (default 14 days)
+- On request, the backend queries cases with an `order_date` within `2 × window_days` of today — bounding the query regardless of total database size
+- A MongoDB aggregation pipeline runs entirely inside the database: sample profiles are unwound, filtered to qualifying viral taxa (superkingdom = Viruses, rank in species/no rank/serotype, abundance > 1, not on the ignorelist), and grouped by taxon to collect the set of distinct cases each taxon appears in
+- Only taxa seen in 2 or more cases are returned to Python, where a sliding window clusters cases by `order_date`
+- Results are cached in memory for 1 hour and explicitly invalidated when a new case is ingested or the ignorelist changes
 - Flagged taxa are surfaced in three places: the **Alerts** page (accessible from the sidebar), a warning indicator on the **case list**, and an amber pill in the **taxonomy table** on the sample page
 - Clicking the pill in the taxonomy table navigates directly to the relevant section of the Alerts page
 
@@ -214,7 +216,33 @@ The app continuously monitors for viral taxa appearing in multiple cases within 
 - Only taxa with more than 1 classified read are included
 - Detection is based on `order_date` on the case, not ingestion date — cases without an order date are excluded
 - The time window can be adjusted to 7, 14, or 30 days from the Alerts page
-- Detection runs at query time and is always current — no re-ingestion needed when new cases arrive
+- Detection runs at query time — no re-ingestion needed when new cases arrive
+- The ignorelist is stored in the `outbreak_ignorelist` collection and managed from the Alerts page (writers can add, admins can remove)
+
+---
+
+## Performance
+
+### Outbreak detection scaling
+
+The aggregation pipeline approach scales well with database growth because the query is bounded by the time window, not total case count. At 500 cases/month with a 30-day window, the pipeline operates on ~1,000 cases regardless of how many total cases exist in the database.
+
+The main cost of the aggregation pipeline is the `$unwind` stages, which expand profile arrays inside MongoDB before filtering. At scale this causes a temporary spike in MongoDB memory and CPU during computation. This is acceptable because:
+
+- Results are cached for 1 hour — the pipeline runs at most a handful of times per day
+- The cache is invalidated explicitly on ingest and ignorelist changes, so results are always current
+
+**Known future optimisation — pre-computed viral taxa summary**
+
+The `$unwind` cost could be eliminated entirely by storing a pre-computed summary of qualifying viral taxa alongside each sample at ingest time. Instead of unwinding the full profile array (potentially thousands of entries), the aggregation would run on a small `viral_taxa` array containing only the 5–20 viral entries that pass the outbreak filter criteria.
+
+This would require:
+
+1. Adding a `viral_taxa` field to the sample document during ingest, populated by filtering the taxpasta profile at write time
+2. Updating the aggregation pipeline to use `$unwind: "$viral_taxa"` instead of unwinding the full `profiles.profile` array
+3. Re-ingesting all existing cases to populate the new field (or running a one-off migration script in mongosh)
+
+This optimisation is not currently implemented. It should be considered if MongoDB memory pressure becomes observable in production monitoring.
 
 ---
 
