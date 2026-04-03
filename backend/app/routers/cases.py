@@ -170,6 +170,26 @@ async def list_samples_for_case(
     return result
 
 
+@router.delete("/{case_id}", summary="Delete a case and all associated data")
+async def delete_case(
+    case_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _user: dict = Depends(require_role("admin")),
+):
+    case = await db["cases"].find_one({"case_id": case_id}, {"_id": 1})
+    if not case:
+        raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
+
+    oid = case["_id"]
+
+    await db["samples"].delete_many({"case_id": oid})
+    await db["krona_files"].delete_many({"case_id": oid})
+    await db["metaval_results"].delete_many({"case_id": oid})
+    await db["cases"].delete_one({"_id": oid})
+
+    return {"deleted": True, "case_id": case_id}
+
+
 @router.get("/{case_id}/krona", summary="Serve Krona HTML for a case")
 async def get_krona(
     case_id: str,
