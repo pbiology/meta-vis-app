@@ -50,3 +50,8 @@ export async function deleteCase(caseId) {
   const res = await client.delete(`/cases/${caseId}`)
   return res.data
 }
+
+export async function getCaseStats() {
+  const res = await client.get('/cases/stats')
+  return res.data
+}
