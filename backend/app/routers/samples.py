@@ -47,13 +47,26 @@ async def list_samples(
     if search.strip():
         query["sample.sample_id"] = {"$regex": search.strip(), "$options": "i"}
 
-    total = await db["samples"].count_documents(query)
-    skip  = (page - 1) * PAGE_SIZE
+    total = (
+        await db["samples"].estimated_document_count()
+        if not query
+        else await db["samples"].count_documents(query)
+    )
+    skip = (page - 1) * PAGE_SIZE
 
-    docs = await db["samples"].find(
-        query,
-        {"profiles": 0},
-    ).sort(
+    # Project only fields needed by the sample list — avoids loading 300 KB docs
+    projection = {
+        "_id":          1,
+        "sample_type":  1,
+        "sample":       1,
+        "case_id_str":  1,
+        "order_date":   1,
+        "ingested_at":  1,
+        "taxprofiler.classifiers.kraken2.pct_unclassified": 1,
+        "taxprofiler.classifiers.kraken2.num_species":      1,
+    }
+
+    docs = await db["samples"].find(query, projection).sort(
         [("order_date", -1), ("ingested_at", -1)]
     ).skip(skip).limit(PAGE_SIZE).to_list(length=PAGE_SIZE)
 

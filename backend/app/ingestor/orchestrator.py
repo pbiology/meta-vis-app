@@ -100,11 +100,19 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             "krona_id": krona_id,
         })
 
+    sample_names = [s.sample_id for s in request.samples if s.sample_type == "sample"]
+    sample_count = len([s for s in request.samples if s.sample_type == "sample"])
+    control_count = len([s for s in request.samples if s.sample_type in ("positive_ctrl", "negative_ctrl")])
+
     await db["cases"].update_one(
         {"_id": case_object_id},
-        {"$set": {"classifiers": updated_classifiers}},
+        {"$set": {
+            "sample_ids": sample_ids,
+            "sample_count": sample_count,
+            "control_count": control_count,
+            "sample_names": sample_names,
+        }},
     )
-
     sample_ids = []
 
     for s in request.samples:

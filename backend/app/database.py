@@ -42,6 +42,12 @@ async def _ensure_indexes():
     await db["samples"].create_index([("order_date", -1), ("ingested_at", -1)])
     await db["samples"].create_index("sample.sample_id")
     await db["samples"].create_index("case_id_str")
+    await db["samples"].create_index([
+        ("sample_type", 1), ("order_date", -1), ("ingested_at", -1)
+    ])
+    await db["samples"].create_index([
+        ("sample.sample_id", 1), ("order_date", -1), ("ingested_at", -1)
+    ])
 
     # krona_files — fast lookup by case+classifier
     await db["krona_files"].create_index(
