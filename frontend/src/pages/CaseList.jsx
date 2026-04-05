@@ -1,20 +1,21 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getCases, deleteCase } from '../api/cases'
+import { getCases, deleteCase, getCaseStats } from '../api/cases'
 import Badge from '../components/Badge'
 import { getOutbreaks } from '../api/alerts'
 import { useAuth } from '../context/AuthContext'
 
 export default function CaseList() {
-  const [data,         setData]         = useState({ items: [], total: 0, pages: 1 })
-  const [loading,      setLoading]      = useState(true)
-  const [error,        setError]        = useState(null)
-  const [page,         setPage]         = useState(1)
-  const [search,       setSearch]       = useState('')
-  const [searchInput,  setSearchInput]  = useState('')
-  const [deleteTarget, setDeleteTarget] = useState(null)
-  const [deleting,     setDeleting]     = useState(false)
+  const [data,            setData]            = useState({ items: [], total: 0, pages: 1 })
+  const [loading,         setLoading]         = useState(true)
+  const [error,           setError]           = useState(null)
+  const [page,            setPage]            = useState(1)
+  const [search,          setSearch]          = useState('')
+  const [searchInput,     setSearchInput]     = useState('')
+  const [deleteTarget,    setDeleteTarget]    = useState(null)
+  const [deleting,        setDeleting]        = useState(false)
   const [outbreakCaseIds, setOutbreakCaseIds] = useState(new Set())
+  const [stats,           setStats]           = useState({ total: 0, pending: 0, reviewed: 0 })
   const navigate = useNavigate()
   const { role } = useAuth()
 
@@ -36,6 +37,10 @@ export default function CaseList() {
 
   useEffect(() => { load() }, [load])
 
+  useEffect(() => {
+    getCaseStats().then(setStats).catch(() => {})
+  }, [])
+
   function handleSearch(e) {
     e.preventDefault()
     setPage(1)
@@ -48,6 +53,7 @@ export default function CaseList() {
       await deleteCase(deleteTarget)
       setDeleteTarget(null)
       load()
+      getCaseStats().then(setStats).catch(() => {})
     } catch {
       alert('Failed to delete case.')
     } finally {
@@ -55,9 +61,7 @@ export default function CaseList() {
     }
   }
 
-  const cases   = data.items ?? []
-  const pending  = cases.filter(c => !c.review?.reviewed).length
-  const reviewed = cases.filter(c =>  c.review?.reviewed).length
+  const cases = data.items ?? []
 
   return (
     <div className="flex flex-col h-full">
@@ -77,13 +81,13 @@ export default function CaseList() {
           />
         </form>
         <span className="text-xs text-gray-400 mr-2">
-          <span className="text-amber-500 font-medium">{pending}</span> pending
+          <span className="text-amber-500 font-medium">{stats.pending}</span> pending
         </span>
         <span className="text-xs text-gray-400">
-          <span className="text-green-600 font-medium">{reviewed}</span> reviewed
+          <span className="text-green-600 font-medium">{stats.reviewed}</span> reviewed
         </span>
         <span className="text-xs text-gray-300">
-          {data.total} total
+          {stats.total} total
         </span>
       </div>
 
@@ -170,7 +174,6 @@ export default function CaseList() {
         )}
       </div>
 
-      {/* Pagination */}
       {data.pages > 1 && (
         <div className="flex items-center justify-center gap-3 px-6 py-3 border-t border-gray-100 bg-white flex-shrink-0">
           <button

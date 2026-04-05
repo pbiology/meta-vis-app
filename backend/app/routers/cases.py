@@ -105,6 +105,17 @@ def _host_pct_for(entries: list, clf_qc: dict = None) -> Optional[float]:
     return round(host_reads / total_reads * 100, 1)
 
 
+@router.get("/stats", summary="Global case counts")
+async def case_stats(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
+    total    = await db["cases"].estimated_document_count()
+    pending  = await db["cases"].count_documents({"review.reviewed": {"$ne": True}})
+    reviewed = await db["cases"].count_documents({"review.reviewed": True})
+    return {"total": total, "pending": pending, "reviewed": reviewed}
+
+
 PAGE_SIZE = 50
 
 @router.get("", summary="List all cases")
