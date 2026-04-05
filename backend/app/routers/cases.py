@@ -118,31 +118,18 @@ async def list_cases(
     if search.strip():
         query["case_id"] = {"$regex": search.strip(), "$options": "i"}
 
-    total = await db["cases"].count_documents(query)
+    total = await db["cases"].estimated_document_count() if not query else await db["cases"].count_documents(query)
     skip  = (page - 1) * PAGE_SIZE
 
     docs = await db["cases"].find(query).sort(
         [("review.reviewed", 1), ("order_date", -1), ("ingested_at", -1)]
     ).skip(skip).limit(PAGE_SIZE).to_list(length=PAGE_SIZE)
 
-    # Embed sample summary — avoids N+1 on the frontend
-    case_oids = [d["_id"] for d in docs]
-    samples   = await db["samples"].find(
-        {"case_id": {"$in": case_oids}},
-        {"case_id": 1, "sample_type": 1, "sample": 1},
-    ).to_list(length=None)
-
-    from collections import defaultdict
-    samples_by_case = defaultdict(list)
-    for s in samples:
-        samples_by_case[str(s["case_id"])].append(s)
-
     result = []
     for doc in docs:
-        case_samples = samples_by_case.get(str(doc["_id"]), [])
-        doc["sample_count"]  = len([s for s in case_samples if s.get("sample_type") == "sample"])
-        doc["control_count"] = len([s for s in case_samples if s.get("sample_type") in ("positive_ctrl", "negative_ctrl")])
-        doc["sample_names"]  = [s["sample"]["sample_id"] for s in case_samples if s.get("sample_type") == "sample" and s.get("sample")]
+        doc.setdefault("sample_count",  0)
+        doc.setdefault("control_count", 0)
+        doc.setdefault("sample_names",  [])
         result.append(CaseResponse.model_validate(_serialise_case(doc)).model_dump(mode="json"))
 
     return {
