@@ -33,25 +33,31 @@ async def _store_krona(
     if not path.exists():
         raise FileNotFoundError(f"Krona file not found: {krona_path}")
     html = path.read_text(encoding="utf-8")
-    result = await db["krona_files"].find_one_and_replace(
+    doc = {
+        "case_id":    case_object_id,
+        "classifier": classifier_name,
+        "html":       html,
+        "stored_at":  datetime.now(timezone.utc),
+    }
+    result = await db["krona_files"].replace_one(
         {"case_id": case_object_id, "classifier": classifier_name},
-        {
-            "case_id":    case_object_id,
-            "classifier": classifier_name,
-            "html":       html,
-            "stored_at":  datetime.now(timezone.utc),
-        },
+        doc,
         upsert=True,
-        return_document=True,
     )
-    return result["_id"]
+    if result.upserted_id:
+        return result.upserted_id
+    existing = await db["krona_files"].find_one(
+        {"case_id": case_object_id, "classifier": classifier_name},
+        {"_id": 1},
+    )
+    return existing["_id"]
 
 
 async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     now = datetime.now(timezone.utc)
 
-    pipeline_info    = read_pipeline_info(request.pipeline_info_path)
-    qc_data          = read_multiqc(request.multiqc_path)
+    pipeline_info = read_pipeline_info(request.pipeline_info_path)
+    qc_data       = read_multiqc(request.multiqc_path)
 
     existing_case = await db["cases"].find_one({"case_id": request.case_id})
     if existing_case:
@@ -60,22 +66,17 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             f"Delete the existing case first, or use a unique case_id."
         )
 
-    # Store Krona files per classifier and build classifier metadata
     classifier_docs = []
     for clf in request.classifiers:
-        classifier_docs.append({
-            "name":  clf.name,
-            "db":    clf.db,
-            "krona": None,  # filled in after case insert
-        })
+        classifier_docs.append({"name": clf.name, "db": clf.db, "krona": None})
 
     case_doc = {
-        "case_id": request.case_id,
-        "order_date": request.order_date.isoformat() if request.order_date else None,
-        "ingested_at": now,
-        "sample_ids":  [],
-        "classifiers": classifier_docs,
-        "has_krona":   any(clf.krona for clf in request.classifiers),
+        "case_id":       request.case_id,
+        "order_date":    request.order_date.isoformat() if request.order_date else None,
+        "ingested_at":   now,
+        "sample_ids":    [],
+        "classifiers":   classifier_docs,
+        "has_krona":     any(clf.krona for clf in request.classifiers),
         "pipeline_info": pipeline_info,
         "review": {
             "reviewed":    False,
@@ -87,72 +88,55 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     case_result    = await db["cases"].insert_one(case_doc)
     case_object_id = case_result.inserted_id
 
-    # Now store Krona files with the real case ObjectId
     updated_classifiers = []
     for clf in request.classifiers:
         krona_id = None
         if clf.krona:
             krona_doc_id = await _store_krona(db, case_object_id, clf.name, clf.krona)
             krona_id = str(krona_doc_id)
-        updated_classifiers.append({
-            "name":     clf.name,
-            "db":       clf.db,
-            "krona_id": krona_id,
-        })
-
-    sample_names = [s.sample_id for s in request.samples if s.sample_type == "sample"]
-    sample_count = len([s for s in request.samples if s.sample_type == "sample"])
-    control_count = len([s for s in request.samples if s.sample_type in ("positive_ctrl", "negative_ctrl")])
+        updated_classifiers.append({"name": clf.name, "db": clf.db, "krona_id": krona_id})
 
     await db["cases"].update_one(
         {"_id": case_object_id},
-        {"$set": {
-            "sample_ids": sample_ids,
-            "sample_count": sample_count,
-            "control_count": control_count,
-            "sample_names": sample_names,
-        }},
+        {"$set": {"classifiers": updated_classifiers}},
     )
-    sample_ids = []
+
+    sample_ids    = []
+    sample_names  = [s.sample_id for s in request.samples if s.sample_type == "sample"]
+    sample_count  = len([s for s in request.samples if s.sample_type == "sample"])
+    control_count = len([s for s in request.samples if s.sample_type in ("positive_ctrl", "negative_ctrl")])
 
     for s in request.samples:
         subject_object_id = None
         if s.subject_id:
             subject_object_id = await _upsert_subject(db, s.subject_id)
 
-        # Build profiles and classifier QC stats for each classifier
-        profiles = []
+        profiles      = []
         classifier_qc = {}
 
         for clf in request.classifiers:
             col = s.columns.get(clf.name)
             if not col:
                 continue
-
-            profile = read_taxpasta(
-                clf.taxpasta,
-                col,
-            )
+            profile = read_taxpasta(clf.taxpasta, col)
             profiles.append({
                 "classifier":    clf.name,
                 "classifier_db": clf.db,
                 "profile":       profile,
             })
-
             clf_qc = _extract_classifier_qc(qc_data, clf.name, col)
             if clf_qc:
                 classifier_qc[clf.name] = clf_qc
 
-        # Classifier-agnostic QC (fastp, bowtie2, fastqc) — keyed by sample_id
         base_qc = _extract_base_qc(qc_data, s.sample_id)
 
         sample_doc = {
-            "case_id": case_object_id,
+            "case_id":     case_object_id,
             "case_id_str": request.case_id,
-            "order_date": request.order_date.isoformat() if request.order_date else None,
-            "subject_id": subject_object_id,
+            "order_date":  request.order_date.isoformat() if request.order_date else None,
+            "subject_id":  subject_object_id,
             "sample_type": s.sample_type,
-            "material": s.material,
+            "material":    s.material,
             "sample": {
                 "sample_id":     s.sample_id,
                 "material":      s.material,
@@ -165,8 +149,8 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
                 "classifiers":   classifier_qc,
                 "pipeline_info": pipeline_info,
             },
-            "profiles":    profiles,
-            "has_krona":   any(clf.krona for clf in request.classifiers),
+            "profiles":  profiles,
+            "has_krona": any(clf.krona for clf in request.classifiers),
             "review": {
                 "reviewed":    False,
                 "reviewed_by": None,
@@ -181,37 +165,40 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
 
     await db["cases"].update_one(
         {"_id": case_object_id},
-        {"$set": {"sample_ids": sample_ids}},
+        {"$set": {
+            "sample_ids":    sample_ids,
+            "sample_count":  sample_count,
+            "control_count": control_count,
+            "sample_names":  sample_names,
+        }},
     )
 
-    # Ingest metaval results if provided
     if request.metaval:
-        metaval_data = read_metaval(request.metaval.igv_dir)
-        metaval_results = metaval_data['results']
+        metaval_data    = read_metaval(request.metaval.igv_dir)
+        metaval_results = metaval_data["results"]
 
-        if metaval_data.get('pipeline_info'):
+        if metaval_data.get("pipeline_info"):
             await db["cases"].update_one(
                 {"_id": case_object_id},
-                {"$set": {"metaval_pipeline_info": metaval_data['pipeline_info']}},
+                {"$set": {"metaval_pipeline_info": metaval_data["pipeline_info"]}},
             )
 
         for r in metaval_results:
-            # Resolve sample ObjectId from sample_name
             sample_doc = await db["samples"].find_one({
-                "case_id": case_object_id,
+                "case_id":          case_object_id,
                 "sample.sample_id": r["sample_name"],
             })
             sample_object_id = sample_doc["_id"] if sample_doc else None
 
             await db["metaval_results"].insert_one({
-                "case_id": case_object_id,
-                "sample_id": sample_object_id,
+                "case_id":     case_object_id,
+                "sample_id":   sample_object_id,
                 "sample_name": r["sample_name"],
-                "classifier": r["classifier"],
-                "taxon_id": r["taxon_id"],
-                "taxon_name": r["taxon_name"],
-                "organisms": r["organisms"],
-                "blast": r["blast"],
+                "classifier":  r["classifier"],
+                "taxon_id":    r["taxon_id"],
+                "taxon_name":  r["taxon_name"],
+                "organisms":   r["organisms"],
+                "blast":       r["blast"],
                 "ingested_at": now,
             })
 
@@ -222,8 +209,9 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
         "sample_ids":       [str(sid) for sid in sample_ids],
     }
 
+
 def _extract_classifier_qc(qc_data: dict, classifier_name: str, col: str) -> dict:
-    """Extract classifier-specific QC stats from new multiqc list-of-records format."""
+    """Extract classifier-specific QC stats from multiqc data."""
 
     if classifier_name == "kraken2":
         key = col.split(".kraken2")[0]
@@ -244,7 +232,6 @@ def _extract_classifier_qc(qc_data: dict, classifier_name: str, col: str) -> dic
     if root_records:
         classified_reads = root_records[0]["counts_rooted"]
     else:
-        # centrifuge has no R record — sum all species-level rooted counts as best estimate
         classified_reads = sum(r["counts_rooted"] for r in records if r.get("rank_code") == "S")
 
     total_reads = unclassified_reads + classified_reads
