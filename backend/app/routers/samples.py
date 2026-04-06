@@ -1,6 +1,7 @@
 # app/routers/samples.py
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import HTMLResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 from app.models.sample import SampleResponse
@@ -29,11 +30,12 @@ def _serialise(doc: dict) -> dict:
 
 PAGE_SIZE = 50
 
+
 @router.get("", summary="List all samples with pagination")
 async def list_samples(
-    page:    int = 1,
-    search:  str = "",
-    filter:  str = "",
+    page:   int = 1,
+    search: str = "",
+    filter: str = "",
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
@@ -54,7 +56,6 @@ async def list_samples(
     )
     skip = (page - 1) * PAGE_SIZE
 
-    # Project only fields needed by the sample list — avoids loading 300 KB docs
     projection = {
         "_id":          1,
         "sample_type":  1,
@@ -105,8 +106,8 @@ async def get_profile(
         raise HTTPException(status_code=404, detail=f"Sample '{sample_id}' not found")
     return {
         "sample_id": sample_id,
-        "sample": doc.get("sample"),
-        "profiles": doc.get("profiles", []),
+        "sample":    doc.get("sample"),
+        "profiles":  doc.get("profiles", []),
     }
 
 
@@ -151,23 +152,23 @@ async def get_ntc_profiles(
 
     return result
 
+
 @router.get("/{sample_id}/krona", summary="Serve Krona HTML for the case this sample belongs to")
 async def get_krona(
-    sample_id: str,
+    sample_id:  str,
     classifier: str = "kraken2",
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    from fastapi.responses import HTMLResponse
     sample = await db["samples"].find_one({"_id": _oid(sample_id)}, {"case_id": 1, "has_krona": 1})
     if not sample:
         raise HTTPException(status_code=404, detail=f"Sample '{sample_id}' not found")
     if not sample.get("has_krona"):
         raise HTTPException(status_code=404, detail="No Krona file associated with this sample's case")
-    doc = await db["krona_files"].find_one({
-        "case_id":    sample["case_id"],
-        "classifier": classifier,
-    })
-    if not doc:
+
+    from app.database import get_blob_store
+    key  = f"krona/{sample['case_id']}/{classifier}.html"
+    html = await get_blob_store().get(key)
+    if not html:
         raise HTTPException(status_code=404, detail=f"Krona file not found for classifier '{classifier}'")
-    return HTMLResponse(content=doc["html"])
+    return HTMLResponse(content=html)

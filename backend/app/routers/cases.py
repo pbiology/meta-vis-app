@@ -220,7 +220,10 @@ async def delete_case(
     oid = case["_id"]
 
     await db["samples"].delete_many({"case_id": oid})
-    await db["krona_files"].delete_many({"case_id": oid})
+    from app.database import get_blob_store
+    store = get_blob_store()
+    await store.delete_prefix(f"krona/{oid}/")
+    await store.delete_prefix(f"igv/{oid}/")
     await db["metaval_results"].delete_many({"case_id": oid})
     await db["cases"].delete_one({"_id": oid})
 
@@ -238,14 +241,13 @@ async def get_krona(
     if not case:
         raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
 
-    doc = await db["krona_files"].find_one({
-        "case_id":    case["_id"],
-        "classifier": classifier,
-    })
-    if not doc:
+    from app.database import get_blob_store
+    key = f"krona/{case['_id']}/{classifier}.html"
+    html = await get_blob_store().get(key)
+    if not html:
         raise HTTPException(status_code=404, detail=f"No Krona file for classifier '{classifier}'")
 
-    return HTMLResponse(content=doc["html"])
+    return HTMLResponse(content=html)
 
 
 @router.patch("/{case_id}/review", summary="Mark a case as reviewed by the current user")

@@ -147,12 +147,11 @@ def read_metaval(metaval_igv_dir: str) -> list[dict]:
             groups[key] = []
         file_size = html_file.stat().st_size
         too_large = file_size > MAX_IGV_SIZE
-        igv_html  = None if too_large else html_file.read_text(encoding='utf-8')
         groups[key].append({
-            'organism_name':       parsed['organism_name'],
-            'igv_html':            igv_html,
+            'organism_name': parsed['organism_name'],
+            'igv_file_path': str(html_file),
             'igv_file_size_bytes': file_size,
-            'igv_too_large':       too_large,
+            'igv_too_large': too_large,
         })
 
     results = []

@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     jwt_secret: str
     controls_taxa_path: str = "controls_taxa.json"
 
+    # Object storage — optional, falls back to MongoDB if not set
+    object_storage_endpoint:   Optional[str] = None
+    object_storage_access_key: Optional[str] = None
+    object_storage_secret_key: Optional[str] = None
+    object_storage_bucket:     str = "meta-vis"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
