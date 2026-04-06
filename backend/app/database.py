@@ -2,6 +2,7 @@ from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from app.config import settings
 
 client: AsyncIOMotorClient = None
+_blob_store = None
 
 
 def _build_mongo_url() -> str:
@@ -15,9 +16,15 @@ def _build_mongo_url() -> str:
 
 
 async def connect_db():
-    global client
+    global client, _blob_store
     client = AsyncIOMotorClient(_build_mongo_url())
     await _ensure_indexes()
+    from app.blob_store import make_blob_store
+    _blob_store = make_blob_store(client[settings.mongodb_db_name])
+
+
+def get_blob_store():
+    return _blob_store
 
 
 async def _ensure_indexes():
@@ -27,6 +34,7 @@ async def _ensure_indexes():
     await db["cases"].create_index("case_id", unique=True)
     await db["cases"].create_index("ingested_at")
     await db["cases"].create_index("order_date")
+    await db["cases"].create_index("review.reviewed")
     await db["cases"].create_index([
         ("review.reviewed", 1),
         ("order_date", -1),
@@ -49,10 +57,8 @@ async def _ensure_indexes():
         ("sample.sample_id", 1), ("order_date", -1), ("ingested_at", -1)
     ])
 
-    # krona_files — fast lookup by case+classifier
-    await db["krona_files"].create_index(
-        [("case_id", 1), ("classifier", 1)], unique=True
-    )
+    # blobs — used by MongoBlobStore when object storage is not configured
+    await db["blobs"].create_index("key", unique=True)
 
     # metaval_results — fast lookup by sample and case
     await db["metaval_results"].create_index("sample_id")

@@ -17,5 +17,19 @@ services:
     env_file:
       - .env
 
+  minio:
+    image: minio/minio
+    container_name: meta-vis-minio
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio_data:/data
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadminpassword
+    command: server /data --console-address ":9001"
+
 volumes:
   mongodb_data:
+  minio_data:

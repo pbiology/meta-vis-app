@@ -252,10 +252,11 @@ class TestReadMetaval:
 
     def test_igv_within_size_limit_is_read(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
-        (igv_dir / "SRR13439790_kraken2_Shigella-virus-Moo19_mappingorganism_Shigella-virus-Moo19_report.html").write_text("<html>content</html>")
+        html_file = igv_dir / "SRR13439790_kraken2_Shigella-virus-Moo19_mappingorganism_Shigella-virus-Moo19_report.html"
+        html_file.write_text("<html>content</html>")
         result = read_metaval(str(igv_dir))
         org = result["results"][0]["organisms"][0]
-        assert org["igv_html"] == "<html>content</html>"
+        assert org["igv_file_path"] == str(html_file)
         assert org["igv_too_large"] is False
 
     def test_igv_exceeding_size_limit_sets_too_large(self, tmp_path):
@@ -265,7 +266,7 @@ class TestReadMetaval:
         result = read_metaval(str(igv_dir))
         org = result["results"][0]["organisms"][0]
         assert org["igv_too_large"] is True
-        assert org["igv_html"] is None
+        assert org["igv_file_path"] == str(large_file)
 
     def test_blast_hits_matched_to_result(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)

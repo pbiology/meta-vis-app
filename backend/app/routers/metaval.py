@@ -23,9 +23,10 @@ def _serialise(doc: dict) -> dict:
     doc["case_id"]   = str(doc["case_id"])
     if doc.get("sample_id"):
         doc["sample_id"] = str(doc["sample_id"])
-    # Strip igv_html from organism list — returned separately
+    # Strip internal storage fields from organism list
     for org in doc.get("organisms", []):
         org.pop("igv_html", None)
+        org.pop("igv_key", None)
     return doc
 
 
@@ -69,7 +70,14 @@ async def get_igv(
         raise HTTPException(status_code=404, detail=f"Organism '{organism_name}' not found")
     if org.get("igv_too_large"):
         raise HTTPException(status_code=413, detail="IGV file exceeds 10 MB limit")
-    if not org.get("igv_html"):
+
+    igv_key = org.get("igv_key")
+    if not igv_key:
         raise HTTPException(status_code=404, detail="IGV HTML not available")
 
-    return HTMLResponse(content=org["igv_html"])
+    from app.database import get_blob_store
+    html = await get_blob_store().get(igv_key)
+    if not html:
+        raise HTTPException(status_code=404, detail="IGV HTML not found in storage")
+
+    return HTMLResponse(content=html)
