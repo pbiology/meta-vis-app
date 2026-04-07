@@ -20,8 +20,8 @@ def store(db):
 # put / get
 # ---------------------------------------------------------------------------
 
-class TestPutGet:
 
+class TestPutGet:
     async def test_put_and_get_returns_content(self, store):
         await store.put("krona/abc/kraken2.html", "<html>krona</html>")
         result = await store.get("krona/abc/kraken2.html")
@@ -56,8 +56,8 @@ class TestPutGet:
 # delete_prefix
 # ---------------------------------------------------------------------------
 
-class TestDeletePrefix:
 
+class TestDeletePrefix:
     async def test_deletes_matching_keys(self, store):
         await store.put("krona/case1/kraken2.html", "a")
         await store.put("krona/case1/centrifuge.html", "b")
@@ -86,11 +86,12 @@ class TestDeletePrefix:
 # make_blob_store factory
 # ---------------------------------------------------------------------------
 
-class TestMakeBlobStore:
 
+class TestMakeBlobStore:
     def test_returns_mongo_blob_store_when_no_s3_config(self, db):
         from unittest.mock import patch
         from app.config import settings
+
         with patch.object(settings, "object_storage_endpoint", None):
             store = make_blob_store(db)
         assert isinstance(store, MongoBlobStore)

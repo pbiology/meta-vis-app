@@ -14,6 +14,7 @@ from app.auth.utils import hash_password, get_current_user
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def fake_db():
     client = AsyncMongoMockClient()
@@ -34,46 +35,60 @@ def client(app):
 
 
 async def insert_user(db, username="alice", password="secret", role="reader"):
-    await db["users"].insert_one({
-        "username":      username,
-        "password_hash": hash_password(password),
-        "role":          role,
-    })
+    await db["users"].insert_one(
+        {
+            "username": username,
+            "password_hash": hash_password(password),
+            "role": role,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # POST /auth/login
 # ---------------------------------------------------------------------------
 
-class TestLogin:
 
+class TestLogin:
     async def test_valid_credentials_returns_200(self, client, fake_db):
         await insert_user(fake_db, "alice", "secret", "writer")
-        resp = client.post("/api/v1/auth/login", data={"username": "alice", "password": "secret"})
+        resp = client.post(
+            "/api/v1/auth/login", data={"username": "alice", "password": "secret"}
+        )
         assert resp.status_code == 200
         assert resp.json()["username"] == "alice"
         assert resp.json()["role"] == "writer"
 
     async def test_valid_credentials_sets_cookie(self, client, fake_db):
         await insert_user(fake_db, "alice", "secret")
-        resp = client.post("/api/v1/auth/login", data={"username": "alice", "password": "secret"})
+        resp = client.post(
+            "/api/v1/auth/login", data={"username": "alice", "password": "secret"}
+        )
         assert "access_token" in resp.cookies
 
     async def test_wrong_password_returns_401(self, client, fake_db):
         await insert_user(fake_db, "alice", "secret")
-        resp = client.post("/api/v1/auth/login", data={"username": "alice", "password": "wrong"})
+        resp = client.post(
+            "/api/v1/auth/login", data={"username": "alice", "password": "wrong"}
+        )
         assert resp.status_code == 401
 
     async def test_unknown_user_returns_401(self, client, fake_db):
-        resp = client.post("/api/v1/auth/login", data={"username": "ghost", "password": "secret"})
+        resp = client.post(
+            "/api/v1/auth/login", data={"username": "ghost", "password": "secret"}
+        )
         assert resp.status_code == 401
 
     async def test_role_defaults_to_reader_when_missing(self, client, fake_db):
-        await fake_db["users"].insert_one({
-            "username":      "norole",
-            "password_hash": hash_password("pass"),
-        })
-        resp = client.post("/api/v1/auth/login", data={"username": "norole", "password": "pass"})
+        await fake_db["users"].insert_one(
+            {
+                "username": "norole",
+                "password_hash": hash_password("pass"),
+            }
+        )
+        resp = client.post(
+            "/api/v1/auth/login", data={"username": "norole", "password": "pass"}
+        )
         assert resp.json()["role"] == "reader"
 
 
@@ -81,8 +96,8 @@ class TestLogin:
 # POST /auth/logout
 # ---------------------------------------------------------------------------
 
-class TestLogout:
 
+class TestLogout:
     def test_logout_returns_200(self, client):
         resp = client.post("/api/v1/auth/logout")
         assert resp.status_code == 200
@@ -100,8 +115,8 @@ class TestLogout:
 # GET /auth/me
 # ---------------------------------------------------------------------------
 
-class TestMe:
 
+class TestMe:
     async def test_authenticated_user_returns_info(self, app, fake_db):
         u = {"username": "alice", "role": "admin"}
         app.dependency_overrides[get_current_user] = lambda: u

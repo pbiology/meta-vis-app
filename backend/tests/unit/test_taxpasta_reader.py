@@ -9,6 +9,7 @@ from app.ingestor.taxpasta_reader import read_taxpasta, _superkingdom_from_linea
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def write_tsv(tmp_path, content: str, filename: str = "taxpasta.tsv"):
     p = tmp_path / filename
     p.write_text(textwrap.dedent(content))
@@ -39,6 +40,7 @@ NO_LINEAGE_TSV = """\
 # Happy path
 # ---------------------------------------------------------------------------
 
+
 def test_read_taxpasta_returns_records(tmp_path):
     path = write_tsv(tmp_path, MINIMAL_TSV)
     records = read_taxpasta(path, "SAMPLE1")
@@ -66,6 +68,7 @@ def test_read_taxpasta_superkingdom_bacteria(tmp_path):
 # Zero-abundance filtering
 # ---------------------------------------------------------------------------
 
+
 def test_zero_abundance_rows_filtered(tmp_path):
     path = write_tsv(tmp_path, ZERO_ABUNDANCE_TSV)
     records = read_taxpasta(path, "SAMPLE1")
@@ -76,6 +79,7 @@ def test_zero_abundance_rows_filtered(tmp_path):
 # No lineage column
 # ---------------------------------------------------------------------------
 
+
 def test_no_lineage_column_superkingdom_is_none(tmp_path):
     path = write_tsv(tmp_path, NO_LINEAGE_TSV)
     records = read_taxpasta(path, "SAMPLE1")
@@ -85,6 +89,7 @@ def test_no_lineage_column_superkingdom_is_none(tmp_path):
 # ---------------------------------------------------------------------------
 # Error cases
 # ---------------------------------------------------------------------------
+
 
 def test_file_not_found_raises():
     with pytest.raises(FileNotFoundError):
@@ -107,14 +112,18 @@ def test_missing_sample_column_raises(tmp_path):
 # _superkingdom_from_lineage unit tests
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("lineage, expected", [
-    ("Bacteria;Firmicutes;Bacilli", "Bacteria"),
-    ("Eukaryota;Chordata;Mammalia", "Eukaryota"),
-    ("Viruses;Coronaviridae",       "Viruses"),
-    ("Archaea;Euryarchaeota",       "Archaea"),
-    ("",                            None),
-    (None,                          None),
-    ("Unknown;Something",           None),
-])
+
+@pytest.mark.parametrize(
+    "lineage, expected",
+    [
+        ("Bacteria;Firmicutes;Bacilli", "Bacteria"),
+        ("Eukaryota;Chordata;Mammalia", "Eukaryota"),
+        ("Viruses;Coronaviridae", "Viruses"),
+        ("Archaea;Euryarchaeota", "Archaea"),
+        ("", None),
+        (None, None),
+        ("Unknown;Something", None),
+    ],
+)
 def test_superkingdom_from_lineage(lineage, expected):
     assert _superkingdom_from_lineage(lineage) == expected

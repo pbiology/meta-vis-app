@@ -1,13 +1,19 @@
 # tests/unit/test_auth_utils.py
 
 import pytest
-from app.auth.utils import hash_password, verify_password, create_access_token, decode_token
+from app.auth.utils import (
+    hash_password,
+    verify_password,
+    create_access_token,
+    decode_token,
+)
 from fastapi import HTTPException
 
 
 # ---------------------------------------------------------------------------
 # hash_password / verify_password
 # ---------------------------------------------------------------------------
+
 
 def test_hash_password_returns_string():
     result = hash_password("mysecret")
@@ -44,6 +50,7 @@ def test_verify_password_empty_string():
 # ---------------------------------------------------------------------------
 # create_access_token / decode_token
 # ---------------------------------------------------------------------------
+
 
 def test_create_access_token_returns_string():
     token = create_access_token("testuser")
@@ -88,13 +95,16 @@ def test_roundtrip_different_usernames():
         payload = decode_token(token)
         assert payload["sub"] == username
 
+
 # ---------------------------------------------------------------------------
 # get_current_user — user not in DB defaults role to reader
 # ---------------------------------------------------------------------------
 
+
 async def test_get_current_user_unknown_user_defaults_to_reader():
     from mongomock_motor import AsyncMongoMockClient
     from app.auth.utils import get_current_user, create_access_token
+
     token = create_access_token("ghost_user")
     db = AsyncMongoMockClient()["test_db"]
     result = await get_current_user(access_token=token, db=db)
@@ -105,10 +115,11 @@ async def test_get_current_user_unknown_user_defaults_to_reader():
 async def test_get_current_user_known_user_returns_correct_role():
     from mongomock_motor import AsyncMongoMockClient
     from app.auth.utils import get_current_user, create_access_token, hash_password
+
     db = AsyncMongoMockClient()["test_db"]
-    await db["users"].insert_one({
-        "username": "alice", "password_hash": hash_password("secret"), "role": "admin"
-    })
+    await db["users"].insert_one(
+        {"username": "alice", "password_hash": hash_password("secret"), "role": "admin"}
+    )
     token = create_access_token("alice")
     result = await get_current_user(access_token=token, db=db)
     assert result["role"] == "admin"

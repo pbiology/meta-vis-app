@@ -22,7 +22,6 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 
 class BlobStore(ABC):
-
     @abstractmethod
     async def put(self, key: str, content: str) -> None:
         """Store content at key."""
@@ -40,13 +39,14 @@ class BlobStore(ABC):
 # MongoDB backend (default)
 # ---------------------------------------------------------------------------
 
-class MongoBlobStore(BlobStore):
 
+class MongoBlobStore(BlobStore):
     def __init__(self, db: AsyncIOMotorDatabase):
         self._db = db
 
     async def put(self, key: str, content: str) -> None:
         from datetime import datetime, timezone
+
         await self._db["blobs"].replace_one(
             {"key": key},
             {"key": key, "content": content, "stored_at": datetime.now(timezone.utc)},
@@ -65,11 +65,12 @@ class MongoBlobStore(BlobStore):
 # S3-compatible object storage backend (MinIO / AWS S3)
 # ---------------------------------------------------------------------------
 
-class S3BlobStore(BlobStore):
 
+class S3BlobStore(BlobStore):
     def __init__(self, endpoint: str, access_key: str, secret_key: str, bucket: str):
         import boto3
         from botocore.config import Config
+
         self._bucket = bucket
         self._s3 = boto3.client(
             "s3",
@@ -129,8 +130,10 @@ class S3BlobStore(BlobStore):
 # Factory — called once at startup, stored as singleton in database.py
 # ---------------------------------------------------------------------------
 
+
 def make_blob_store(db: AsyncIOMotorDatabase) -> BlobStore:
     from app.config import settings
+
     if settings.object_storage_endpoint:
         return S3BlobStore(
             endpoint=settings.object_storage_endpoint,

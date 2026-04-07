@@ -12,8 +12,8 @@ from app.routers.alerts import parse_date, _cache, CACHE_TTL_SECONDS
 # parse_date
 # ---------------------------------------------------------------------------
 
-class TestParseDate:
 
+class TestParseDate:
     def test_parses_iso_string(self):
         result = parse_date("2024-03-15")
         assert result == date(2024, 3, 15)
@@ -31,6 +31,7 @@ class TestParseDate:
 # Outbreak clustering logic (extracted and unit tested directly)
 # ---------------------------------------------------------------------------
 
+
 def find_flagged(case_entries: list, window_days: int) -> set:
     """
     Replicates the sliding window clustering from _compute_outbreaks.
@@ -41,7 +42,7 @@ def find_flagged(case_entries: list, window_days: int) -> set:
     for i, anchor in enumerate(sorted_entries):
         anchor_date = parse_date(anchor["order_date"])
         cluster = [anchor]
-        for other in sorted_entries[i + 1:]:
+        for other in sorted_entries[i + 1 :]:
             if (parse_date(other["order_date"]) - anchor_date).days <= window_days:
                 cluster.append(other)
             else:
@@ -57,7 +58,6 @@ def make_entry(case_id: str, order_date: str) -> dict:
 
 
 class TestOutbreakClustering:
-
     def test_two_cases_same_date_flagged(self):
         entries = [make_entry("case1", "2024-03-15"), make_entry("case2", "2024-03-15")]
         assert find_flagged(entries, window_days=14) == {"case1", "case2"}
@@ -107,7 +107,7 @@ class TestOutbreakClustering:
     def test_narrower_window_reduces_clusters(self):
         entries = [make_entry("case1", "2024-03-01"), make_entry("case2", "2024-03-10")]
         assert find_flagged(entries, window_days=14) == {"case1", "case2"}
-        assert find_flagged(entries, window_days=7)  == set()
+        assert find_flagged(entries, window_days=7) == set()
 
     def test_wider_window_increases_clusters(self):
         entries = [make_entry("case1", "2024-03-01"), make_entry("case2", "2024-03-20")]
@@ -124,8 +124,8 @@ class TestOutbreakClustering:
 # Cache module-level state
 # ---------------------------------------------------------------------------
 
-class TestAlertCache:
 
+class TestAlertCache:
     def setup_method(self):
         _cache.clear()
 

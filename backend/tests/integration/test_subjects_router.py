@@ -13,6 +13,7 @@ from tests.helpers import make_test_app
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def app(fake_db, fake_blob):
     return make_test_app(router, fake_db, fake_blob)
@@ -24,26 +25,31 @@ def client(app):
 
 
 async def insert_subject(db, subject_id="SUBJ001"):
-    result = await db["subjects"].insert_one({
-        "subject_id": subject_id,
-        "created_at": datetime.now(timezone.utc),
-    })
+    result = await db["subjects"].insert_one(
+        {
+            "subject_id": subject_id,
+            "created_at": datetime.now(timezone.utc),
+        }
+    )
     return result.inserted_id
 
 
-async def insert_sample_for_subject(db, subject_oid, sample_id="SRR001",
-                                     order_date="2026-01-01"):
-    result = await db["samples"].insert_one({
-        "subject_id":  subject_oid,
-        "case_id":     ObjectId(),
-        "sample_type": "sample",
-        "material":    "DNA",
-        "sample":      {"sample_id": sample_id},
-        "run_id":      ObjectId(),
-        "order_date":  order_date,
-        "ingested_at": datetime.now(timezone.utc),
-        "review":      {"reviewed": False},
-    })
+async def insert_sample_for_subject(
+    db, subject_oid, sample_id="SRR001", order_date="2026-01-01"
+):
+    result = await db["samples"].insert_one(
+        {
+            "subject_id": subject_oid,
+            "case_id": ObjectId(),
+            "sample_type": "sample",
+            "material": "DNA",
+            "sample": {"sample_id": sample_id},
+            "run_id": ObjectId(),
+            "order_date": order_date,
+            "ingested_at": datetime.now(timezone.utc),
+            "review": {"reviewed": False},
+        }
+    )
     return result.inserted_id
 
 
@@ -51,8 +57,8 @@ async def insert_sample_for_subject(db, subject_oid, sample_id="SRR001",
 # GET /subjects
 # ---------------------------------------------------------------------------
 
-class TestListSubjects:
 
+class TestListSubjects:
     async def test_empty_db_returns_empty_list(self, client, fake_db):
         resp = client.get("/api/v1/subjects")
         assert resp.status_code == 200
@@ -76,8 +82,8 @@ class TestListSubjects:
 # GET /subjects/{subject_id}/samples
 # ---------------------------------------------------------------------------
 
-class TestListSamplesForSubject:
 
+class TestListSamplesForSubject:
     async def test_returns_samples_for_subject(self, client, fake_db):
         oid = await insert_subject(fake_db, "SUBJ001")
         await insert_sample_for_subject(fake_db, oid, "SRR001")

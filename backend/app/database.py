@@ -20,6 +20,7 @@ async def connect_db():
     client = AsyncIOMotorClient(_build_mongo_url())
     await _ensure_indexes()
     from app.blob_store import make_blob_store
+
     _blob_store = make_blob_store(client[settings.mongodb_db_name])
 
 
@@ -35,27 +36,31 @@ async def _ensure_indexes():
     await db["cases"].create_index("ingested_at")
     await db["cases"].create_index("order_date")
     await db["cases"].create_index("review.reviewed")
-    await db["cases"].create_index([
-        ("review.reviewed", 1),
-        ("order_date", -1),
-        ("ingested_at", -1),
-    ])
+    await db["cases"].create_index(
+        [
+            ("review.reviewed", 1),
+            ("order_date", -1),
+            ("ingested_at", -1),
+        ]
+    )
 
     # samples — fast lookup by case, by case+type+material (NTC profiles),
     # and by viral taxa fields used in the outbreak aggregation pipeline
     await db["samples"].create_index("case_id")
-    await db["samples"].create_index([("case_id", 1), ("sample_type", 1), ("material", 1)])
+    await db["samples"].create_index(
+        [("case_id", 1), ("sample_type", 1), ("material", 1)]
+    )
     await db["samples"].create_index("profiles.profile.superkingdom")
     await db["samples"].create_index("profiles.profile.taxon_id")
     await db["samples"].create_index([("order_date", -1), ("ingested_at", -1)])
     await db["samples"].create_index("sample.sample_id")
     await db["samples"].create_index("case_id_str")
-    await db["samples"].create_index([
-        ("sample_type", 1), ("order_date", -1), ("ingested_at", -1)
-    ])
-    await db["samples"].create_index([
-        ("sample.sample_id", 1), ("order_date", -1), ("ingested_at", -1)
-    ])
+    await db["samples"].create_index(
+        [("sample_type", 1), ("order_date", -1), ("ingested_at", -1)]
+    )
+    await db["samples"].create_index(
+        [("sample.sample_id", 1), ("order_date", -1), ("ingested_at", -1)]
+    )
 
     # blobs — used by MongoBlobStore when object storage is not configured
     await db["blobs"].create_index("key", unique=True)

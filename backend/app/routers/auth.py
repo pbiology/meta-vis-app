@@ -13,9 +13,9 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/login", summary="Obtain a JWT via httpOnly cookie")
 async def login(
-        response: Response,
-        form_data: OAuth2PasswordRequestForm = Depends(),
-        db: AsyncIOMotorDatabase = Depends(get_db),
+    response: Response,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     user = await db["users"].find_one({"username": form_data.username})
     if not user or not verify_password(form_data.password, user["password_hash"]):
