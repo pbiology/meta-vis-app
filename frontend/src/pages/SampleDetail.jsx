@@ -437,10 +437,10 @@ const [activeTab, setActiveTab] = useState(null)
         )}
 
         {/* Metaval — viral taxa per classifier */}
-        {metavalResults.length > 0 && (
-          <section className="bg-white border border-gray-100 rounded-xl">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
-              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">Metaval</p>
+        <section className="bg-white border border-gray-100 rounded-xl">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">Metaval</p>
+            {metavalResults.length > 0 && (
               <div className="flex gap-1.5">
                 {classifiers.map(clf => {
                   const hasResults = metavalResults.some(r => r.classifier === clf.classifier)
@@ -460,7 +460,11 @@ const [activeTab, setActiveTab] = useState(null)
                   )
                 })}
               </div>
-            </div>
+            )}
+          </div>
+          {metavalResults.length === 0 ? (
+            <p className="px-4 py-6 text-xs text-gray-300 text-center">No viral taxon found</p>
+          ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
@@ -487,8 +491,8 @@ const [activeTab, setActiveTab] = useState(null)
                 </tbody>
               </table>
             </div>
-          </section>
-        )}
+          )}
+        </section>
 
         {/* Taxonomy — tabs per classifier */}
         {classifiers.length > 0 && (
