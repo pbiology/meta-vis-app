@@ -190,3 +190,50 @@ class TestSpikeInFor:
         clf_qc = make_clf_qc(classified_reads=1000)
         result = _spike_in_for(ENTRIES, spike_in_ids={1234, 5678}, clf_qc=clf_qc)
         assert len(result) == 2
+
+
+# ---------------------------------------------------------------------------
+# _non_host_total — diamond fallback (no root entry, no clf_qc)
+# ---------------------------------------------------------------------------
+
+class TestNonHostTotalDiamondFallback:
+
+    def test_no_root_no_clf_qc_sums_non_host_entries(self):
+        # Diamond doesn't emit a root entry and has no clf_qc
+        entries = [
+            make_entry(9606, "Homo sapiens",   300, "Eukaryota"),
+            make_entry(1279, "Staphylococcus", 400, "Bacteria"),
+            make_entry(1234, "Virus-A",        200, "Viruses"),
+        ]
+        result = _non_host_total(entries, clf_qc=None)
+        # No root (taxon_id=1), so falls back to sum of non-host entries
+        assert result == 400 + 200  # Staph + Virus, not Homo sapiens
+
+    def test_no_root_no_clf_qc_excludes_unclassified(self):
+        entries = [
+            make_entry(0,    "unclassified",   500),
+            make_entry(1279, "Staphylococcus", 400, "Bacteria"),
+        ]
+        result = _non_host_total(entries, clf_qc=None)
+        assert result == 400  # unclassified excluded
+
+    def test_no_root_no_clf_qc_excludes_unclassified_prefix(self):
+        entries = [
+            make_entry(999,  "unclassified Bacteria", 500, "Bacteria"),
+            make_entry(1279, "Staphylococcus",         400, "Bacteria"),
+        ]
+        result = _non_host_total(entries, clf_qc=None)
+        assert result == 400
+
+    def test_no_root_no_clf_qc_empty_entries_returns_zero(self):
+        assert _non_host_total([], clf_qc=None) == 0
+
+    def test_root_present_takes_priority_over_sum_fallback(self):
+        # When root IS present, use it rather than summing
+        entries = [
+            make_entry(1,    "root",           1000),
+            make_entry(9606, "Homo sapiens",   300, "Eukaryota"),
+            make_entry(1279, "Staphylococcus", 400, "Bacteria"),
+        ]
+        result = _non_host_total(entries, clf_qc=None)
+        assert result == 1000 - 300  # root - host, not sum

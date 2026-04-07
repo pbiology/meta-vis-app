@@ -7,6 +7,7 @@ from app.ingestor.metaval_reader import (
     _read_blast,
     _read_extracted_reads,
     _read_spades,
+    _read_metaval_pipeline_info,
     _fasta_stats,
     read_metaval,
 )
@@ -516,3 +517,42 @@ class TestReadMetaval:
         make_igv_dir(tmp_path)
         result = read_metaval(str(tmp_path))
         assert "pipeline_info" in result
+
+
+# ---------------------------------------------------------------------------
+# _read_metaval_pipeline_info
+# ---------------------------------------------------------------------------
+
+class TestReadMetavalPipelineInfo:
+
+    def test_returns_none_when_pipeline_info_dir_missing(self, tmp_path):
+        result = _read_metaval_pipeline_info(tmp_path)
+        assert result is None
+
+    def test_returns_none_when_no_yml_file(self, tmp_path):
+        (tmp_path / 'pipeline_info').mkdir()
+        result = _read_metaval_pipeline_info(tmp_path)
+        assert result is None
+
+    def test_returns_pipeline_info_when_yml_present(self, tmp_path):
+        pipeline_info_dir = tmp_path / 'pipeline_info'
+        pipeline_info_dir.mkdir()
+        yml = pipeline_info_dir / 'versions.yml'
+        yml.write_text(
+            "Workflow:\n"
+            "  genomic-medicine-sweden/metaval: 1.0.0\n"
+            "  Nextflow: 23.10.1\n"
+        )
+        result = _read_metaval_pipeline_info(tmp_path)
+        assert result is not None
+        assert result['pipeline_configuration']['pipeline_name'] == 'genomic-medicine-sweden/metaval'
+        assert result['pipeline_configuration']['nextflow'] == '23.10.1'
+
+    def test_returns_none_when_yml_is_invalid(self, tmp_path):
+        pipeline_info_dir = tmp_path / 'pipeline_info'
+        pipeline_info_dir.mkdir()
+        yml = pipeline_info_dir / 'versions.yml'
+        yml.write_text("not: a: valid: pipeline: info\n")
+        # Missing 'Workflow' key — read_pipeline_info raises ValueError, caught silently
+        result = _read_metaval_pipeline_info(tmp_path)
+        assert result is None
