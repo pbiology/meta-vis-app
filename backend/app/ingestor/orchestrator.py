@@ -196,31 +196,44 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
 
             organisms = list(await asyncio.gather(*[_upload_igv(org) for org in r["organisms"]]))
 
-            # Upload extracted reads FASTA files
-            extracted_reads = r.get("extracted_reads", {})
-            reads_keys = {}
-            for read_num, path_key in [("1", "read_1_path"), ("2", "read_2_path")]:
-                fasta_path = extracted_reads.get(path_key)
+            # Upload verification data (scaffolds, contigs, or raw reads)
+            vd = r.get("verification_data", {})
+            vd_type = vd.get("type")
+            vd_store = {"type": vd_type, "count": vd.get("count", 0), "avg_length": vd.get("avg_length", 0)}
+
+            if vd_type in ("scaffolds", "contigs"):
+                fasta_path = vd.get("path")
                 if fasta_path and Path(fasta_path).exists():
                     blob_key = (
-                        f"extracted_reads/{case_object_id}/{r['sample_name']}/"
-                        f"{r['classifier']}/{r['taxon_name']}_read_{read_num}.fa"
+                        f"verification_data/{case_object_id}/{r['sample_name']}/"
+                        f"{r['classifier']}/{r['taxon_name']}_{vd_type}.fa"
                     )
                     content = Path(fasta_path).read_text(encoding="utf-8")
                     await get_blob_store().put(blob_key, content)
-                    reads_keys[f"read_{read_num}_key"] = blob_key
+                    vd_store["blob_key"] = blob_key
+            elif vd_type == "raw_reads":
+                for read_num, path_key in [("1", "read_1_path"), ("2", "read_2_path")]:
+                    fasta_path = vd.get(path_key)
+                    if fasta_path and Path(fasta_path).exists():
+                        blob_key = (
+                            f"verification_data/{case_object_id}/{r['sample_name']}/"
+                            f"{r['classifier']}/{r['taxon_name']}_read_{read_num}.fa"
+                        )
+                        content = Path(fasta_path).read_text(encoding="utf-8")
+                        await get_blob_store().put(blob_key, content)
+                        vd_store[f"read_{read_num}_key"] = blob_key
 
             await db["metaval_results"].insert_one({
-                "case_id":         case_object_id,
-                "sample_id":       sample_object_id,
-                "sample_name":     r["sample_name"],
-                "classifier":      r["classifier"],
-                "taxon_id":        r["taxon_id"],
-                "taxon_name":      r["taxon_name"],
-                "organisms":       organisms,
-                "blast":           r["blast"],
-                "extracted_reads": reads_keys,   # {read_1_key, read_2_key}
-                "ingested_at":     now,
+                "case_id": case_object_id,
+                "sample_id": sample_object_id,
+                "sample_name": r["sample_name"],
+                "classifier": r["classifier"],
+                "taxon_id": r["taxon_id"],
+                "taxon_name": r["taxon_name"],
+                "organisms": organisms,
+                "blast": r["blast"],
+                "verification_data": vd_store,
+                "ingested_at": now,
             })
 
     return {

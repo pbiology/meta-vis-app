@@ -5,6 +5,9 @@ from app.ingestor.metaval_reader import (
     _parse_igv_filename,
     _read_viral_taxids,
     _read_blast,
+    _read_extracted_reads,
+    _read_spades,
+    _fasta_stats,
     read_metaval,
 )
 
@@ -35,6 +38,36 @@ def make_blast_dir(tmp_path, classifier="kraken2", filename=None, content=None):
         f = blast_dir / filename
         f.write_text(content)
     return blast_dir
+
+FASTA_CONTENT = (
+    ">READ_1 length=10\n"
+    "ATCGATCGAT\n"
+    ">READ_2 length=10\n"
+    "GCTAGCTAGC\n"
+)
+
+SPADES_CONTENT = (
+    ">NODE_1_length_20_cov_1.0\n"
+    "ATCGATCGATGCTAGCTAGC\n"
+    ">NODE_2_length_15_cov_1.5\n"
+    "ATCGATCGATGCTAG\n"
+)
+
+def make_extracted_reads_dir(tmp_path, classifier="kraken2", name_part="SAMPLE1_Virus-A", content=None):
+    reads_dir = tmp_path / "extracted_reads" / classifier
+    reads_dir.mkdir(parents=True, exist_ok=True)
+    fa = reads_dir / f"{name_part}.extracted_{classifier}_read_1.fa"
+    fa.write_text(content or FASTA_CONTENT)
+    fa2 = reads_dir / f"{name_part}.extracted_{classifier}_read_2.fa"
+    fa2.write_text(content or FASTA_CONTENT)
+    return reads_dir
+
+def make_spades_dir(tmp_path, classifier="kraken2", name_part="SAMPLE1_Virus-A", kind="scaffolds", content=None):
+    spades_dir = tmp_path / "spades" / classifier
+    spades_dir.mkdir(parents=True, exist_ok=True)
+    fa = spades_dir / f"{name_part}.{kind}.fa"
+    fa.write_text(content or SPADES_CONTENT)
+    return spades_dir
 
 
 BLAST_SUMMARY_CONTENT = (
@@ -215,6 +248,129 @@ class TestReadBlast:
 
 
 # ---------------------------------------------------------------------------
+# _fasta_stats
+# ---------------------------------------------------------------------------
+
+class TestFastaStats:
+
+    def test_counts_sequences(self, tmp_path):
+        f = tmp_path / "test.fa"
+        f.write_text(FASTA_CONTENT)
+        stats = _fasta_stats(f)
+        assert stats['count'] == 2
+
+    def test_avg_length_correct(self, tmp_path):
+        f = tmp_path / "test.fa"
+        f.write_text(FASTA_CONTENT)
+        stats = _fasta_stats(f)
+        assert stats['avg_length'] == 10.0
+
+    def test_empty_file_returns_zeros(self, tmp_path):
+        f = tmp_path / "empty.fa"
+        f.write_text("")
+        stats = _fasta_stats(f)
+        assert stats['count'] == 0
+        assert stats['avg_length'] == 0
+
+
+# ---------------------------------------------------------------------------
+# _read_extracted_reads
+# ---------------------------------------------------------------------------
+
+class TestReadExtractedReads:
+
+    def test_happy_path(self, tmp_path):
+        make_extracted_reads_dir(tmp_path, "kraken2", "SAMPLE1_Virus-A")
+        result = _read_extracted_reads(tmp_path)
+        assert ("SAMPLE1_Virus-A", "kraken2") in result
+
+    def test_stats_computed(self, tmp_path):
+        make_extracted_reads_dir(tmp_path, "kraken2", "SAMPLE1_Virus-A")
+        result = _read_extracted_reads(tmp_path)
+        entry = result[("SAMPLE1_Virus-A", "kraken2")]
+        assert entry['count'] == 2
+        assert entry['avg_length'] == 10.0
+
+    def test_read_2_path_populated(self, tmp_path):
+        make_extracted_reads_dir(tmp_path, "kraken2", "SAMPLE1_Virus-A")
+        result = _read_extracted_reads(tmp_path)
+        entry = result[("SAMPLE1_Virus-A", "kraken2")]
+        assert entry['read_2_path'] is not None
+
+    def test_missing_directory_returns_empty(self, tmp_path):
+        result = _read_extracted_reads(tmp_path)
+        assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# _read_spades
+# ---------------------------------------------------------------------------
+
+class TestReadSpades:
+
+    def test_scaffolds_preferred_over_contigs(self, tmp_path):
+        make_spades_dir(tmp_path, "kraken2", "SAMPLE1_Virus-A", "scaffolds")
+        make_spades_dir(tmp_path, "kraken2", "SAMPLE1_Virus-A", "contigs")
+        result = _read_spades(tmp_path)
+        assert result[("SAMPLE1_Virus-A", "kraken2")]['type'] == 'scaffolds'
+
+    def test_falls_back_to_contigs(self, tmp_path):
+        make_spades_dir(tmp_path, "kraken2", "SAMPLE1_Virus-A", "contigs")
+        result = _read_spades(tmp_path)
+        assert result[("SAMPLE1_Virus-A", "kraken2")]['type'] == 'contigs'
+
+    def test_stats_computed(self, tmp_path):
+        make_spades_dir(tmp_path, "kraken2", "SAMPLE1_Virus-A", "scaffolds")
+        result = _read_spades(tmp_path)
+        entry = result[("SAMPLE1_Virus-A", "kraken2")]
+        assert entry['count'] == 2
+        assert entry['avg_length'] == 17.5
+
+    def test_missing_directory_returns_empty(self, tmp_path):
+        result = _read_spades(tmp_path)
+        assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# read_metaval — verification_data
+# ---------------------------------------------------------------------------
+
+class TestReadMetavalVerificationData:
+
+    def test_spades_takes_priority_over_raw_reads(self, tmp_path):
+        igv_dir = make_igv_dir(tmp_path)
+        (igv_dir / "SAMPLE1_kraken2_Virus-A_mappingorganism_Virus-A_report.html").write_text("<html/>")
+        make_extracted_reads_dir(tmp_path, "kraken2", "SAMPLE1_Virus-A")
+        make_spades_dir(tmp_path, "kraken2", "SAMPLE1_Virus-A", "scaffolds")
+        result = read_metaval(str(tmp_path))
+        assert result["results"][0]["verification_data"]["type"] == "scaffolds"
+
+    def test_falls_back_to_raw_reads_when_no_spades(self, tmp_path):
+        igv_dir = make_igv_dir(tmp_path)
+        (igv_dir / "SAMPLE1_kraken2_Virus-A_mappingorganism_Virus-A_report.html").write_text("<html/>")
+        make_extracted_reads_dir(tmp_path, "kraken2", "SAMPLE1_Virus-A")
+        result = read_metaval(str(tmp_path))
+        assert result["results"][0]["verification_data"]["type"] == "raw_reads"
+
+    def test_verification_data_has_stats(self, tmp_path):
+        igv_dir = make_igv_dir(tmp_path)
+        (igv_dir / "SAMPLE1_kraken2_Virus-A_mappingorganism_Virus-A_report.html").write_text("<html/>")
+        make_extracted_reads_dir(tmp_path, "kraken2", "SAMPLE1_Virus-A")
+        result = read_metaval(str(tmp_path))
+        vd = result["results"][0]["verification_data"]
+        assert vd["count"] == 2
+        assert vd["avg_length"] == 10.0
+
+    def test_no_verification_data_gives_empty_dict(self, tmp_path):
+        igv_dir = make_igv_dir(tmp_path)
+        (igv_dir / "SAMPLE1_kraken2_Virus-A_mappingorganism_Virus-A_report.html").write_text("<html/>")
+        result = read_metaval(str(tmp_path))
+        vd = result["results"][0]["verification_data"]
+        assert vd["type"] == "raw_reads"
+        assert vd["count"] == 0
+
+
+# ---------------------------------------------------------------------------
 # read_metaval
 # ---------------------------------------------------------------------------
 
@@ -227,6 +383,7 @@ class TestReadMetaval:
     def test_empty_igv_directory_returns_empty_results(self, tmp_path):
         make_igv_dir(tmp_path)
         result = read_metaval(str(tmp_path))
+        assert result["results"] == []
 
     def test_happy_path_groups_by_sample_classifier_taxon(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)

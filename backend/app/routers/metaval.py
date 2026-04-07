@@ -29,13 +29,15 @@ def _serialise(doc: dict) -> dict:
     for org in doc.get("organisms", []):
         org.pop("igv_html", None)
         org.pop("igv_key", None)
-    # Strip internal storage keys from extracted_reads — expose only presence
-    reads = doc.get("extracted_reads", {})
-    doc["extracted_reads"] = {
-        "has_read_1": bool(reads.get("read_1_key")),
-        "has_read_2": bool(reads.get("read_2_key")),
-    }
-    return doc
+        # Expose verification_data without internal blob keys
+        vd = doc.get("verification_data", {})
+        doc["verification_data"] = {
+            "type": vd.get("type"),
+            "count": vd.get("count"),
+            "avg_length": vd.get("avg_length"),
+            "available": bool(vd.get("blob_key") or vd.get("read_1_key")),
+        }
+        return doc
 
 
 @router.get("/sample/{sample_id}", summary="List metaval results for a sample")
@@ -62,61 +64,37 @@ async def get_metaval(
     return _serialise(doc)
 
 
-@router.get("/{metaval_id}/reads/{read_num}", summary="Serve extracted reads FASTA for read 1 or 2")
-async def get_extracted_reads(
+@router.post("/{metaval_id}/blast", summary="Submit verification data to NCBI BLAST")
+async def blast_verification_data(
     metaval_id: str,
-    read_num: int,
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    if read_num not in (1, 2):
-        raise HTTPException(status_code=422, detail="read_num must be 1 or 2")
-
     doc = await db["metaval_results"].find_one({"_id": _oid(metaval_id)})
     if not doc:
         raise HTTPException(status_code=404, detail="Metaval result not found")
 
-    key = doc.get("extracted_reads", {}).get(f"read_{read_num}_key")
+    vd = doc.get("verification_data", {})
+    vd_type = vd.get("type")
+
+    # For assembled data use the single blob key; for raw reads use read 1
+    if vd_type in ("scaffolds", "contigs"):
+        key = vd.get("blob_key")
+    elif vd_type == "raw_reads":
+        key = vd.get("read_1_key")
+    else:
+        key = None
+
     if not key:
-        raise HTTPException(status_code=404, detail=f"Extracted reads (read {read_num}) not available")
-
-    from app.database import get_blob_store
-    content = await get_blob_store().get(key)
-    if not content:
-        raise HTTPException(status_code=404, detail="Reads not found in storage")
-
-    taxon_name = doc.get("taxon_name", "reads")
-    filename   = f"{taxon_name}_read_{read_num}.fa"
-    return PlainTextResponse(
-        content=content,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-@router.post("/{metaval_id}/blast/{read_num}", summary="Submit extracted reads to NCBI BLAST")
-async def blast_reads(
-    metaval_id: str,
-    read_num: int,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(get_current_user),
-):
-    if read_num not in (1, 2):
-        raise HTTPException(status_code=422, detail="read_num must be 1 or 2")
-
-    doc = await db["metaval_results"].find_one({"_id": _oid(metaval_id)})
-    if not doc:
-        raise HTTPException(status_code=404, detail="Metaval result not found")
-
-    key = doc.get("extracted_reads", {}).get(f"read_{read_num}_key")
-    if not key:
-        raise HTTPException(status_code=404, detail=f"Extracted reads (read {read_num}) not available")
+        raise HTTPException(status_code=404, detail="Verification data not available for BLAST")
 
     from app.database import get_blob_store
     fasta = await get_blob_store().get(key)
     if not fasta:
-        raise HTTPException(status_code=404, detail="Reads not found in storage")
+        raise HTTPException(status_code=404, detail="Verification data not found in storage")
 
     def _submit_to_ncbi(fasta: str) -> str:
+        import re
         response = http_requests.post(
             "https://blast.ncbi.nlm.nih.gov/blast/Blast.cgi",
             data={
@@ -131,7 +109,6 @@ async def blast_reads(
             timeout=60,
         )
         response.raise_for_status()
-        import re
         match = re.search(r"RID = ([A-Z0-9]+)", response.text)
         if not match:
             raise ValueError("Could not parse RID from NCBI response")
@@ -139,14 +116,14 @@ async def blast_reads(
 
     try:
         loop = asyncio.get_event_loop()
-        rid = await loop.run_in_executor(None, _submit_to_ncbi, fasta)
+        rid  = await loop.run_in_executor(None, _submit_to_ncbi, fasta)
     except ValueError as e:
         raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"NCBI BLAST submission failed: {str(e)}")
 
     return {
-        "rid": rid,
+        "rid":         rid,
         "results_url": f"https://blast.ncbi.nlm.nih.gov/blast/Blast.cgi?CMD=Get&FORMAT_TYPE=HTML&RID={rid}",
     }
 

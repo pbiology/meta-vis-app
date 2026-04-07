@@ -2,13 +2,13 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getMetavalResult, submitBlast } from '../api/metaval'
 
-function BlastModal({ readNum, onClose }) {
+function BlastModal({ onClose }) {
   const [status, setStatus] = useState('blasting')
   const [error,  setError]  = useState(null)
   const { metavalId } = useParams()
 
   useEffect(() => {
-    submitBlast(metavalId, readNum)
+    submitBlast(metavalId)
       .then(data => {
         window.open(data.results_url, '_blank')
         onClose()
@@ -29,11 +29,9 @@ function BlastModal({ readNum, onClose }) {
               <svg className="w-5 h-5 animate-spin text-blue-500 flex-shrink-0" viewBox="0 0 16 16" fill="none">
                 <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" strokeDasharray="28" strokeDashoffset="10"/>
               </svg>
-              <p className="text-sm font-medium text-gray-800">BLASTing read {readNum}…</p>
+              <p className="text-sm font-medium text-gray-800">Submitting to NCBI BLAST…</p>
             </div>
-            <p className="text-xs text-gray-400">
-              Submitting to NCBI BLAST. This can take up to 30 seconds.
-            </p>
+            <p className="text-xs text-gray-400">This can take up to 30 seconds.</p>
           </>
         )}
         {status === 'error' && (
@@ -59,54 +57,69 @@ function BlastModal({ readNum, onClose }) {
   )
 }
 
-function ReadsSection({ result }) {
-  const [blastingRead, setBlastingRead] = useState(null)
+const TYPE_LABEL = {
+  scaffolds: 'Scaffolds',
+  contigs:   'Contigs',
+  raw_reads: 'Raw reads',
+}
 
-  const reads = result?.extracted_reads ?? {}
-  const rows = [
-    { num: 1, label: 'Read 1', available: reads.has_read_1 },
-    { num: 2, label: 'Read 2', available: reads.has_read_2 },
-  ]
-  const anyAvailable = rows.some(r => r.available)
+function VerificationDataSection({ result }) {
+  const [showBlast, setShowBlast] = useState(false)
+
+  const vd = result?.verification_data ?? {}
 
   return (
     <>
-      {blastingRead && (
-        <BlastModal
-          readNum={blastingRead}
-          onClose={() => setBlastingRead(null)}
-        />
-      )}
+      {showBlast && <BlastModal onClose={() => setShowBlast(false)} />}
+
       <section className="bg-white border border-gray-100 rounded-xl">
         <div className="px-5 py-3.5 border-b border-gray-100">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Extracted reads</p>
+          <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+            Taxon verification data
+          </p>
         </div>
-        {anyAvailable ? (
+
+        {vd.type ? (
           <table className="w-full text-left">
+            <thead>
+              <tr>
+                {['Type', 'Sequences', 'Avg length', 'Data availability', ''].map(h => (
+                  <th key={h} className="px-5 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
             <tbody>
-              {rows.map(({ num, label, available }) => (
-                <tr key={num} className="border-t border-gray-50 first:border-t-0">
-                  <td className="px-5 py-2 text-xs font-medium text-gray-600 w-20">{label}</td>
-                  <td className="px-5 py-2 text-xs text-gray-400">
-                    {available ? 'Available' : <span className="text-gray-300">Not available</span>}
-                  </td>
-                  <td className="px-5 py-2 text-right">
-                    {available && (
-                      <button
-                        onClick={() => setBlastingRead(num)}
-                        className="text-xs px-3 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
-                      >
-                        BLAST read {num}
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              <tr>
+                <td className="px-5 py-2.5 text-xs text-gray-600">
+                  {TYPE_LABEL[vd.type] ?? vd.type}
+                </td>
+                <td className="px-5 py-2.5 text-xs text-gray-500 tabular-nums">
+                  {vd.count?.toLocaleString() ?? '—'}
+                </td>
+                <td className="px-5 py-2.5 text-xs text-gray-500 tabular-nums">
+                  {vd.avg_length != null ? `${vd.avg_length} bp` : '—'}
+                </td>
+                <td className="px-5 py-2.5 text-xs text-gray-400">
+                  {vd.available ? 'Available' : <span className="text-gray-300">Not available</span>}
+                </td>
+                <td className="px-5 py-2.5 text-right">
+                  {vd.available && (
+                    <button
+                      onClick={() => setShowBlast(true)}
+                      className="text-xs px-3 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                    >
+                      BLAST
+                    </button>
+                  )}
+                </td>
+              </tr>
             </tbody>
           </table>
         ) : (
           <p className="px-5 py-8 text-xs text-gray-300 text-center">
-            No extracted reads were ingested for this taxon.
+            No verification data was ingested for this taxon.
           </p>
         )}
       </section>
@@ -157,7 +170,7 @@ export default function MetavalDetails() {
         <span className="text-gray-200">/</span>
         <h1 className="text-sm font-medium text-gray-900 italic">{taxonLabel}</h1>
         {result?.taxon_id && (
-            <a
+
             href={`https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=${result.taxon_id}`}
             target="_blank"
             rel="noopener noreferrer"
@@ -169,7 +182,7 @@ export default function MetavalDetails() {
         )}
       </div>
       <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
-        <ReadsSection result={result} />
+        <VerificationDataSection result={result} />
       </div>
     </div>
   )
