@@ -10,15 +10,8 @@ export async function getMetavalResult(metavalId) {
   return res.data
 }
 
-export function getReadsDownloadUrl(metavalId, readNum) {
-  // Returns a direct URL the browser can use for download / fetch.
-  // client.defaults.baseURL already contains the API origin.
-  const base = client.defaults.baseURL ?? ''
-  return `${base}/metaval/${metavalId}/reads/${readNum}`
-}
-
-export async function submitBlast(metavalId, readNum) {
-  const res = await client.post(`/metaval/${metavalId}/blast/${readNum}`)
+export async function submitBlast(metavalId) {
+  const res = await client.post(`/metaval/${metavalId}/blast`)
   return res.data
 }
 

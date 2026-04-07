@@ -103,11 +103,33 @@ def _read_blast(metaval_dir: Path) -> dict:
     return results
 
 
+def _fasta_stats(path: Path) -> dict:
+    """
+    Compute sequence count and average length for a FASTA file.
+    """
+    sequences = []
+    current_len = 0
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith('>'):
+                if current_len > 0:
+                    sequences.append(current_len)
+                current_len = 0
+            else:
+                current_len += len(line)
+    if current_len > 0:
+        sequences.append(current_len)
+    count = len(sequences)
+    avg   = round(sum(sequences) / count, 1) if count else 0
+    return {'count': count, 'avg_length': avg}
+
+
 def _read_extracted_reads(metaval_dir: Path) -> dict:
     """
     Scan extracted_reads/{classifier}/ for paired FASTA files.
     Returns a dict keyed by (name_part, classifier) ->
-      {'read_1_path': str, 'read_2_path': str | None}
+      {'read_1_path': str, 'read_2_path': str | None, 'count': int, 'avg_length': float}
     where name_part is "{sample_name}_{taxon_name}" (same convention as blast).
 
     Filename pattern:
@@ -124,17 +146,68 @@ def _read_extracted_reads(metaval_dir: Path) -> dict:
         classifier = clf_dir.name
 
         for fa_file in clf_dir.glob(f'*.extracted_{classifier}_read_1.fa'):
-            # Strip the .extracted_{classifier}_read_1.fa suffix to get
-            # "{sample_name}_{taxon_name}" — the dot before "extracted" is
-            # the delimiter between prefix and the extracted suffix.
             name_part = fa_file.name.replace(f'.extracted_{classifier}_read_1.fa', '')
-            read_2 = clf_dir / fa_file.name.replace('_read_1.fa', '_read_2.fa')
+            read_2    = clf_dir / fa_file.name.replace('_read_1.fa', '_read_2.fa')
+            stats     = _fasta_stats(fa_file)
             reads_map[(name_part, classifier)] = {
                 'read_1_path': str(fa_file),
                 'read_2_path': str(read_2) if read_2.exists() else None,
+                'count':       stats['count'],
+                'avg_length':  stats['avg_length'],
             }
 
     return reads_map
+
+
+def _read_spades(metaval_dir: Path) -> dict:
+    """
+    Scan spades/{classifier}/ for assembly output.
+    Prefers scaffolds.fa over contigs.fa.
+    Returns a dict keyed by (name_part, classifier) ->
+      {'type': 'scaffolds'|'contigs', 'path': str, 'count': int, 'avg_length': float}
+    where name_part is "{sample_name}_{taxon_name}".
+
+    Filename pattern:
+      {sample_name}_{taxon_name}.scaffolds.fa
+      {sample_name}_{taxon_name}.contigs.fa
+    """
+    spades_map = {}
+    spades_dir = metaval_dir / 'spades'
+    if not spades_dir.exists():
+        return spades_map
+
+    for clf_dir in spades_dir.iterdir():
+        if not clf_dir.is_dir():
+            continue
+        classifier = clf_dir.name
+
+        # Index available files by name_part
+        scaffolds = {
+            f.name.replace('.scaffolds.fa', ''): f
+            for f in clf_dir.glob('*.scaffolds.fa')
+        }
+        contigs = {
+            f.name.replace('.contigs.fa', ''): f
+            for f in clf_dir.glob('*.contigs.fa')
+        }
+
+        all_name_parts = set(scaffolds) | set(contigs)
+        for name_part in all_name_parts:
+            if name_part in scaffolds:
+                fa_file    = scaffolds[name_part]
+                entry_type = 'scaffolds'
+            else:
+                fa_file    = contigs[name_part]
+                entry_type = 'contigs'
+            stats = _fasta_stats(fa_file)
+            spades_map[(name_part, classifier)] = {
+                'type':       entry_type,
+                'path':       str(fa_file),
+                'count':      stats['count'],
+                'avg_length': stats['avg_length'],
+            }
+
+    return spades_map
 
 
 def _read_metaval_pipeline_info(metaval_dir: Path) -> Optional[dict]:
@@ -164,9 +237,10 @@ def read_metaval(metaval_dir: str) -> dict:
     if not igv_dir.exists():
         raise FileNotFoundError(f"Metaval igv/ subdirectory not found: {igv_dir}")
 
-    taxid_map        = _read_viral_taxids(metaval_dir)
-    blast_data       = _read_blast(metaval_dir)
-    reads_data       = _read_extracted_reads(metaval_dir)
+    taxid_map = _read_viral_taxids(metaval_dir)
+    blast_data = _read_blast(metaval_dir)
+    reads_data = _read_extracted_reads(metaval_dir)
+    spades_data = _read_spades(metaval_dir)
     metaval_pipeline = _read_metaval_pipeline_info(metaval_dir)
 
     # Group IGV files by (sample_name, classifier, taxon_name)
@@ -193,16 +267,34 @@ def read_metaval(metaval_dir: str) -> dict:
         name_part = f"{sample_name}_{taxon_name}"
 
         blast_hits = blast_data.get((name_part, classifier), [])
-        reads      = reads_data.get((name_part, classifier), {})
+
+        # Prefer spades assembly over raw reads if available
+        spades = spades_data.get((name_part, classifier))
+        reads = reads_data.get((name_part, classifier), {})
+        if spades:
+            verification_data = {
+                'type': spades['type'],  # 'scaffolds' or 'contigs'
+                'path': spades['path'],
+                'count': spades['count'],
+                'avg_length': spades['avg_length'],
+            }
+        else:
+            verification_data = {
+                'type': 'raw_reads',
+                'read_1_path': reads.get('read_1_path'),
+                'read_2_path': reads.get('read_2_path'),
+                'count': reads.get('count', 0),
+                'avg_length': reads.get('avg_length', 0),
+            }
 
         results.append({
-            'sample_name':     sample_name,
-            'classifier':      classifier,
-            'taxon_id':        taxon_id,
-            'taxon_name':      taxon_name,
-            'organisms':       organisms,
-            'blast':           blast_hits,
-            'extracted_reads': reads,   # {'read_1_path': ..., 'read_2_path': ...}
+            'sample_name': sample_name,
+            'classifier': classifier,
+            'taxon_id': taxon_id,
+            'taxon_name': taxon_name,
+            'organisms': organisms,
+            'blast': blast_hits,
+            'verification_data': verification_data,
         })
 
     return {
