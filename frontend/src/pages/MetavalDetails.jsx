@@ -96,7 +96,12 @@ function VerificationDataSection({ result }) {
                   {TYPE_LABEL[vd.type] ?? vd.type}
                 </td>
                 <td className="px-5 py-2.5 text-xs text-gray-500 tabular-nums">
-                  {vd.count?.toLocaleString() ?? '—'}
+{                 vd.count != null
+                    ? vd.type === 'raw_reads'
+                      ? `${vd.count.toLocaleString()} × ${vd.file_count ?? 1} (${(vd.file_count ?? 1) > 1 ? 'paired-end' : 'single-end'})`
+                      : vd.count.toLocaleString()
+                    : '—'
+                  }
                 </td>
                 <td className="px-5 py-2.5 text-xs text-gray-500 tabular-nums">
                   {vd.avg_length != null ? `${vd.avg_length} bp` : '—'}

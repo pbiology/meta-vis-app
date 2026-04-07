@@ -147,13 +147,15 @@ def _read_extracted_reads(metaval_dir: Path) -> dict:
 
         for fa_file in clf_dir.glob(f'*.extracted_{classifier}_read_1.fa'):
             name_part = fa_file.name.replace(f'.extracted_{classifier}_read_1.fa', '')
-            read_2    = clf_dir / fa_file.name.replace('_read_1.fa', '_read_2.fa')
-            stats     = _fasta_stats(fa_file)
+            read_2 = clf_dir / fa_file.name.replace('_read_1.fa', '_read_2.fa')
+            read_2_path = str(read_2) if read_2.exists() else None
+            stats = _fasta_stats(fa_file)
             reads_map[(name_part, classifier)] = {
                 'read_1_path': str(fa_file),
-                'read_2_path': str(read_2) if read_2.exists() else None,
-                'count':       stats['count'],
-                'avg_length':  stats['avg_length'],
+                'read_2_path': read_2_path,
+                'file_count': 2 if read_2_path else 1,
+                'count': stats['count'],
+                'avg_length': stats['avg_length'],
             }
 
     return reads_map
@@ -283,6 +285,7 @@ def read_metaval(metaval_dir: str) -> dict:
                 'type': 'raw_reads',
                 'read_1_path': reads.get('read_1_path'),
                 'read_2_path': reads.get('read_2_path'),
+                'file_count': reads.get('file_count', 1),
                 'count': reads.get('count', 0),
                 'avg_length': reads.get('avg_length', 0),
             }

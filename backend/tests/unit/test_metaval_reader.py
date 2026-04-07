@@ -296,6 +296,16 @@ class TestReadExtractedReads:
         result = _read_extracted_reads(tmp_path)
         entry = result[("SAMPLE1_Virus-A", "kraken2")]
         assert entry['read_2_path'] is not None
+        assert entry['file_count'] == 2
+
+    def test_single_end_file_count_is_1(self, tmp_path):
+        reads_dir = tmp_path / "extracted_reads" / "kraken2"
+        reads_dir.mkdir(parents=True, exist_ok=True)
+        fa = reads_dir / "SAMPLE1_Virus-A.extracted_kraken2_read_1.fa"
+        fa.write_text(FASTA_CONTENT)
+        # No read_2 file created
+        result = _read_extracted_reads(tmp_path)
+        assert result[("SAMPLE1_Virus-A", "kraken2")]['file_count'] == 1
 
     def test_missing_directory_returns_empty(self, tmp_path):
         result = _read_extracted_reads(tmp_path)
