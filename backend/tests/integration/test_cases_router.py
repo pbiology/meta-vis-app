@@ -1,0 +1,261 @@
+# tests/integration/test_cases_router.py
+
+import pytest
+from bson import ObjectId
+from datetime import datetime, timezone
+from fastapi.testclient import TestClient
+
+from app.routers.cases import router
+from tests.conftest import make_test_app
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def app(fake_db, fake_blob):
+    return make_test_app(router, fake_db, fake_blob)
+
+
+@pytest.fixture
+def client(app):
+    return TestClient(app)
+
+
+async def insert_case(db, case_id="testcase", reviewed=False, order_date="2026-01-01"):
+    result = await db["cases"].insert_one({
+        "case_id":       case_id,
+        "order_date":    order_date,
+        "ingested_at":   datetime.now(timezone.utc),
+        "sample_ids":    [],
+        "classifiers":   [],
+        "has_krona":     False,
+        "pipeline_info": None,
+        "sample_count":  0,
+        "control_count": 0,
+        "sample_names":  [],
+        "notes":         [],
+        "review": {
+            "reviewed":    reviewed,
+            "reviewed_by": "alice" if reviewed else None,
+            "reviewed_at": None,
+            "notes":       None,
+        },
+    })
+    return result.inserted_id
+
+
+async def insert_sample(db, case_oid, sample_id="SRR001", sample_type="sample"):
+    result = await db["samples"].insert_one({
+        "case_id":     case_oid,
+        "case_id_str": "testcase",
+        "sample_type": sample_type,
+        "material":    "DNA",
+        "sample":      {"sample_id": sample_id, "sample_source": "blood"},
+        "taxprofiler": {"fastp": None, "bowtie2": None, "classifiers": {}},
+        "profiles":    [],
+        "has_krona":   False,
+        "review":      {"reviewed": False},
+        "ingested_at": datetime.now(timezone.utc),
+    })
+    return result.inserted_id
+
+
+# ---------------------------------------------------------------------------
+# GET /cases/stats
+# ---------------------------------------------------------------------------
+
+class TestCaseStats:
+
+    async def test_empty_db_returns_zeros(self, client, fake_db):
+        resp = client.get("/api/v1/cases/stats")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total"] == 0
+        assert data["pending"] == 0
+        assert data["reviewed"] == 0
+
+    async def test_counts_correctly(self, client, fake_db):
+        await insert_case(fake_db, "case1", reviewed=False)
+        await insert_case(fake_db, "case2", reviewed=True)
+        resp = client.get("/api/v1/cases/stats")
+        data = resp.json()
+        assert data["total"] == 2
+        assert data["reviewed"] == 1
+        assert data["pending"] == 1
+
+
+# ---------------------------------------------------------------------------
+# GET /cases
+# ---------------------------------------------------------------------------
+
+class TestListCases:
+
+    async def test_empty_db_returns_empty_list(self, client, fake_db):
+        resp = client.get("/api/v1/cases")
+        assert resp.status_code == 200
+        assert resp.json()["items"] == []
+        assert resp.json()["total"] == 0
+
+    async def test_returns_ingested_case(self, client, fake_db):
+        await insert_case(fake_db, "speedysnake")
+        resp = client.get("/api/v1/cases")
+        items = resp.json()["items"]
+        assert len(items) == 1
+        assert items[0]["case_id"] == "speedysnake"
+
+    async def test_search_filters_by_case_id(self, client, fake_db):
+        await insert_case(fake_db, "speedy")
+        await insert_case(fake_db, "slowtiger")
+        resp = client.get("/api/v1/cases?search=speedy")
+        items = resp.json()["items"]
+        assert len(items) == 1
+        assert items[0]["case_id"] == "speedy"
+
+    async def test_pagination_total_correct(self, client, fake_db):
+        for i in range(3):
+            await insert_case(fake_db, f"case{i}")
+        resp = client.get("/api/v1/cases")
+        assert resp.json()["total"] == 3
+
+
+# ---------------------------------------------------------------------------
+# GET /cases/{case_id}
+# ---------------------------------------------------------------------------
+
+class TestGetCase:
+
+    async def test_returns_case(self, client, fake_db):
+        await insert_case(fake_db, "mycase")
+        resp = client.get("/api/v1/cases/mycase")
+        assert resp.status_code == 200
+        assert resp.json()["case_id"] == "mycase"
+
+    async def test_unknown_case_returns_404(self, client, fake_db):
+        resp = client.get("/api/v1/cases/nonexistent")
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# GET /cases/{case_id}/samples
+# ---------------------------------------------------------------------------
+
+class TestListSamplesForCase:
+
+    async def test_returns_samples(self, client, fake_db):
+        oid = await insert_case(fake_db, "testcase")
+        await insert_sample(fake_db, oid, "SRR001")
+        resp = client.get("/api/v1/cases/testcase/samples")
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+        assert resp.json()[0]["sample"]["sample_id"] == "SRR001"
+
+    async def test_unknown_case_returns_404(self, client, fake_db):
+        resp = client.get("/api/v1/cases/nonexistent/samples")
+        assert resp.status_code == 404
+
+    async def test_type_filter_controls(self, client, fake_db):
+        oid = await insert_case(fake_db, "testcase")
+        await insert_sample(fake_db, oid, "SRR001", sample_type="sample")
+        await insert_sample(fake_db, oid, "CTRL01", sample_type="negative_ctrl")
+        resp = client.get("/api/v1/cases/testcase/samples?type=controls")
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["sample"]["sample_id"] == "CTRL01"
+
+
+# ---------------------------------------------------------------------------
+# PATCH /cases/{case_id}/review
+# ---------------------------------------------------------------------------
+
+class TestReviewCase:
+
+    async def test_marks_case_as_reviewed(self, client, fake_db):
+        await insert_case(fake_db, "testcase", reviewed=False)
+        resp = client.patch("/api/v1/cases/testcase/review", json={})
+        assert resp.status_code == 200
+        assert resp.json()["reviewed"] is True
+        assert resp.json()["reviewed_by"] == "testuser"
+
+    async def test_unknown_case_returns_404(self, client, fake_db):
+        resp = client.patch("/api/v1/cases/nonexistent/review", json={})
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# DELETE /cases/{case_id}/review
+# ---------------------------------------------------------------------------
+
+class TestUnreviewCase:
+
+    async def test_removes_review(self, client, fake_db):
+        await insert_case(fake_db, "testcase", reviewed=True)
+        resp = client.delete("/api/v1/cases/testcase/review")
+        assert resp.status_code == 200
+        assert resp.json()["reviewed"] is False
+
+    async def test_unknown_case_returns_404(self, client, fake_db):
+        resp = client.delete("/api/v1/cases/nonexistent/review")
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# POST /cases/{case_id}/notes
+# ---------------------------------------------------------------------------
+
+class TestAddNote:
+
+    async def test_adds_note(self, client, fake_db):
+        await insert_case(fake_db, "testcase")
+        resp = client.post("/api/v1/cases/testcase/notes", json={"text": "Looks clean"})
+        assert resp.status_code == 200
+        assert resp.json()["text"] == "Looks clean"
+        assert resp.json()["author"] == "testuser"
+
+    async def test_empty_note_returns_422(self, client, fake_db):
+        await insert_case(fake_db, "testcase")
+        resp = client.post("/api/v1/cases/testcase/notes", json={"text": "  "})
+        assert resp.status_code == 422
+
+    async def test_unknown_case_returns_404(self, client, fake_db):
+        resp = client.post("/api/v1/cases/nonexistent/notes", json={"text": "hi"})
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# DELETE /cases/{case_id}/notes/{note_index}
+# ---------------------------------------------------------------------------
+
+class TestDeleteNote:
+
+    async def test_deletes_note(self, client, fake_db):
+        await insert_case(fake_db, "testcase")
+        client.post("/api/v1/cases/testcase/notes", json={"text": "First note"})
+        resp = client.delete("/api/v1/cases/testcase/notes/0")
+        assert resp.status_code == 200
+        assert resp.json()["deleted"] is True
+
+    async def test_out_of_range_index_returns_404(self, client, fake_db):
+        await insert_case(fake_db, "testcase")
+        resp = client.delete("/api/v1/cases/testcase/notes/99")
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# DELETE /cases/{case_id}
+# ---------------------------------------------------------------------------
+
+class TestDeleteCase:
+
+    async def test_deletes_case(self, client, fake_db):
+        await insert_case(fake_db, "testcase")
+        resp = client.delete("/api/v1/cases/testcase")
+        assert resp.status_code == 200
+        assert resp.json()["deleted"] is True
+        # Confirm it's gone
+        assert client.get("/api/v1/cases/testcase").status_code == 404
+
+    async def test_unknown_case_returns_404(self, client, fake_db):
+        resp = client.delete("/api/v1/cases/nonexistent")
+        assert resp.status_code == 404
