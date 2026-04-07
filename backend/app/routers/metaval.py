@@ -35,6 +35,7 @@ def _serialise(doc: dict) -> dict:
             "type": vd.get("type"),
             "count": vd.get("count"),
             "avg_length": vd.get("avg_length"),
+            "file_count": vd.get("file_count", 1),
             "available": bool(vd.get("blob_key") or vd.get("read_1_key")),
         }
         return doc

@@ -199,7 +199,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             # Upload verification data (scaffolds, contigs, or raw reads)
             vd = r.get("verification_data", {})
             vd_type = vd.get("type")
-            vd_store = {"type": vd_type, "count": vd.get("count", 0), "avg_length": vd.get("avg_length", 0)}
+            vd_store = {"type": vd_type, "count": vd.get("count", 0), "avg_length": vd.get("avg_length", 0), "file_count": vd.get("file_count", 1)}
 
             if vd_type in ("scaffolds", "contigs"):
                 fasta_path = vd.get("path")
