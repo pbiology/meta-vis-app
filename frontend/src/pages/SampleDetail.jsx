@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { getSample, getProfile, getKronaUrl, getNtcProfiles } from '../api/samples'
+import { getSample, getProfile, getNtcProfiles } from '../api/samples'
 import Badge from '../components/Badge'
 import MetricCard from '../components/MetricCard'
 import { getMetavalForSample } from '../api/metaval'
@@ -327,9 +327,7 @@ export default function SampleDetail() {
   const [profile,        setProfile]        = useState(null)
   const [loading,        setLoading]        = useState(true)
   const [error,          setError]          = useState(null)
-  const [kronaUrls,      setKronaUrls]      = useState({})
-  const [kronaErrors,    setKronaErrors]    = useState({})
-  const [activeTab, setActiveTab] = useState(null)
+const [activeTab, setActiveTab] = useState(null)
   const [metavalResults,    setMetavalResults]    = useState([])
   const [outbreakTaxonIds,  setOutbreakTaxonIds]  = useState(new Set())
   const [ntcProfiles, setNtcProfiles] = useState([])
@@ -346,28 +344,7 @@ export default function SampleDetail() {
           const ids = new Set(data.outbreaks.map(o => o.taxon_id))
           setOutbreakTaxonIds(ids)
         }).catch(() => {})
-        if (s.has_krona && p.profiles?.length) {
-          const firstClassifier = p.profiles[0].classifier
-          setActiveTab(firstClassifier)
-          const urlEntries = await Promise.all(
-            p.profiles.map(async prof => {
-              try {
-                const url = await getKronaUrl(sampleId, prof.classifier)
-                return { name: prof.classifier, url, error: false }
-              } catch {
-                return { name: prof.classifier, url: null, error: true }
-              }
-            })
-          )
-          const urls   = {}
-          const errors = {}
-          urlEntries.forEach(({ name, url, error }) => {
-            if (error) errors[name] = true
-            else urls[name] = url
-          })
-          setKronaUrls(urls)
-          setKronaErrors(errors)
-        } else if (p.profiles?.length) {
+        if (p.profiles?.length) {
           setActiveTab(p.profiles[0].classifier)
         }
       } catch {
@@ -452,44 +429,56 @@ export default function SampleDetail() {
           </section>
         )}
 
-        {/* Krona — tabs per classifier */}
-        {sample?.has_krona && classifiers.length > 0 && (
+        {/* Metaval — viral taxa per classifier */}
+        {metavalResults.length > 0 && (
           <section className="bg-white border border-gray-100 rounded-xl">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
-              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">Krona</p>
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">Metaval</p>
               <div className="flex gap-1.5">
-                {classifiers.map(clf => (
-                  <button
-                    key={clf.classifier}
-                    onClick={() => setActiveTab(clf.classifier)}
-                    className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
-                      activeTab === clf.classifier
-                        ? 'bg-gray-900 text-white font-medium'
-                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                    }`}
-                  >
-                    {clf.classifier}
-                  </button>
-                ))}
+                {classifiers.map(clf => {
+                  const hasResults = metavalResults.some(r => r.classifier === clf.classifier)
+                  if (!hasResults) return null
+                  return (
+                    <button
+                      key={clf.classifier}
+                      onClick={() => setActiveTab(clf.classifier)}
+                      className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
+                        activeTab === clf.classifier
+                          ? 'bg-gray-900 text-white font-medium'
+                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      }`}
+                    >
+                      {clf.classifier}
+                    </button>
+                  )
+                })}
               </div>
             </div>
-            <div className="p-4">
-              {activeTab && kronaErrors[activeTab] && (
-                <p className="text-xs text-red-400">Krona file could not be loaded.</p>
-              )}
-              {activeTab && !kronaUrls[activeTab] && !kronaErrors[activeTab] && (
-                <div className="flex items-center justify-center h-40 text-sm text-gray-400">Loading Krona…</div>
-              )}
-              {activeTab && kronaUrls[activeTab] && (
-                <iframe
-                  key={kronaUrls[activeTab]}
-                  src={kronaUrls[activeTab]}
-                  title={`Krona — ${activeTab}`}
-                  className="w-full rounded-lg border border-gray-100"
-                  style={{ height: '85vh' }}
-                  sandbox="allow-scripts allow-popups allow-forms"
-                />
-              )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100">Viral taxon</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {metavalResults
+                    .filter(r => r.classifier === activeTab)
+                    .map(r => (
+                      <tr key={r._id} className="border-t border-gray-50 hover:bg-gray-50">
+                        <td className="px-4 py-2.5">
+                          <Link
+                            to={`/samples/${sampleId}/metaval/${r._id}`}
+                            className="text-xs italic text-gray-700 hover:text-blue-600 underline transition-colors"
+                          >
+                            {r.taxon_name.replace(/-/g, ' ')}
+                          </Link>
+                        </td>
+                      </tr>
+                    ))
+                  }
+                </tbody>
+              </table>
             </div>
           </section>
         )}
