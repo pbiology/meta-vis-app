@@ -66,7 +66,7 @@ export default function SampleList() {
           </svg>
           <input
             type="text"
-            placeholder="Search sample ID…"
+            placeholder="Search sample ID (case sensitive)…"
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             className="bg-transparent text-xs text-gray-700 placeholder-gray-400 outline-none w-full"
