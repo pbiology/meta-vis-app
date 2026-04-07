@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getMetavalResult, submitBlast } from '../api/metaval'
+import { getMetavalResult, submitBlast, getIgvUrl } from '../api/metaval'
 
 function BlastModal({ onClose }) {
   const [status, setStatus] = useState('blasting')
@@ -219,6 +219,111 @@ function BlastTable({ rows, program }) {
   )
 }
 
+function CandidateOrganismsSection({ metavalId, organisms }) {
+  const [selected,   setSelected]   = useState(null)
+  const [igvUrl,     setIgvUrl]     = useState(null)
+  const [igvLoading, setIgvLoading] = useState(false)
+  const [igvError,   setIgvError]   = useState(null)
+
+  async function handleSelect(org) {
+    if (selected === org.organism_name) return
+    setSelected(org.organism_name)
+    setIgvUrl(null)
+    setIgvError(null)
+    if (org.igv_too_large) {
+      setIgvError('IGV file exceeds 10 MB and cannot be displayed.')
+      return
+    }
+    setIgvLoading(true)
+    try {
+      const url = await getIgvUrl(metavalId, org.organism_name)
+      setIgvUrl(url)
+    } catch {
+      setIgvError('Failed to load IGV report.')
+    } finally {
+      setIgvLoading(false)
+    }
+  }
+
+  return (
+    <section className="bg-white border border-gray-100 rounded-xl">
+      <div className="px-5 py-3.5 border-b border-gray-100">
+        <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+          Candidate organisms
+        </p>
+      </div>
+
+      {!organisms || organisms.length === 0 ? (
+        <p className="px-5 py-8 text-xs text-gray-300 text-center">
+          No predicted candidate found
+        </p>
+      ) : (
+        <>
+          <table className="w-full text-left">
+            <thead>
+              <tr>
+                {['Organism', 'IGV size', ''].map(h => (
+                  <th key={h} className="px-5 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {organisms.map(org => (
+                <tr
+                  key={org.organism_name}
+                  onClick={() => handleSelect(org)}
+                  className={`cursor-pointer border-t border-gray-50 transition-colors ${
+                    selected === org.organism_name ? 'bg-blue-50' : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <td className="px-5 py-2.5 text-xs italic text-gray-700">
+                    {org.organism_name.replace(/-/g, ' ')}
+                  </td>
+                  <td className="px-5 py-2.5 text-xs text-gray-400 tabular-nums">
+                    {org.igv_too_large
+                      ? <span className="text-red-400">&gt; 10 MB</span>
+                      : `${(org.igv_file_size_bytes / 1024).toFixed(0)} KB`
+                    }
+                  </td>
+                  <td className="px-5 py-2.5 text-right">
+                    {selected === org.organism_name && (
+                      <span className="text-xs text-blue-500">viewing</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {selected && (
+            <div className="border-t border-gray-100 p-5">
+              {igvError && (
+                <p className="text-xs text-red-400">{igvError}</p>
+              )}
+              {igvLoading && (
+                <div className="flex items-center justify-center h-40 text-sm text-gray-400">
+                  Loading IGV…
+                </div>
+              )}
+              {igvUrl && !igvLoading && (
+                <iframe
+                  src={igvUrl}
+                  title="IGV report"
+                  className="w-full rounded-lg border border-gray-100"
+                  style={{ height: '75vh' }}
+                  sandbox="allow-scripts allow-popups allow-forms"
+                />
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
 export default function MetavalDetails() {
   const { sampleId, metavalId } = useParams()
   const navigate = useNavigate()
@@ -276,6 +381,7 @@ export default function MetavalDetails() {
       <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
         <VerificationDataSection result={result} />
         <BlastResultsSection blast={result?.blast} />
+        <CandidateOrganismsSection metavalId={metavalId} organisms={result?.organisms} />
       </div>
     </div>
   )
