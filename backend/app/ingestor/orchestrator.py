@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from pathlib import Path
+import asyncio
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
@@ -72,13 +73,13 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     case_result    = await db["cases"].insert_one(case_doc)
     case_object_id = case_result.inserted_id
 
-    updated_classifiers = []
-    for clf in request.classifiers:
-        krona_id = None
+    async def _upload_krona(clf):
         if clf.krona:
             await _store_krona(case_object_id, clf.name, clf.krona)
-            krona_id = clf.name  # marker only — used to confirm krona exists
-        updated_classifiers.append({"name": clf.name, "db": clf.db, "krona_id": krona_id})
+            return {"name": clf.name, "db": clf.db, "krona_id": clf.name}
+        return {"name": clf.name, "db": clf.db, "krona_id": None}
+
+    updated_classifiers = list(await asyncio.gather(*[_upload_krona(clf) for clf in request.classifiers]))
 
     await db["cases"].update_one(
         {"_id": case_object_id},
@@ -167,17 +168,16 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
                 {"$set": {"metaval_pipeline_info": metaval_data["pipeline_info"]}},
             )
 
+        from app.database import get_blob_store
+
         for r in metaval_results:
             sample_doc = await db["samples"].find_one({
-                "case_id": case_object_id,
+                "case_id":          case_object_id,
                 "sample.sample_id": r["sample_name"],
             })
             sample_object_id = sample_doc["_id"] if sample_doc else None
 
-            # Upload IGV files to blob store, store key reference
-            from app.database import get_blob_store
-            organisms = []
-            for org in r["organisms"]:
+            async def _upload_igv(org):
                 igv_key = None
                 if not org.get("igv_too_large") and org.get("igv_file_path"):
                     igv_key = (
@@ -186,22 +186,24 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
                     )
                     html = Path(org["igv_file_path"]).read_text(encoding="utf-8")
                     await get_blob_store().put(igv_key, html)
-                organisms.append({
-                    "organism_name": org["organism_name"],
-                    "igv_key": igv_key,
+                return {
+                    "organism_name":       org["organism_name"],
+                    "igv_key":             igv_key,
                     "igv_file_size_bytes": org["igv_file_size_bytes"],
-                    "igv_too_large": org["igv_too_large"],
-                })
+                    "igv_too_large":       org["igv_too_large"],
+                }
+
+            organisms = list(await asyncio.gather(*[_upload_igv(org) for org in r["organisms"]]))
 
             await db["metaval_results"].insert_one({
-                "case_id": case_object_id,
-                "sample_id": sample_object_id,
+                "case_id":     case_object_id,
+                "sample_id":   sample_object_id,
                 "sample_name": r["sample_name"],
-                "classifier": r["classifier"],
-                "taxon_id": r["taxon_id"],
-                "taxon_name": r["taxon_name"],
-                "organisms": organisms,
-                "blast": r["blast"],
+                "classifier":  r["classifier"],
+                "taxon_id":    r["taxon_id"],
+                "taxon_name":  r["taxon_name"],
+                "organisms":   organisms,
+                "blast":       r["blast"],
                 "ingested_at": now,
             })
 
