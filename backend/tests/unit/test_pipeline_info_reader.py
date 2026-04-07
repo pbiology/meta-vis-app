@@ -29,6 +29,7 @@ VALID_PIPELINE_INFO = {
 # Happy path
 # ---------------------------------------------------------------------------
 
+
 def test_read_pipeline_info_returns_dict(tmp_path):
     path = write_yaml(tmp_path, VALID_PIPELINE_INFO)
     result = read_pipeline_info(path)
@@ -61,6 +62,7 @@ def test_nextflow_version_correct(tmp_path):
 # ---------------------------------------------------------------------------
 # Error cases
 # ---------------------------------------------------------------------------
+
 
 def test_file_not_found_raises():
     with pytest.raises(FileNotFoundError):

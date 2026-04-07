@@ -22,7 +22,9 @@ async def list_subjects(
     return subjects
 
 
-@router.get("/{subject_id}/samples", summary="All samples for a subject, sorted by order_date")
+@router.get(
+    "/{subject_id}/samples", summary="All samples for a subject, sorted by order_date"
+)
 async def list_samples_for_subject(
     subject_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -45,9 +47,11 @@ async def list_samples_for_subject(
         "taxprofiler.bowtie2": 1,
     }
 
-    cursor = db["samples"].find(
-        {"subject_id": subject["_id"]}, projection
-    ).sort([("order_date", -1), ("ingested_at", -1)])
+    cursor = (
+        db["samples"]
+        .find({"subject_id": subject["_id"]}, projection)
+        .sort([("order_date", -1), ("ingested_at", -1)])
+    )
 
     samples = []
     async for doc in cursor:

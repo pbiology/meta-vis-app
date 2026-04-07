@@ -20,14 +20,16 @@ def client(app):
 
 
 async def insert_case(db, case_id="testcase", has_krona=True):
-    result = await db["cases"].insert_one({
-        "case_id":     case_id,
-        "ingested_at": datetime.now(timezone.utc),
-        "has_krona":   has_krona,
-        "classifiers": [],
-        "review":      {"reviewed": False},
-        "notes":       [],
-    })
+    result = await db["cases"].insert_one(
+        {
+            "case_id": case_id,
+            "ingested_at": datetime.now(timezone.utc),
+            "has_krona": has_krona,
+            "classifiers": [],
+            "review": {"reviewed": False},
+            "notes": [],
+        }
+    )
     return result.inserted_id
 
 
@@ -35,8 +37,8 @@ async def insert_case(db, case_id="testcase", has_krona=True):
 # GET /cases/{case_id}/krona
 # ---------------------------------------------------------------------------
 
-class TestGetCaseKrona:
 
+class TestGetCaseKrona:
     async def test_serves_krona_html(self, client, fake_db, fake_blob):
         oid = await insert_case(fake_db, "testcase")
         await fake_blob.put(f"krona/{oid}/kraken2.html", "<html>krona</html>")

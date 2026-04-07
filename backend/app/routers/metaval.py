@@ -21,8 +21,8 @@ def _oid(id_str: str) -> ObjectId:
 
 
 def _serialise(doc: dict) -> dict:
-    doc["_id"]       = str(doc["_id"])
-    doc["case_id"]   = str(doc["case_id"])
+    doc["_id"] = str(doc["_id"])
+    doc["case_id"] = str(doc["case_id"])
     if doc.get("sample_id"):
         doc["sample_id"] = str(doc["sample_id"])
     # Strip internal storage fields from organism list
@@ -47,9 +47,11 @@ async def list_metaval_for_sample(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    docs = await db["metaval_results"].find(
-        {"sample_id": _oid(sample_id)}
-    ).to_list(length=200)
+    docs = (
+        await db["metaval_results"]
+        .find({"sample_id": _oid(sample_id)})
+        .to_list(length=200)
+    )
     return [_serialise(d) for d in docs]
 
 
@@ -87,24 +89,30 @@ async def blast_verification_data(
         key = None
 
     if not key:
-        raise HTTPException(status_code=404, detail="Verification data not available for BLAST")
+        raise HTTPException(
+            status_code=404, detail="Verification data not available for BLAST"
+        )
 
     from app.database import get_blob_store
+
     fasta = await get_blob_store().get(key)
     if not fasta:
-        raise HTTPException(status_code=404, detail="Verification data not found in storage")
+        raise HTTPException(
+            status_code=404, detail="Verification data not found in storage"
+        )
 
     def _submit_to_ncbi(fasta: str) -> str:
         import re
+
         response = http_requests.post(
             "https://blast.ncbi.nlm.nih.gov/blast/Blast.cgi",
             data={
-                "CMD":          "Put",
-                "PROGRAM":      "blastn",
-                "DATABASE":     "nt",
-                "QUERY":        fasta,
-                "FORMAT_TYPE":  "HTML",
-                "MEGABLAST":    "on",
+                "CMD": "Put",
+                "PROGRAM": "blastn",
+                "DATABASE": "nt",
+                "QUERY": fasta,
+                "FORMAT_TYPE": "HTML",
+                "MEGABLAST": "on",
                 "HITLIST_SIZE": "10",
             },
             timeout=60,
@@ -117,19 +125,24 @@ async def blast_verification_data(
 
     try:
         loop = asyncio.get_event_loop()
-        rid  = await loop.run_in_executor(None, _submit_to_ncbi, fasta)
+        rid = await loop.run_in_executor(None, _submit_to_ncbi, fasta)
     except ValueError as e:
         raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"NCBI BLAST submission failed: {str(e)}")
+        raise HTTPException(
+            status_code=502, detail=f"NCBI BLAST submission failed: {str(e)}"
+        )
 
     return {
-        "rid":         rid,
+        "rid": rid,
         "results_url": f"https://blast.ncbi.nlm.nih.gov/blast/Blast.cgi?CMD=Get&FORMAT_TYPE=HTML&RID={rid}",
     }
 
 
-@router.get("/{metaval_id}/igv/{organism_name}", summary="Serve IGV HTML for a specific organism")
+@router.get(
+    "/{metaval_id}/igv/{organism_name}",
+    summary="Serve IGV HTML for a specific organism",
+)
 async def get_igv(
     metaval_id: str,
     organism_name: str,
@@ -140,9 +153,14 @@ async def get_igv(
     if not doc:
         raise HTTPException(status_code=404, detail="Metaval result not found")
 
-    org = next((o for o in doc.get("organisms", []) if o["organism_name"] == organism_name), None)
+    org = next(
+        (o for o in doc.get("organisms", []) if o["organism_name"] == organism_name),
+        None,
+    )
     if not org:
-        raise HTTPException(status_code=404, detail=f"Organism '{organism_name}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"Organism '{organism_name}' not found"
+        )
     if org.get("igv_too_large"):
         raise HTTPException(status_code=413, detail="IGV file exceeds 10 MB limit")
 
@@ -151,6 +169,7 @@ async def get_igv(
         raise HTTPException(status_code=404, detail="IGV HTML not available")
 
     from app.database import get_blob_store
+
     html = await get_blob_store().get(igv_key)
     if not html:
         raise HTTPException(status_code=404, detail="IGV HTML not found in storage")

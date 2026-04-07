@@ -13,12 +13,12 @@ router = APIRouter(prefix="/users", tags=["users"])
 VALID_ROLES = {"reader", "writer", "admin"}
 
 REVIEWER_TITLES = [
-    (0,   "Newbie"),
-    (1,   "Initiate"),
-    (5,   "Novice"),
-    (15,  "Apprentice"),
-    (30,  "Disciple"),
-    (60,  "Adept"),
+    (0, "Newbie"),
+    (1, "Initiate"),
+    (5, "Novice"),
+    (15, "Apprentice"),
+    (30, "Disciple"),
+    (60, "Adept"),
     (100, "Journeyman"),
     (175, "Veteran"),
     (250, "Expert"),
@@ -51,16 +51,18 @@ class UserUpdatePassword(BaseModel):
 
 def _serialise(doc: dict, reviews: int = 0) -> dict:
     return {
-        "_id":            str(doc["_id"]),
-        "username":       doc["username"],
-        "role":           (doc.get("role") or "reader").lower(),
-        "reviews":        reviews,
+        "_id": str(doc["_id"]),
+        "username": doc["username"],
+        "role": (doc.get("role") or "reader").lower(),
+        "reviews": reviews,
         "reviewer_title": reviewer_title(reviews),
     }
 
 
 async def _count_reviews(db: AsyncIOMotorDatabase, username: str) -> int:
-    return await db["cases"].count_documents({"review.reviewed_by": username, "review.reviewed": True})
+    return await db["cases"].count_documents(
+        {"review.reviewed_by": username, "review.reviewed": True}
+    )
 
 
 @router.get("", summary="List all users")
@@ -83,9 +85,9 @@ async def get_my_stats(
 ):
     count = await _count_reviews(db, current_user["username"])
     return {
-        "username":        current_user["username"],
-        "reviews":         count,
-        "reviewer_title":  reviewer_title(count),
+        "username": current_user["username"],
+        "reviews": count,
+        "reviewer_title": reviewer_title(count),
     }
 
 
@@ -96,15 +98,21 @@ async def create_user(
     _user: dict = Depends(require_role("admin")),
 ):
     if body.role.lower() not in VALID_ROLES:
-        raise HTTPException(status_code=422, detail=f"Role must be one of: {', '.join(VALID_ROLES)}")
+        raise HTTPException(
+            status_code=422, detail=f"Role must be one of: {', '.join(VALID_ROLES)}"
+        )
     existing = await db["users"].find_one({"username": body.username})
     if existing:
-        raise HTTPException(status_code=409, detail=f"Username '{body.username}' already exists")
-    await db["users"].insert_one({
-        "username":      body.username,
-        "password_hash": hash_password(body.password),
-        "role":          body.role.lower(),
-    })
+        raise HTTPException(
+            status_code=409, detail=f"Username '{body.username}' already exists"
+        )
+    await db["users"].insert_one(
+        {
+            "username": body.username,
+            "password_hash": hash_password(body.password),
+            "role": body.role.lower(),
+        }
+    )
     return {"username": body.username, "role": body.role.lower()}
 
 
@@ -116,7 +124,9 @@ async def update_role(
     _user: dict = Depends(require_role("admin")),
 ):
     if body.role.lower() not in VALID_ROLES:
-        raise HTTPException(status_code=422, detail=f"Role must be one of: {', '.join(VALID_ROLES)}")
+        raise HTTPException(
+            status_code=422, detail=f"Role must be one of: {', '.join(VALID_ROLES)}"
+        )
     result = await db["users"].update_one(
         {"username": username},
         {"$set": {"role": body.role.lower()}},

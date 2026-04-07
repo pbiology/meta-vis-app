@@ -4,12 +4,15 @@ from datetime import datetime, date
 from typing import Optional, List, Literal, Dict, Any
 from pydantic import BaseModel, ConfigDict
 
+
 class _Base(BaseModel):
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
 
 # ---------------------------------------------------------------------------
 # Taxonomic profile
 # ---------------------------------------------------------------------------
+
 
 class TaxonEntry(BaseModel):
     taxon_id: int
@@ -28,6 +31,7 @@ class ClassifierProfile(BaseModel):
 # ---------------------------------------------------------------------------
 # QC blocks
 # ---------------------------------------------------------------------------
+
 
 class FastQCStats(_Base):
     total_sequences: Optional[int] = None
@@ -50,12 +54,12 @@ class FastpStats(_Base):
 
 
 class ClassifierQcStats(_Base):
-    pct_unclassified:   Optional[float] = None
-    unclassified_reads: Optional[int]   = None
-    classified_reads:   Optional[int]   = None
-    total_reads:        Optional[int]   = None
-    num_species:        Optional[int]   = None
-    num_genera:         Optional[int]   = None
+    pct_unclassified: Optional[float] = None
+    unclassified_reads: Optional[int] = None
+    classified_reads: Optional[int] = None
+    total_reads: Optional[int] = None
+    num_species: Optional[int] = None
+    num_genera: Optional[int] = None
 
 
 class Bowtie2Stats(_Base):
@@ -67,35 +71,36 @@ class Bowtie2Stats(_Base):
 
 
 class PipelineConfiguration(_Base):
-    pipeline_name:    Optional[str] = None
+    pipeline_name: Optional[str] = None
     pipeline_version: Optional[str] = None
-    nextflow:         Optional[str] = None
+    nextflow: Optional[str] = None
 
 
 class PipelineInfo(_Base):
-    software_used:          Optional[Dict[str, Any]] = None
+    software_used: Optional[Dict[str, Any]] = None
     pipeline_configuration: Optional[PipelineConfiguration] = None
 
 
 class TaxprofilerStats(_Base):
-    fastp:         Optional[FastpStats]                          = None
-    fastqc:        Optional[FastQCStats]                         = None
-    bowtie2:       Optional[Bowtie2Stats]                        = None
-    classifiers:   Optional[Dict[str, ClassifierQcStats]]        = None
-    pipeline_info: Optional[PipelineInfo]                        = None
+    fastp: Optional[FastpStats] = None
+    fastqc: Optional[FastQCStats] = None
+    bowtie2: Optional[Bowtie2Stats] = None
+    classifiers: Optional[Dict[str, ClassifierQcStats]] = None
+    pipeline_info: Optional[PipelineInfo] = None
 
 
 # ---------------------------------------------------------------------------
 # Sample metadata
 # ---------------------------------------------------------------------------
 
+
 class SampleMetadata(_Base):
-    sample_id:     str
+    sample_id: str
     sample_source: Optional[str] = None
-    material:      Optional[str] = None
-    sample_type:   Optional[str] = None
-    subject_id:    Optional[str] = None
-    biopsy_id:     Optional[str] = None
+    material: Optional[str] = None
+    sample_type: Optional[str] = None
+    subject_id: Optional[str] = None
+    biopsy_id: Optional[str] = None
 
 
 class LibraryPreparation(_Base):
@@ -116,6 +121,7 @@ class SequencingMetadata(_Base):
 # Review subdocument
 # ---------------------------------------------------------------------------
 
+
 class ReviewStatus(_Base):
     reviewed: bool = False
     reviewed_by: Optional[str] = None
@@ -127,18 +133,20 @@ class ReviewStatus(_Base):
 # Full sample document (stored in MongoDB)
 # ---------------------------------------------------------------------------
 
+
 class SampleResponse(_Base):
     """Validated response model for sample documents read from MongoDB."""
-    case_id:     str
-    subject_id:  Optional[str]       = None
+
+    case_id: str
+    subject_id: Optional[str] = None
     sample_type: Literal["sample", "positive_ctrl", "negative_ctrl"]
-    material:    Literal["DNA", "RNA"]
-    sample:      Optional[SampleMetadata]    = None
-    taxprofiler: Optional[TaxprofilerStats]  = None
-    profiles:    List[ClassifierProfile]     = []
-    has_krona:   bool                        = False
-    review:      ReviewStatus                = ReviewStatus()
-    ingested_at: Optional[datetime]          = None
+    material: Literal["DNA", "RNA"]
+    sample: Optional[SampleMetadata] = None
+    taxprofiler: Optional[TaxprofilerStats] = None
+    profiles: List[ClassifierProfile] = []
+    has_krona: bool = False
+    review: ReviewStatus = ReviewStatus()
+    ingested_at: Optional[datetime] = None
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -147,30 +155,32 @@ class SampleResponse(_Base):
 # Case document (read from MongoDB)
 # ---------------------------------------------------------------------------
 
+
 class CaseClassifier(_Base):
-    name:     str
-    db:       str
+    name: str
+    db: str
     krona_id: Optional[str] = None
 
 
 class CaseNote(_Base):
-    text:       str
-    author:     str
+    text: str
+    author: str
     created_at: str
 
 
 class CaseResponse(_Base):
     """Validated response model for case documents read from MongoDB."""
-    case_id:               str
-    order_date:            Optional[str]          = None
-    ingested_at:           Optional[datetime]      = None
-    classifiers:           List[CaseClassifier]    = []
-    has_krona:             bool                    = False
-    pipeline_info:         Optional[PipelineInfo]  = None
-    metaval_pipeline_info: Optional[PipelineInfo]  = None
-    review:                ReviewStatus            = ReviewStatus()
-    notes:                 List[CaseNote]          = []
-    sample_ids:            List[str]               = []
+
+    case_id: str
+    order_date: Optional[str] = None
+    ingested_at: Optional[datetime] = None
+    classifiers: List[CaseClassifier] = []
+    has_krona: bool = False
+    pipeline_info: Optional[PipelineInfo] = None
+    metaval_pipeline_info: Optional[PipelineInfo] = None
+    review: ReviewStatus = ReviewStatus()
+    notes: List[CaseNote] = []
+    sample_ids: List[str] = []
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -179,13 +189,15 @@ class CaseResponse(_Base):
 # Ingest request models
 # ---------------------------------------------------------------------------
 
+
 class MetavalIngestRequest(BaseModel):
-    metaval_dir: str   # path to the metaval output root directory
+    metaval_dir: str  # path to the metaval output root directory
+
 
 class ClassifierIngestRequest(BaseModel):
-    name: str                    # e.g. "kraken2" or "centrifuge"
-    db: str                      # e.g. "k2_pluspf" or "p_compressed+h+v"
-    taxpasta: str                # path to taxpasta TSV
+    name: str  # e.g. "kraken2" or "centrifuge"
+    db: str  # e.g. "k2_pluspf" or "p_compressed+h+v"
+    taxpasta: str  # path to taxpasta TSV
     krona: Optional[str] = None  # path to krona HTML
 
 

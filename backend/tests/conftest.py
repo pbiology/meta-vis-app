@@ -14,6 +14,7 @@ from app.auth.utils import get_current_user, require_role
 # In-memory MongoDB — reset per test
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def fake_db():
     client = AsyncMongoMockClient()
@@ -23,6 +24,7 @@ def fake_db():
 # ---------------------------------------------------------------------------
 # Blob store mock — simple dict backend
 # ---------------------------------------------------------------------------
+
 
 class FakeBlobStore:
     def __init__(self):
@@ -49,6 +51,7 @@ def fake_blob():
 # Auth helpers
 # ---------------------------------------------------------------------------
 
+
 def user(role: str = "admin", username: str = "testuser") -> dict:
     return {"username": username, "role": role}
 
@@ -65,6 +68,7 @@ def override_auth(app: FastAPI, role: str = "admin", username: str = "testuser")
 # ---------------------------------------------------------------------------
 # Standard app factory
 # ---------------------------------------------------------------------------
+
 
 def make_test_app(router, fake_db, fake_blob, role: str = "admin"):
     """Build a minimal FastAPI test app with the given router and mocked deps."""

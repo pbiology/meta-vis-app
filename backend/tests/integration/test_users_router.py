@@ -12,6 +12,7 @@ from tests.helpers import make_test_app
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def app(fake_db, fake_blob):
     return make_test_app(router, fake_db, fake_blob)
@@ -23,25 +24,29 @@ def client(app):
 
 
 async def insert_user(db, username="alice", role="reader", reviews=0):
-    await db["users"].insert_one({
-        "username":      username,
-        "password_hash": hash_password("secret"),
-        "role":          role,
-    })
+    await db["users"].insert_one(
+        {
+            "username": username,
+            "password_hash": hash_password("secret"),
+            "role": role,
+        }
+    )
     # Insert reviewed cases to simulate review count
     for i in range(reviews):
-        await db["cases"].insert_one({
-            "case_id": f"case_{username}_{i}",
-            "review":  {"reviewed": True, "reviewed_by": username},
-        })
+        await db["cases"].insert_one(
+            {
+                "case_id": f"case_{username}_{i}",
+                "review": {"reviewed": True, "reviewed_by": username},
+            }
+        )
 
 
 # ---------------------------------------------------------------------------
 # GET /users
 # ---------------------------------------------------------------------------
 
-class TestListUsers:
 
+class TestListUsers:
     async def test_empty_db_returns_empty_list(self, client, fake_db):
         resp = client.get("/api/v1/users")
         assert resp.status_code == 200
@@ -75,8 +80,8 @@ class TestListUsers:
 # GET /users/me/stats
 # ---------------------------------------------------------------------------
 
-class TestMyStats:
 
+class TestMyStats:
     async def test_returns_stats_for_current_user(self, client, fake_db):
         await insert_user(fake_db, "testuser", reviews=5)
         resp = client.get("/api/v1/users/me/stats")
@@ -97,31 +102,35 @@ class TestMyStats:
 # POST /users
 # ---------------------------------------------------------------------------
 
-class TestCreateUser:
 
+class TestCreateUser:
     async def test_creates_user_successfully(self, client, fake_db):
-        resp = client.post("/api/v1/users", json={
-            "username": "bob", "password": "pass123", "role": "writer"
-        })
+        resp = client.post(
+            "/api/v1/users",
+            json={"username": "bob", "password": "pass123", "role": "writer"},
+        )
         assert resp.status_code == 200
         assert resp.json()["username"] == "bob"
         assert resp.json()["role"] == "writer"
 
     async def test_duplicate_username_returns_409(self, client, fake_db):
         await insert_user(fake_db, "bob")
-        resp = client.post("/api/v1/users", json={
-            "username": "bob", "password": "pass123"
-        })
+        resp = client.post(
+            "/api/v1/users", json={"username": "bob", "password": "pass123"}
+        )
         assert resp.status_code == 409
 
     async def test_invalid_role_returns_422(self, client, fake_db):
-        resp = client.post("/api/v1/users", json={
-            "username": "bob", "password": "pass123", "role": "superuser"
-        })
+        resp = client.post(
+            "/api/v1/users",
+            json={"username": "bob", "password": "pass123", "role": "superuser"},
+        )
         assert resp.status_code == 422
 
     async def test_default_role_is_reader(self, client, fake_db):
-        resp = client.post("/api/v1/users", json={"username": "bob", "password": "pass123"})
+        resp = client.post(
+            "/api/v1/users", json={"username": "bob", "password": "pass123"}
+        )
         assert resp.json()["role"] == "reader"
 
 
@@ -129,8 +138,8 @@ class TestCreateUser:
 # PATCH /users/{username}/role
 # ---------------------------------------------------------------------------
 
-class TestUpdateRole:
 
+class TestUpdateRole:
     async def test_updates_role_successfully(self, client, fake_db):
         await insert_user(fake_db, "alice", "reader")
         resp = client.patch("/api/v1/users/alice/role", json={"role": "writer"})
@@ -151,16 +160,20 @@ class TestUpdateRole:
 # PATCH /users/{username}/password
 # ---------------------------------------------------------------------------
 
-class TestUpdatePassword:
 
+class TestUpdatePassword:
     async def test_updates_password_successfully(self, client, fake_db):
         await insert_user(fake_db, "alice")
-        resp = client.patch("/api/v1/users/alice/password", json={"password": "newpass"})
+        resp = client.patch(
+            "/api/v1/users/alice/password", json={"password": "newpass"}
+        )
         assert resp.status_code == 200
         assert resp.json()["updated"] is True
 
     async def test_unknown_user_returns_404(self, client, fake_db):
-        resp = client.patch("/api/v1/users/ghost/password", json={"password": "newpass"})
+        resp = client.patch(
+            "/api/v1/users/ghost/password", json={"password": "newpass"}
+        )
         assert resp.status_code == 404
 
 
@@ -168,8 +181,8 @@ class TestUpdatePassword:
 # DELETE /users/{username}
 # ---------------------------------------------------------------------------
 
-class TestDeleteUser:
 
+class TestDeleteUser:
     async def test_deletes_user_successfully(self, client, fake_db):
         await insert_user(fake_db, "alice")
         resp = client.delete("/api/v1/users/alice")

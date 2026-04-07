@@ -21,6 +21,7 @@ from app.database import get_db
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def make_app():
     app = FastAPI()
     app.include_router(alerts_router, prefix="/api/v1")
@@ -39,12 +40,14 @@ def override_auth(app, user):
 # Ignorelist GET
 # ---------------------------------------------------------------------------
 
-class TestIgnorelistGet:
 
+class TestIgnorelistGet:
     def test_returns_empty_list(self):
         app = make_app()
         mock_db = MagicMock()
-        mock_db["outbreak_ignorelist"].find.return_value.sort.return_value.to_list = AsyncMock(return_value=[])
+        mock_db[
+            "outbreak_ignorelist"
+        ].find.return_value.sort.return_value.to_list = AsyncMock(return_value=[])
         app.dependency_overrides[get_db] = lambda: mock_db
         override_auth(app, admin_user())
 
@@ -55,17 +58,20 @@ class TestIgnorelistGet:
 
     def test_returns_serialised_docs(self):
         from bson import ObjectId
+
         app = make_app()
         doc = {
-            "_id":        ObjectId("64a1b2c3d4e5f6a7b8c9d0e1"),
-            "taxon_id":   11676,
+            "_id": ObjectId("64a1b2c3d4e5f6a7b8c9d0e1"),
+            "taxon_id": 11676,
             "taxon_name": "Human immunodeficiency virus 1",
-            "reason":     None,
-            "added_by":   "admin",
-            "added_at":   "2024-03-15T10:00:00",
+            "reason": None,
+            "added_by": "admin",
+            "added_at": "2024-03-15T10:00:00",
         }
         mock_db = MagicMock()
-        mock_db["outbreak_ignorelist"].find.return_value.sort.return_value.to_list = AsyncMock(return_value=[doc])
+        mock_db[
+            "outbreak_ignorelist"
+        ].find.return_value.sort.return_value.to_list = AsyncMock(return_value=[doc])
         app.dependency_overrides[get_db] = lambda: mock_db
         override_auth(app, admin_user())
 
@@ -82,8 +88,8 @@ class TestIgnorelistGet:
 # Ignorelist POST
 # ---------------------------------------------------------------------------
 
-class TestIgnorelistPost:
 
+class TestIgnorelistPost:
     def _make_db(self, existing=None):
         from bson import ObjectId
 
@@ -101,21 +107,24 @@ class TestIgnorelistPost:
         app.dependency_overrides[get_db] = lambda: self._make_db(existing=None)
         override_auth(app, admin_user())
 
-        resp = TestClient(app).post("/api/v1/alerts/ignorelist", json={
-            "taxon_id": 11676, "taxon_name": "HIV-1", "reason": "endemic"
-        })
+        resp = TestClient(app).post(
+            "/api/v1/alerts/ignorelist",
+            json={"taxon_id": 11676, "taxon_name": "HIV-1", "reason": "endemic"},
+        )
 
         assert resp.status_code == 200
         assert resp.json()["taxon_id"] == 11676
 
     def test_duplicate_taxon_returns_409(self):
         app = make_app()
-        app.dependency_overrides[get_db] = lambda: self._make_db(existing={"taxon_id": 11676})
+        app.dependency_overrides[get_db] = lambda: self._make_db(
+            existing={"taxon_id": 11676}
+        )
         override_auth(app, admin_user())
 
-        resp = TestClient(app).post("/api/v1/alerts/ignorelist", json={
-            "taxon_id": 11676, "taxon_name": "HIV-1"
-        })
+        resp = TestClient(app).post(
+            "/api/v1/alerts/ignorelist", json={"taxon_id": 11676, "taxon_name": "HIV-1"}
+        )
 
         assert resp.status_code == 409
 
@@ -125,9 +134,10 @@ class TestIgnorelistPost:
         app.dependency_overrides[get_db] = lambda: self._make_db(existing=None)
         override_auth(app, admin_user())
 
-        TestClient(app).post("/api/v1/alerts/ignorelist", json={
-            "taxon_id": 99999, "taxon_name": "Test virus"
-        })
+        TestClient(app).post(
+            "/api/v1/alerts/ignorelist",
+            json={"taxon_id": 99999, "taxon_name": "Test virus"},
+        )
 
         assert alerts._cache == {}
 
@@ -136,12 +146,14 @@ class TestIgnorelistPost:
 # Ignorelist DELETE
 # ---------------------------------------------------------------------------
 
-class TestIgnorelistDelete:
 
+class TestIgnorelistDelete:
     def test_delete_existing_taxon_succeeds(self):
         app = make_app()
         mock_db = MagicMock()
-        mock_db["outbreak_ignorelist"].delete_one = AsyncMock(return_value=MagicMock(deleted_count=1))
+        mock_db["outbreak_ignorelist"].delete_one = AsyncMock(
+            return_value=MagicMock(deleted_count=1)
+        )
         app.dependency_overrides[get_db] = lambda: mock_db
         override_auth(app, admin_user())
 
@@ -153,7 +165,9 @@ class TestIgnorelistDelete:
     def test_delete_nonexistent_taxon_returns_404(self):
         app = make_app()
         mock_db = MagicMock()
-        mock_db["outbreak_ignorelist"].delete_one = AsyncMock(return_value=MagicMock(deleted_count=0))
+        mock_db["outbreak_ignorelist"].delete_one = AsyncMock(
+            return_value=MagicMock(deleted_count=0)
+        )
         app.dependency_overrides[get_db] = lambda: mock_db
         override_auth(app, admin_user())
 
@@ -165,7 +179,9 @@ class TestIgnorelistDelete:
         alerts._cache[14] = {"outbreaks": []}
         app = make_app()
         mock_db = MagicMock()
-        mock_db["outbreak_ignorelist"].delete_one = AsyncMock(return_value=MagicMock(deleted_count=1))
+        mock_db["outbreak_ignorelist"].delete_one = AsyncMock(
+            return_value=MagicMock(deleted_count=1)
+        )
         app.dependency_overrides[get_db] = lambda: mock_db
         override_auth(app, admin_user())
 

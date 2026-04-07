@@ -58,10 +58,10 @@ def parse_classifier(raw: str) -> dict:
         print(f"Classifier '{name}' is missing required keys: {missing}")
         sys.exit(1)
     return {
-        "name":    name,
-        "db":      parts["db"],
+        "name": name,
+        "db": parts["db"],
         "taxpasta": parts["taxpasta"],
-        "krona":   parts.get("krona"),
+        "krona": parts.get("krona"),
     }
 
 
@@ -145,11 +145,20 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--case-id", required=True)
-    parser.add_argument("--order-date", default=None, help="Case order date (YYYY-MM-DD)")
+    parser.add_argument(
+        "--order-date", default=None, help="Case order date (YYYY-MM-DD)"
+    )
     parser.add_argument("--multiqc", required=True)
-    parser.add_argument("--pipeline-info", required=True,
-                        help="Path to nf_core_*_software_mqc_versions.yml file (or legacy pipeline_info directory)")
-    parser.add_argument("--metaval", default=None, help="Path to metaval output root directory (optional)")
+    parser.add_argument(
+        "--pipeline-info",
+        required=True,
+        help="Path to nf_core_*_software_mqc_versions.yml file (or legacy pipeline_info directory)",
+    )
+    parser.add_argument(
+        "--metaval",
+        default=None,
+        help="Path to metaval output root directory (optional)",
+    )
     parser.add_argument(
         "--classifier",
         action="append",
@@ -164,7 +173,7 @@ def main():
         metavar="KEY=VALUE ...",
         help="Sample descriptor. Repeat for each sample.",
     )
-    parser.add_argument("--url",      default="http://localhost:8000")
+    parser.add_argument("--url", default="http://localhost:8000")
     parser.add_argument("--username", default="admin")
     parser.add_argument("--password", required=True)
 

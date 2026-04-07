@@ -1,35 +1,41 @@
 # tests/unit/test_cases_helpers.py
 
-from app.routers.cases import _non_host_total, _top_taxa_for, _host_pct_for, _spike_in_for
+from app.routers.cases import (
+    _non_host_total,
+    _top_taxa_for,
+    _host_pct_for,
+    _spike_in_for,
+)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def make_entry(taxon_id, name, abundance, superkingdom=None):
     return {
-        "taxon_id":    taxon_id,
-        "name":        name,
-        "abundance":   abundance,
+        "taxon_id": taxon_id,
+        "name": name,
+        "abundance": abundance,
         "superkingdom": superkingdom,
     }
 
 
 def make_clf_qc(classified_reads=1000, unclassified_reads=200):
     return {
-        "classified_reads":   classified_reads,
+        "classified_reads": classified_reads,
         "unclassified_reads": unclassified_reads,
     }
 
 
 # Standard entries used across multiple tests
 ENTRIES = [
-    make_entry(1,    "root",           1000),        # root — excluded
-    make_entry(9606, "Homo sapiens",   300,  "Eukaryota"),  # host — excluded
-    make_entry(1279, "Staphylococcus", 400,  "Bacteria"),
-    make_entry(1234, "Virus-A",        200,  "Viruses"),
-    make_entry(5678, "Fungus-B",       100,  "Eukaryota"),
+    make_entry(1, "root", 1000),  # root — excluded
+    make_entry(9606, "Homo sapiens", 300, "Eukaryota"),  # host — excluded
+    make_entry(1279, "Staphylococcus", 400, "Bacteria"),
+    make_entry(1234, "Virus-A", 200, "Viruses"),
+    make_entry(5678, "Fungus-B", 100, "Eukaryota"),
 ]
 
 
@@ -37,8 +43,8 @@ ENTRIES = [
 # _non_host_total
 # ---------------------------------------------------------------------------
 
-class TestNonHostTotal:
 
+class TestNonHostTotal:
     def test_uses_clf_qc_classified_reads_when_available(self):
         clf_qc = make_clf_qc(classified_reads=1000)
         result = _non_host_total(ENTRIES, clf_qc)
@@ -68,8 +74,8 @@ class TestNonHostTotal:
 # _top_taxa_for
 # ---------------------------------------------------------------------------
 
-class TestTopTaxaFor:
 
+class TestTopTaxaFor:
     def test_returns_top_n_by_abundance(self):
         clf_qc = make_clf_qc(classified_reads=1000)
         result = _top_taxa_for(ENTRIES, clf_qc, n=3)
@@ -129,8 +135,8 @@ class TestTopTaxaFor:
 # _host_pct_for
 # ---------------------------------------------------------------------------
 
-class TestHostPctFor:
 
+class TestHostPctFor:
     def test_happy_path_with_clf_qc(self):
         clf_qc = make_clf_qc(classified_reads=1000, unclassified_reads=200)
         result = _host_pct_for(ENTRIES, clf_qc)
@@ -150,7 +156,9 @@ class TestHostPctFor:
         assert result is None
 
     def test_zero_total_returns_none(self):
-        result = _host_pct_for([], make_clf_qc(classified_reads=0, unclassified_reads=0))
+        result = _host_pct_for(
+            [], make_clf_qc(classified_reads=0, unclassified_reads=0)
+        )
         assert result is None
 
     def test_empty_entries_returns_none(self):
@@ -161,8 +169,8 @@ class TestHostPctFor:
 # _spike_in_for
 # ---------------------------------------------------------------------------
 
-class TestSpikeInFor:
 
+class TestSpikeInFor:
     def test_empty_spike_in_ids_returns_empty_list(self):
         result = _spike_in_for(ENTRIES, spike_in_ids=set())
         assert result == []
@@ -196,14 +204,14 @@ class TestSpikeInFor:
 # _non_host_total — diamond fallback (no root entry, no clf_qc)
 # ---------------------------------------------------------------------------
 
-class TestNonHostTotalDiamondFallback:
 
+class TestNonHostTotalDiamondFallback:
     def test_no_root_no_clf_qc_sums_non_host_entries(self):
         # Diamond doesn't emit a root entry and has no clf_qc
         entries = [
-            make_entry(9606, "Homo sapiens",   300, "Eukaryota"),
+            make_entry(9606, "Homo sapiens", 300, "Eukaryota"),
             make_entry(1279, "Staphylococcus", 400, "Bacteria"),
-            make_entry(1234, "Virus-A",        200, "Viruses"),
+            make_entry(1234, "Virus-A", 200, "Viruses"),
         ]
         result = _non_host_total(entries, clf_qc=None)
         # No root (taxon_id=1), so falls back to sum of non-host entries
@@ -211,7 +219,7 @@ class TestNonHostTotalDiamondFallback:
 
     def test_no_root_no_clf_qc_excludes_unclassified(self):
         entries = [
-            make_entry(0,    "unclassified",   500),
+            make_entry(0, "unclassified", 500),
             make_entry(1279, "Staphylococcus", 400, "Bacteria"),
         ]
         result = _non_host_total(entries, clf_qc=None)
@@ -219,8 +227,8 @@ class TestNonHostTotalDiamondFallback:
 
     def test_no_root_no_clf_qc_excludes_unclassified_prefix(self):
         entries = [
-            make_entry(999,  "unclassified Bacteria", 500, "Bacteria"),
-            make_entry(1279, "Staphylococcus",         400, "Bacteria"),
+            make_entry(999, "unclassified Bacteria", 500, "Bacteria"),
+            make_entry(1279, "Staphylococcus", 400, "Bacteria"),
         ]
         result = _non_host_total(entries, clf_qc=None)
         assert result == 400
@@ -231,8 +239,8 @@ class TestNonHostTotalDiamondFallback:
     def test_root_present_takes_priority_over_sum_fallback(self):
         # When root IS present, use it rather than summing
         entries = [
-            make_entry(1,    "root",           1000),
-            make_entry(9606, "Homo sapiens",   300, "Eukaryota"),
+            make_entry(1, "root", 1000),
+            make_entry(9606, "Homo sapiens", 300, "Eukaryota"),
             make_entry(1279, "Staphylococcus", 400, "Bacteria"),
         ]
         result = _non_host_total(entries, clf_qc=None)

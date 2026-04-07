@@ -24,6 +24,7 @@ def _load_controls_taxa() -> dict:
             return json.load(f)
     return {}
 
+
 router = APIRouter(prefix="/cases", tags=["cases"])
 
 
@@ -40,7 +41,7 @@ def _serialise_case(doc: dict) -> dict:
 
 
 def _serialise_sample(doc: dict) -> dict:
-    doc["_id"]     = str(doc["_id"])
+    doc["_id"] = str(doc["_id"])
     doc["case_id"] = str(doc["case_id"])
     if doc.get("subject_id"):
         doc["subject_id"] = str(doc["subject_id"])
@@ -60,7 +61,8 @@ def _non_host_total(entries: list, clf_qc: dict = None) -> float:
     # Fallback for classifiers like diamond that don't emit a root entry:
     # sum all non-host, non-root, classified abundances directly
     return sum(
-        e["abundance"] for e in entries
+        e["abundance"]
+        for e in entries
         if e.get("taxon_id") not in HOST_TAXON_IDS
         and e.get("name") != "unclassified"
         and not (e.get("name") or "").startswith("unclassified ")
@@ -70,18 +72,21 @@ def _non_host_total(entries: list, clf_qc: dict = None) -> float:
 def _top_taxa_for(entries: list, clf_qc: dict = None, n: int = 3) -> list:
     non_host_total = _non_host_total(entries, clf_qc)
     non_host_entries = [
-        e for e in entries
+        e
+        for e in entries
         if e.get("taxon_id") not in HOST_TAXON_IDS
-           and e.get("name") != "unclassified"
-           and not (e.get("name") or "").startswith("unclassified ")
+        and e.get("name") != "unclassified"
+        and not (e.get("name") or "").startswith("unclassified ")
     ]
     non_host_entries.sort(key=lambda e: e.get("abundance", 0), reverse=True)
     return [
         {
-            "name":         e["name"],
+            "name": e["name"],
             "superkingdom": e.get("superkingdom"),
-            "abundance":    e["abundance"],
-            "pct":          round(e["abundance"] / non_host_total * 100, 3) if non_host_total else None,
+            "abundance": e["abundance"],
+            "pct": round(e["abundance"] / non_host_total * 100, 3)
+            if non_host_total
+            else None,
         }
         for e in non_host_entries[:n]
     ]
@@ -93,10 +98,12 @@ def _spike_in_for(entries: list, spike_in_ids: set, clf_qc: dict = None) -> list
     non_host_total = _non_host_total(entries, clf_qc)
     return [
         {
-            "name":      e["name"],
-            "taxon_id":  e["taxon_id"],
+            "name": e["name"],
+            "taxon_id": e["taxon_id"],
             "abundance": e["abundance"],
-            "pct":       round(e["abundance"] / non_host_total * 100, 3) if non_host_total else None,
+            "pct": round(e["abundance"] / non_host_total * 100, 3)
+            if non_host_total
+            else None,
         }
         for e in entries
         if e.get("taxon_id") in spike_in_ids
@@ -107,8 +114,14 @@ def _host_pct_for(entries: list, clf_qc: dict = None) -> Optional[float]:
     host_reads = next((e["abundance"] for e in entries if e.get("taxon_id") == 9606), 0)
     classified_reads = clf_qc.get("classified_reads") if clf_qc else None
     if classified_reads is None:
-        classified_reads = next((e["abundance"] for e in entries if e.get("taxon_id") == 1), 0)
-    total_reads = host_reads + (clf_qc.get("unclassified_reads") or 0) if clf_qc else classified_reads
+        classified_reads = next(
+            (e["abundance"] for e in entries if e.get("taxon_id") == 1), 0
+        )
+    total_reads = (
+        host_reads + (clf_qc.get("unclassified_reads") or 0)
+        if clf_qc
+        else classified_reads
+    )
     if not total_reads:
         return None
     return round(host_reads / total_reads * 100, 1)
@@ -119,17 +132,18 @@ async def case_stats(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    total    = await db["cases"].estimated_document_count()
-    pending  = await db["cases"].count_documents({"review.reviewed": {"$ne": True}})
+    total = await db["cases"].estimated_document_count()
+    pending = await db["cases"].count_documents({"review.reviewed": {"$ne": True}})
     reviewed = await db["cases"].count_documents({"review.reviewed": True})
     return {"total": total, "pending": pending, "reviewed": reviewed}
 
 
 PAGE_SIZE = 50
 
+
 @router.get("", summary="List all cases")
 async def list_cases(
-    page:   int = 1,
+    page: int = 1,
     search: str = "",
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
@@ -138,23 +152,34 @@ async def list_cases(
     if search.strip():
         query["case_id"] = {"$regex": search.strip()}
 
-    total = await db["cases"].estimated_document_count() if not query else await db["cases"].count_documents(query)
-    skip  = (page - 1) * PAGE_SIZE
+    total = (
+        await db["cases"].estimated_document_count()
+        if not query
+        else await db["cases"].count_documents(query)
+    )
+    skip = (page - 1) * PAGE_SIZE
 
-    docs = await db["cases"].find(query).sort(
-        [("review.reviewed", 1), ("order_date", -1), ("ingested_at", -1)]
-    ).skip(skip).limit(PAGE_SIZE).to_list(length=PAGE_SIZE)
+    docs = (
+        await db["cases"]
+        .find(query)
+        .sort([("review.reviewed", 1), ("order_date", -1), ("ingested_at", -1)])
+        .skip(skip)
+        .limit(PAGE_SIZE)
+        .to_list(length=PAGE_SIZE)
+    )
 
     result = []
     for doc in docs:
-        doc.setdefault("sample_count",  0)
+        doc.setdefault("sample_count", 0)
         doc.setdefault("control_count", 0)
-        doc.setdefault("sample_names",  [])
-        result.append(CaseResponse.model_validate(_serialise_case(doc)).model_dump(mode="json"))
+        doc.setdefault("sample_names", [])
+        result.append(
+            CaseResponse.model_validate(_serialise_case(doc)).model_dump(mode="json")
+        )
 
     return {
         "total": total,
-        "page":  page,
+        "page": page,
         "pages": max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE),
         "items": result,
     }
@@ -230,6 +255,7 @@ async def delete_case(
 
     await db["samples"].delete_many({"case_id": oid})
     from app.database import get_blob_store
+
     store = get_blob_store()
     await store.delete_prefix(f"krona/{oid}/")
     await store.delete_prefix(f"igv/{oid}/")
@@ -251,15 +277,20 @@ async def get_krona(
         raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
 
     from app.database import get_blob_store
+
     key = f"krona/{case['_id']}/{classifier}.html"
     html = await get_blob_store().get(key)
     if not html:
-        raise HTTPException(status_code=404, detail=f"No Krona file for classifier '{classifier}'")
+        raise HTTPException(
+            status_code=404, detail=f"No Krona file for classifier '{classifier}'"
+        )
 
     return HTMLResponse(content=html)
 
 
-@router.patch("/{case_id}/review", summary="Mark a case as reviewed by the current user")
+@router.patch(
+    "/{case_id}/review", summary="Mark a case as reviewed by the current user"
+)
 async def review_case(
     case_id: str,
     payload: ReviewPayload,
@@ -270,16 +301,20 @@ async def review_case(
         {"case_id": case_id},
         {
             "$set": {
-                "review.reviewed":    True,
+                "review.reviewed": True,
                 "review.reviewed_by": current_user["username"],
                 "review.reviewed_at": datetime.now(timezone.utc),
-                "review.notes":       payload.notes,
+                "review.notes": payload.notes,
             }
         },
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
-    return {"case_id": case_id, "reviewed": True, "reviewed_by": current_user["username"]}
+    return {
+        "case_id": case_id,
+        "reviewed": True,
+        "reviewed_by": current_user["username"],
+    }
 
 
 @router.delete("/{case_id}/review", summary="Remove review from a case")
@@ -292,10 +327,10 @@ async def unreview_case(
         {"case_id": case_id},
         {
             "$set": {
-                "review.reviewed":    False,
+                "review.reviewed": False,
                 "review.reviewed_by": None,
                 "review.reviewed_at": None,
-                "review.notes":       None,
+                "review.notes": None,
             }
         },
     )
@@ -318,8 +353,8 @@ async def add_note(
     if not payload.text.strip():
         raise HTTPException(status_code=422, detail="Note text cannot be empty")
     note = {
-        "text":       payload.text.strip(),
-        "author":     current_user["username"],
+        "text": payload.text.strip(),
+        "author": current_user["username"],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     result = await db["cases"].update_one(
@@ -345,8 +380,13 @@ async def delete_note(
     if note_index < 0 or note_index >= len(notes):
         raise HTTPException(status_code=404, detail="Note not found")
     note = notes[note_index]
-    if current_user["role"] != "admin" and note.get("author") != current_user["username"]:
-        raise HTTPException(status_code=403, detail="You can only delete your own notes")
+    if (
+        current_user["role"] != "admin"
+        and note.get("author") != current_user["username"]
+    ):
+        raise HTTPException(
+            status_code=403, detail="You can only delete your own notes"
+        )
     # Remove by index using $unset + $pull trick
     notes.pop(note_index)
     await db["cases"].update_one(

@@ -33,7 +33,7 @@ PAGE_SIZE = 50
 
 @router.get("", summary="List all samples with pagination")
 async def list_samples(
-    page:   int = 1,
+    page: int = 1,
     search: str = "",
     filter: str = "",
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -57,23 +57,28 @@ async def list_samples(
     skip = (page - 1) * PAGE_SIZE
 
     projection = {
-        "_id":          1,
-        "sample_type":  1,
-        "sample":       1,
-        "case_id_str":  1,
-        "order_date":   1,
-        "ingested_at":  1,
+        "_id": 1,
+        "sample_type": 1,
+        "sample": 1,
+        "case_id_str": 1,
+        "order_date": 1,
+        "ingested_at": 1,
         "taxprofiler.classifiers.kraken2.pct_unclassified": 1,
-        "taxprofiler.classifiers.kraken2.num_species":      1,
+        "taxprofiler.classifiers.kraken2.num_species": 1,
     }
 
-    docs = await db["samples"].find(query, projection).sort(
-        [("order_date", -1), ("ingested_at", -1)]
-    ).skip(skip).limit(PAGE_SIZE).to_list(length=PAGE_SIZE)
+    docs = (
+        await db["samples"]
+        .find(query, projection)
+        .sort([("order_date", -1), ("ingested_at", -1)])
+        .skip(skip)
+        .limit(PAGE_SIZE)
+        .to_list(length=PAGE_SIZE)
+    )
 
     return {
         "total": total,
-        "page":  page,
+        "page": page,
         "pages": max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE),
         "items": [_serialise(doc) for doc in docs],
     }
@@ -106,12 +111,15 @@ async def get_profile(
         raise HTTPException(status_code=404, detail=f"Sample '{sample_id}' not found")
     return {
         "sample_id": sample_id,
-        "sample":    doc.get("sample"),
-        "profiles":  doc.get("profiles", []),
+        "sample": doc.get("sample"),
+        "profiles": doc.get("profiles", []),
     }
 
 
-@router.get("/{sample_id}/ntc_profiles", summary="Get negative control profiles matching this sample's material")
+@router.get(
+    "/{sample_id}/ntc_profiles",
+    summary="Get negative control profiles matching this sample's material",
+)
 async def get_ntc_profiles(
     sample_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -124,14 +132,18 @@ async def get_ntc_profiles(
     if not sample:
         raise HTTPException(status_code=404, detail=f"Sample '{sample_id}' not found")
 
-    ntc_docs = await db["samples"].find(
-        {
-            "case_id":     sample["case_id"],
-            "sample_type": "negative_ctrl",
-            "material":    sample["material"],
-        },
-        {"profiles": 1, "sample": 1},
-    ).to_list(length=50)
+    ntc_docs = (
+        await db["samples"]
+        .find(
+            {
+                "case_id": sample["case_id"],
+                "sample_type": "negative_ctrl",
+                "material": sample["material"],
+            },
+            {"profiles": 1, "sample": 1},
+        )
+        .to_list(length=50)
+    )
 
     result = []
     for ntc in ntc_docs:
@@ -145,30 +157,42 @@ async def get_ntc_profiles(
                 if e.get("abundance", 0) > 0
             }
             classifiers[clf] = abundance_map
-        result.append({
-            "sample_id":   ntc_sample_id,
-            "classifiers": classifiers,
-        })
+        result.append(
+            {
+                "sample_id": ntc_sample_id,
+                "classifiers": classifiers,
+            }
+        )
 
     return result
 
 
-@router.get("/{sample_id}/krona", summary="Serve Krona HTML for the case this sample belongs to")
+@router.get(
+    "/{sample_id}/krona", summary="Serve Krona HTML for the case this sample belongs to"
+)
 async def get_krona(
-    sample_id:  str,
+    sample_id: str,
     classifier: str = "kraken2",
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    sample = await db["samples"].find_one({"_id": _oid(sample_id)}, {"case_id": 1, "has_krona": 1})
+    sample = await db["samples"].find_one(
+        {"_id": _oid(sample_id)}, {"case_id": 1, "has_krona": 1}
+    )
     if not sample:
         raise HTTPException(status_code=404, detail=f"Sample '{sample_id}' not found")
     if not sample.get("has_krona"):
-        raise HTTPException(status_code=404, detail="No Krona file associated with this sample's case")
+        raise HTTPException(
+            status_code=404, detail="No Krona file associated with this sample's case"
+        )
 
     from app.database import get_blob_store
-    key  = f"krona/{sample['case_id']}/{classifier}.html"
+
+    key = f"krona/{sample['case_id']}/{classifier}.html"
     html = await get_blob_store().get(key)
     if not html:
-        raise HTTPException(status_code=404, detail=f"Krona file not found for classifier '{classifier}'")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Krona file not found for classifier '{classifier}'",
+        )
     return HTMLResponse(content=html)
