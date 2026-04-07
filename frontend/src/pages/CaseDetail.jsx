@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { getCase, getCaseSamples, reviewCase, unreviewCase, getCaseKronaUrl, addNote, deleteNote } from '../api/cases'
 import Badge from '../components/Badge'
 import { useAuth } from '../context/AuthContext'
@@ -19,6 +19,7 @@ const FILTERS = ['All', 'Sample', 'Controls']
 export default function CaseDetail() {
   const { caseId } = useParams()
   const navigate   = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { role, user } = useAuth()
 
   const [caseData,        setCaseData]        = useState(null)
@@ -30,7 +31,7 @@ export default function CaseDetail() {
   const [unreviewConfirm, setUnreviewConfirm] = useState(false)
   const [kronaUrls,       setKronaUrls]       = useState({})
   const [kronaErrors,     setKronaErrors]     = useState({})
-  const [kronaTab,        setKronaTab]        = useState(null)
+const [kronaTab,        setKronaTab]        = useState(searchParams.get('classifier'))
   const [provenanceOpen,  setProvenanceOpen]  = useState(false)
   const [notesOpen,    setNotesOpen]    = useState(false)
   const [noteText,     setNoteText]     = useState('')
@@ -284,7 +285,7 @@ export default function CaseDetail() {
                 {classifiers.map(clf => (
                   <button
                     key={clf.name}
-                    onClick={() => setKronaTab(clf.name)}
+                    onClick={() => { setKronaTab(clf.name); setSearchParams({ classifier: clf.name }) }}
                     className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
                       kronaTab === clf.name
                         ? 'bg-gray-900 text-white font-medium'
@@ -321,7 +322,7 @@ export default function CaseDetail() {
                       return (
                         <tr
                           key={s._id}
-                          onClick={() => navigate(`/samples/${s._id}`)}
+                          onClick={() => navigate(`/samples/${s._id}?classifier=${kronaTab ?? ''}`)}
                           className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
                         >
                           <td className="px-4 py-1.5 font-mono text-xs text-gray-700">{s.sample?.sample_id ?? '—'}</td>

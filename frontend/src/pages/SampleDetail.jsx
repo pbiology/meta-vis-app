@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { getSample, getProfile, getNtcProfiles } from '../api/samples'
 import Badge from '../components/Badge'
 import MetricCard from '../components/MetricCard'
@@ -49,7 +49,7 @@ function TaxonomyTable({ profile, clfQc, metavalResults, sampleId, outbreakTaxon
   const TAX_PER_PAGE = 50
 
   const allEntries   = profile?.profile ?? []
-const hostReads    = allEntries.find(t => t.taxon_id === 9606)?.abundance ?? 0
+  const hostReads    = allEntries.find(t => t.taxon_id === 9606)?.abundance ?? 0
   const unclassReads = allEntries.find(t => t.taxon_id === 0)?.abundance ?? 0
   const rootReads    = allEntries.find(t => t.taxon_id === 1)?.abundance ?? 0
   const classifiedReads = clfQc?.classified_reads ?? rootReads
@@ -326,6 +326,7 @@ const hostReads    = allEntries.find(t => t.taxon_id === 9606)?.abundance ?? 0
 export default function SampleDetail() {
   const { sampleId } = useParams()
   const navigate     = useNavigate()
+  const [searchParams] = useSearchParams()
 
   const [sample,         setSample]         = useState(null)
   const [profile,        setProfile]        = useState(null)
@@ -349,7 +350,9 @@ const [activeTab, setActiveTab] = useState(null)
           setOutbreakTaxonIds(ids)
         }).catch(() => {})
         if (p.profiles?.length) {
-          setActiveTab(p.profiles[0].classifier)
+          const requestedClassifier = searchParams.get('classifier')
+          const match = p.profiles.find(p => p.classifier === requestedClassifier)
+          setActiveTab(match ? requestedClassifier : p.profiles[0].classifier)
         }
       } catch {
         setError('Failed to load sample.')
