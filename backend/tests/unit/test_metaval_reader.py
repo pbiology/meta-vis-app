@@ -76,6 +76,11 @@ BLAST_SUMMARY_CONTENT = (
     "NODE_2\t2886042\tShigella virus Moo19\t1\n"
 )
 
+BLASTX_SUMMARY_CONTENT = (
+    "qseqid\tstaxid\tssciname\tcount\tmin_pident\tmax_pident\tmedian_pident\tmin_length\tmax_length\tmedian_length\tmin_bitscore\tmax_bitscore\tmedian_bitscore\n"
+    "NODE_1\t2886042\tShigella virus Moo19\t1\t94.8\t94.8\t94.8\t96\t96\t96.0\t190.0\t190.0\t190.0\n"
+)
+
 
 # ---------------------------------------------------------------------------
 # _parse_igv_filename
