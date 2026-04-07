@@ -41,7 +41,7 @@ const HOST_IDS = new Set([9606, 1, 0, 131567])
 
 function TaxonomyTable({ profile, clfQc, metavalResults, sampleId, outbreakTaxonIds, ntcProfiles }) {
   const [taxSearch,   setTaxSearch]   = useState('')
-  const [taxKingdoms, setTaxKingdoms] = useState([])
+  const [taxKingdoms, setTaxKingdoms] = useState(['Viruses'])
   const [taxSort,     setTaxSort]     = useState({ col: 'abundance', dir: -1 })
   const [taxPage,     setTaxPage]     = useState(0)
   const [metavalOnly, setMetavalOnly] = useState(false)
