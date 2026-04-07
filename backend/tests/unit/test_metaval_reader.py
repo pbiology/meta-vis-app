@@ -31,8 +31,8 @@ def make_viral_taxids_dir(tmp_path, classifier="kraken2", entries: list[tuple] =
     return taxids_dir
 
 
-def make_blast_dir(tmp_path, classifier="kraken2", filename=None, content=None):
-    blast_dir = tmp_path / "blast" / "blastn" / classifier
+def make_blast_dir(tmp_path, classifier="kraken2", filename=None, content=None, program="blastn"):
+    blast_dir = tmp_path / "blast" / program / classifier
     blast_dir.mkdir(parents=True, exist_ok=True)
     if filename and content is not None:
         f = blast_dir / filename
@@ -187,33 +187,55 @@ class TestReadViralTaxids:
 
 class TestReadBlast:
 
-    def test_happy_path_rows_parsed(self, tmp_path):
+    def test_blastn_rows_parsed(self, tmp_path):
         make_blast_dir(
             tmp_path, "kraken2",
             "SRR13439790_Shigella-virus-Moo19_blast_filtered_summary.txt",
             BLAST_SUMMARY_CONTENT,
+            program="blastn",
         )
         result = _read_blast(tmp_path)
-        rows = result[("SRR13439790_Shigella-virus-Moo19", "kraken2")]
+        rows = result[("SRR13439790_Shigella-virus-Moo19", "kraken2")]["blastn"]
         assert len(rows) == 2
         assert rows[0]["qseqid"] == "NODE_1"
         assert rows[0]["ssciname"] == "Shigella virus Moo19"
 
-    def test_column_headers_used_as_keys(self, tmp_path):
+    def test_blastx_rows_parsed(self, tmp_path):
+        make_blast_dir(
+            tmp_path, "kraken2",
+            "SRR13439790_Shigella-virus-Moo19_blastx_filtered_summary.txt",
+            BLASTX_SUMMARY_CONTENT,
+            program="blastx",
+        )
+        result = _read_blast(tmp_path)
+        rows = result[("SRR13439790_Shigella-virus-Moo19", "kraken2")]["blastx"]
+        assert len(rows) == 1
+        assert rows[0]["ssciname"] == "Shigella virus Moo19"
+
+    def test_both_programs_combined_under_same_key(self, tmp_path):
         make_blast_dir(
             tmp_path, "kraken2",
             "SRR13439790_Shigella-virus-Moo19_blast_filtered_summary.txt",
             BLAST_SUMMARY_CONTENT,
+            program="blastn",
+        )
+        make_blast_dir(
+            tmp_path, "kraken2",
+            "SRR13439790_Shigella-virus-Moo19_blastx_filtered_summary.txt",
+            BLASTX_SUMMARY_CONTENT,
+            program="blastx",
         )
         result = _read_blast(tmp_path)
-        rows = result[("SRR13439790_Shigella-virus-Moo19", "kraken2")]
-        assert set(rows[0].keys()) == {"qseqid", "staxid", "ssciname", "count"}
+        key = ("SRR13439790_Shigella-virus-Moo19", "kraken2")
+        assert len(result[key]["blastn"]) == 2
+        assert len(result[key]["blastx"]) == 1
 
     def test_empty_file_skipped(self, tmp_path):
         make_blast_dir(
             tmp_path, "kraken2",
             "SRR13439790_Shigella-virus-Moo19_blast_filtered_summary.txt",
             "",
+            program="blastn",
         )
         result = _read_blast(tmp_path)
         assert result == {}
@@ -223,6 +245,7 @@ class TestReadBlast:
             tmp_path, "kraken2",
             "SRR13439790_Shigella-virus-Moo19_blast_filtered_summary.txt",
             "qseqid\tstaxid\tssciname\tcount\n",
+            program="blastn",
         )
         result = _read_blast(tmp_path)
         assert result == {}
@@ -236,11 +259,13 @@ class TestReadBlast:
             tmp_path, "kraken2",
             "SRR13439790_Virus-A_blast_filtered_summary.txt",
             BLAST_SUMMARY_CONTENT,
+            program="blastn",
         )
         make_blast_dir(
             tmp_path, "centrifuge",
             "SRR13439790_Virus-B_blast_filtered_summary.txt",
             BLAST_SUMMARY_CONTENT,
+            program="blastn",
         )
         result = _read_blast(tmp_path)
         assert ("SRR13439790_Virus-A", "kraken2")    in result
@@ -440,7 +465,7 @@ class TestReadMetaval:
         assert org["igv_too_large"] is True
         assert org["igv_file_path"] == str(large_file)
 
-    def test_blast_hits_matched_to_result(self, tmp_path):
+    def test_blastn_hits_matched_to_result(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
         (
                     igv_dir / "SRR13439790_kraken2_Shigella-virus-Moo19_mappingorganism_Shigella-virus-Moo19_report.html").write_text(
@@ -449,17 +474,32 @@ class TestReadMetaval:
             tmp_path, "kraken2",
             "SRR13439790_Shigella-virus-Moo19_blast_filtered_summary.txt",
             BLAST_SUMMARY_CONTENT,
+            program="blastn",
         )
         result = read_metaval(str(tmp_path))
-        assert len(result["results"][0]["blast"]) == 2
+        assert len(result["results"][0]["blast"]["blastn"]) == 2
 
-    def test_no_blast_data_gives_empty_blast_list(self, tmp_path):
+    def test_blastx_hits_matched_to_result(self, tmp_path):
+        igv_dir = make_igv_dir(tmp_path)
+        (
+                    igv_dir / "SRR13439790_kraken2_Shigella-virus-Moo19_mappingorganism_Shigella-virus-Moo19_report.html").write_text(
+            "<html/>")
+        make_blast_dir(
+            tmp_path, "kraken2",
+            "SRR13439790_Shigella-virus-Moo19_blastx_filtered_summary.txt",
+            BLASTX_SUMMARY_CONTENT,
+            program="blastx",
+        )
+        result = read_metaval(str(tmp_path))
+        assert len(result["results"][0]["blast"]["blastx"]) == 1
+
+    def test_no_blast_data_gives_empty_dicts(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
         (
                     igv_dir / "SRR13439790_kraken2_Shigella-virus-Moo19_mappingorganism_Shigella-virus-Moo19_report.html").write_text(
             "<html/>")
         result = read_metaval(str(tmp_path))
-        assert result["results"][0]["blast"] == []
+        assert result["results"][0]["blast"] == {"blastn": [], "blastx": []}
 
     def test_unrecognised_igv_filenames_ignored(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
