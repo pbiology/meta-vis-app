@@ -13,16 +13,17 @@ router = APIRouter(prefix="/users", tags=["users"])
 VALID_ROLES = {"reader", "writer", "admin"}
 
 REVIEWER_TITLES = [
-    (0,   "Spore"),
-    (1,   "Mycelium"),
-    (5,   "Puffball"),
-    (15,  "Penny Bun"),
-    (30,  "Chanterelle"),
-    (60,  "Oyster"),
-    (100, "Shiitake"),
-    (175, "Lion's Mane"),
-    (300, "Morel"),
-    (500, "Truffle"),
+    (0,   "Newbie"),
+    (1,   "Initiate"),
+    (5,   "Novice"),
+    (15,  "Apprentice"),
+    (30,  "Disciple"),
+    (60,  "Adept"),
+    (100, "Journeyman"),
+    (175, "Veteran"),
+    (250, "Expert"),
+    (300, "Master"),
+    (500, "Grand Master"),
 ]
 
 
