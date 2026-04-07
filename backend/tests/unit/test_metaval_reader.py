@@ -220,41 +220,46 @@ class TestReadBlast:
 
 class TestReadMetaval:
 
-    def test_missing_igv_directory_raises(self, tmp_path):
+    def test_missing_directory_raises(self, tmp_path):
         with pytest.raises(FileNotFoundError):
-            read_metaval(str(tmp_path / "nonexistent" / "igv"))
+            read_metaval(str(tmp_path / "nonexistent"))
 
     def test_empty_igv_directory_returns_empty_results(self, tmp_path):
-        igv_dir = make_igv_dir(tmp_path)
-        result = read_metaval(str(igv_dir))
-        assert result["results"] == []
+        make_igv_dir(tmp_path)
+        result = read_metaval(str(tmp_path))
 
     def test_happy_path_groups_by_sample_classifier_taxon(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
-        (igv_dir / "SRR13439790_kraken2_Shigella-virus-Moo19_mappingorganism_Shigella-virus-Moo19_report.html").write_text("<html/>")
-        (igv_dir / "SRR13439790_kraken2_Shigella-virus-Moo19_mappingorganism_Escherichia-phage-IME11_report.html").write_text("<html/>")
-        result = read_metaval(str(igv_dir))
+        (
+                    igv_dir / "SRR13439790_kraken2_Shigella-virus-Moo19_mappingorganism_Shigella-virus-Moo19_report.html").write_text(
+            "<html/>")
+        (
+                    igv_dir / "SRR13439790_kraken2_Shigella-virus-Moo19_mappingorganism_Escherichia-phage-IME11_report.html").write_text(
+            "<html/>")
+        result = read_metaval(str(tmp_path))
         assert len(result["results"]) == 1
         assert len(result["results"][0]["organisms"]) == 2
 
     def test_taxon_id_resolved_from_taxid_map(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
-        (igv_dir / "SRR13439790_kraken2_Shigella-virus-Moo19_mappingorganism_Shigella-virus-Moo19_report.html").write_text("<html/>")
+        (
+                    igv_dir / "SRR13439790_kraken2_Shigella-virus-Moo19_mappingorganism_Shigella-virus-Moo19_report.html").write_text(
+            "<html/>")
         make_viral_taxids_dir(tmp_path, "kraken2", [(2886042, "Shigella-virus-Moo19")])
-        result = read_metaval(str(igv_dir))
+        result = read_metaval(str(tmp_path))
         assert result["results"][0]["taxon_id"] == 2886042
 
     def test_taxon_id_is_none_when_not_in_taxid_map(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
         (igv_dir / "SRR13439790_kraken2_Unknown-virus_mappingorganism_Unknown-virus_report.html").write_text("<html/>")
-        result = read_metaval(str(igv_dir))
+        result = read_metaval(str(tmp_path))
         assert result["results"][0]["taxon_id"] is None
 
     def test_igv_within_size_limit_is_read(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
         html_file = igv_dir / "SRR13439790_kraken2_Shigella-virus-Moo19_mappingorganism_Shigella-virus-Moo19_report.html"
         html_file.write_text("<html>content</html>")
-        result = read_metaval(str(igv_dir))
+        result = read_metaval(str(tmp_path))
         org = result["results"][0]["organisms"][0]
         assert org["igv_file_path"] == str(html_file)
         assert org["igv_too_large"] is False
@@ -263,35 +268,39 @@ class TestReadMetaval:
         igv_dir = make_igv_dir(tmp_path)
         large_file = igv_dir / "SRR13439790_kraken2_Shigella-virus-Moo19_mappingorganism_Shigella-virus-Moo19_report.html"
         large_file.write_bytes(b"x" * (10 * 1024 * 1024 + 1))
-        result = read_metaval(str(igv_dir))
+        result = read_metaval(str(tmp_path))
         org = result["results"][0]["organisms"][0]
         assert org["igv_too_large"] is True
         assert org["igv_file_path"] == str(large_file)
 
     def test_blast_hits_matched_to_result(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
-        (igv_dir / "SRR13439790_kraken2_Shigella-virus-Moo19_mappingorganism_Shigella-virus-Moo19_report.html").write_text("<html/>")
+        (
+                    igv_dir / "SRR13439790_kraken2_Shigella-virus-Moo19_mappingorganism_Shigella-virus-Moo19_report.html").write_text(
+            "<html/>")
         make_blast_dir(
             tmp_path, "kraken2",
             "SRR13439790_Shigella-virus-Moo19_blast_filtered_summary.txt",
             BLAST_SUMMARY_CONTENT,
         )
-        result = read_metaval(str(igv_dir))
+        result = read_metaval(str(tmp_path))
         assert len(result["results"][0]["blast"]) == 2
 
     def test_no_blast_data_gives_empty_blast_list(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
-        (igv_dir / "SRR13439790_kraken2_Shigella-virus-Moo19_mappingorganism_Shigella-virus-Moo19_report.html").write_text("<html/>")
-        result = read_metaval(str(igv_dir))
+        (
+                    igv_dir / "SRR13439790_kraken2_Shigella-virus-Moo19_mappingorganism_Shigella-virus-Moo19_report.html").write_text(
+            "<html/>")
+        result = read_metaval(str(tmp_path))
         assert result["results"][0]["blast"] == []
 
     def test_unrecognised_igv_filenames_ignored(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
         (igv_dir / "not_a_valid_filename.html").write_text("<html/>")
-        result = read_metaval(str(igv_dir))
+        result = read_metaval(str(tmp_path))
         assert result["results"] == []
 
     def test_pipeline_info_key_present_in_result(self, tmp_path):
-        igv_dir = make_igv_dir(tmp_path)
-        result = read_metaval(str(igv_dir))
+        make_igv_dir(tmp_path)
+        result = read_metaval(str(tmp_path))
         assert "pipeline_info" in result

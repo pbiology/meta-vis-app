@@ -180,7 +180,7 @@ class CaseResponse(_Base):
 # ---------------------------------------------------------------------------
 
 class MetavalIngestRequest(BaseModel):
-    igv_dir: str   # path to the metaval igv/ directory
+    metaval_dir: str   # path to the metaval output root directory
 
 class ClassifierIngestRequest(BaseModel):
     name: str                    # e.g. "kraken2" or "centrifuge"

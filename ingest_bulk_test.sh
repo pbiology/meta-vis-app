@@ -47,7 +47,7 @@ for i in $(seq 1 $COUNT); do
     --sample "sample_id=SRR13439802 type=negative_ctrl source=feces material=DNA column_kraken2=SRR13439802_pe_SRR13439802_k2_pluspf.kraken2.kraken2.report column_centrifuge=SRR13439802_pe_SRR13439802_p_compressed+h+v.centrifuge" \
     --sample "sample_id=SRR13439790 type=sample source=blood material=RNA column_kraken2=SRR13439790_pe_SRR13439790_k2_pluspf.kraken2.kraken2.report column_centrifuge=SRR13439790_pe_SRR13439790_p_compressed+h+v.centrifuge" \
     --sample "sample_id=SRR13439813 type=negative_ctrl material=RNA column_kraken2=SRR13439813_pe_SRR13439813_k2_pluspf.kraken2.kraken2.report column_centrifuge=SRR13439813_pe_SRR13439813_p_compressed+h+v.centrifuge" \
-    --metaval-igv "$TEST_DATA/metaval/igv" \
+    --metaval "$TEST_DATA/metaval" \
     --url "$URL" \
     --password "$PASSWORD" 2>/dev/null; then
     success=$(( success + 1 ))

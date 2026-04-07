@@ -155,12 +155,14 @@ def _read_metaval_pipeline_info(metaval_dir: Path) -> Optional[dict]:
         return None
 
 
-def read_metaval(metaval_igv_dir: str) -> dict:
-    igv_dir     = Path(metaval_igv_dir)
-    metaval_dir = igv_dir.parent
+def read_metaval(metaval_dir: str) -> dict:
+    metaval_dir = Path(metaval_dir)
+    igv_dir     = metaval_dir / 'igv'
 
+    if not metaval_dir.exists():
+        raise FileNotFoundError(f"Metaval directory not found: {metaval_dir}")
     if not igv_dir.exists():
-        raise FileNotFoundError(f"Metaval IGV directory not found: {metaval_igv_dir}")
+        raise FileNotFoundError(f"Metaval igv/ subdirectory not found: {igv_dir}")
 
     taxid_map        = _read_viral_taxids(metaval_dir)
     blast_data       = _read_blast(metaval_dir)
