@@ -127,7 +127,7 @@ async def list_cases(
 ):
     query = {}
     if search.strip():
-        query["case_id"] = {"$regex": search.strip(), "$options": "i"}
+        query["case_id"] = {"$regex": search.strip()}
 
     total = await db["cases"].estimated_document_count() if not query else await db["cases"].count_documents(query)
     skip  = (page - 1) * PAGE_SIZE

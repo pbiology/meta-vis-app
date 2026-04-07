@@ -74,7 +74,7 @@ export default function CaseList() {
           </svg>
           <input
             type="text"
-            placeholder="Search case ID…"
+            placeholder="Search case name (case sensitive)…"
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
             className="bg-transparent text-xs text-gray-700 placeholder-gray-400 outline-none w-full"

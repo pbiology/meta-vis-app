@@ -47,7 +47,7 @@ async def list_samples(
         query["sample_type"] = {"$in": ["positive_ctrl", "negative_ctrl"]}
 
     if search.strip():
-        query["sample.sample_id"] = {"$regex": search.strip(), "$options": "i"}
+        query["sample.sample_id"] = {"$regex": search.strip()}
 
     total = (
         await db["samples"].estimated_document_count()
