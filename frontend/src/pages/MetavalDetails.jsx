@@ -170,7 +170,7 @@ export default function MetavalDetails() {
         <span className="text-gray-200">/</span>
         <h1 className="text-sm font-medium text-gray-900 italic">{taxonLabel}</h1>
         {result?.taxon_id && (
-
+          <a
             href={`https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=${result.taxon_id}`}
             target="_blank"
             rel="noopener noreferrer"
