@@ -67,7 +67,8 @@ def _read_viral_taxids(metaval_dir: Path) -> dict:
 def _read_blast(metaval_dir: Path) -> dict:
     """
     Scan blast/blastn/{classifier}/ for all summary files.
-    Returns a dict keyed by (sample_name, classifier, taxon_name) -> list of hit dicts.
+    Returns a dict keyed by (name_part, classifier) -> list of hit dicts,
+    where name_part is "{sample_name}_{taxon_name}".
     Only reads *_blast_filtered_summary.txt files with content.
     """
     results = {}
@@ -84,13 +85,8 @@ def _read_blast(metaval_dir: Path) -> dict:
             if summary_file.stat().st_size == 0:
                 continue
 
-            # filename: {sample_name}_{taxon_name}_blast_filtered_summary.txt
-            stem = summary_file.stem  # e.g. SRR13439790_Shigella-virus-Moo19_blast_filtered_summary
-            # strip trailing _blast_filtered_summary
+            stem = summary_file.stem
             name_part = stem.replace('_blast_filtered_summary', '')
-            # split on first underscore to get sample_name
-            # sample names contain underscores too, so we need to match against known samples
-            # store as full name_part and resolve later
             rows = []
             with open(summary_file) as f:
                 lines = f.readlines()
@@ -105,6 +101,40 @@ def _read_blast(metaval_dir: Path) -> dict:
             results[(name_part, classifier)] = rows
 
     return results
+
+
+def _read_extracted_reads(metaval_dir: Path) -> dict:
+    """
+    Scan extracted_reads/{classifier}/ for paired FASTA files.
+    Returns a dict keyed by (name_part, classifier) ->
+      {'read_1_path': str, 'read_2_path': str | None}
+    where name_part is "{sample_name}_{taxon_name}" (same convention as blast).
+
+    Filename pattern:
+      {sample_name}_{taxon_name}.extracted_{classifier}_read_{1|2}.fa
+    """
+    reads_map = {}
+    reads_dir = metaval_dir / 'extracted_reads'
+    if not reads_dir.exists():
+        return reads_map
+
+    for clf_dir in reads_dir.iterdir():
+        if not clf_dir.is_dir():
+            continue
+        classifier = clf_dir.name
+
+        for fa_file in clf_dir.glob(f'*.extracted_{classifier}_read_1.fa'):
+            # Strip the .extracted_{classifier}_read_1.fa suffix to get
+            # "{sample_name}_{taxon_name}" — the dot before "extracted" is
+            # the delimiter between prefix and the extracted suffix.
+            name_part = fa_file.name.replace(f'.extracted_{classifier}_read_1.fa', '')
+            read_2 = clf_dir / fa_file.name.replace('_read_1.fa', '_read_2.fa')
+            reads_map[(name_part, classifier)] = {
+                'read_1_path': str(fa_file),
+                'read_2_path': str(read_2) if read_2.exists() else None,
+            }
+
+    return reads_map
 
 
 def _read_metaval_pipeline_info(metaval_dir: Path) -> Optional[dict]:
@@ -125,15 +155,16 @@ def _read_metaval_pipeline_info(metaval_dir: Path) -> Optional[dict]:
         return None
 
 
-def read_metaval(metaval_igv_dir: str) -> list[dict]:
+def read_metaval(metaval_igv_dir: str) -> dict:
     igv_dir     = Path(metaval_igv_dir)
     metaval_dir = igv_dir.parent
 
     if not igv_dir.exists():
         raise FileNotFoundError(f"Metaval IGV directory not found: {metaval_igv_dir}")
 
-    taxid_map = _read_viral_taxids(metaval_dir)
-    blast_data = _read_blast(metaval_dir)
+    taxid_map        = _read_viral_taxids(metaval_dir)
+    blast_data       = _read_blast(metaval_dir)
+    reads_data       = _read_extracted_reads(metaval_dir)
     metaval_pipeline = _read_metaval_pipeline_info(metaval_dir)
 
     # Group IGV files by (sample_name, classifier, taxon_name)
@@ -148,30 +179,31 @@ def read_metaval(metaval_igv_dir: str) -> list[dict]:
         file_size = html_file.stat().st_size
         too_large = file_size > MAX_IGV_SIZE
         groups[key].append({
-            'organism_name': parsed['organism_name'],
-            'igv_file_path': str(html_file),
+            'organism_name':       parsed['organism_name'],
+            'igv_file_path':       str(html_file),
             'igv_file_size_bytes': file_size,
-            'igv_too_large': too_large,
+            'igv_too_large':       too_large,
         })
 
     results = []
     for (sample_name, classifier, taxon_name), organisms in groups.items():
-        taxon_id = taxid_map.get((classifier, taxon_name))
+        taxon_id  = taxid_map.get((classifier, taxon_name))
+        name_part = f"{sample_name}_{taxon_name}"
 
-        # Match blast summary — name_part is "{sample_name}_{taxon_name}"
-        name_part   = f"{sample_name}_{taxon_name}"
-        blast_hits  = blast_data.get((name_part, classifier), [])
+        blast_hits = blast_data.get((name_part, classifier), [])
+        reads      = reads_data.get((name_part, classifier), {})
 
         results.append({
-            'sample_name': sample_name,
-            'classifier':  classifier,
-            'taxon_id':    taxon_id,
-            'taxon_name':  taxon_name,
-            'organisms':   organisms,
-            'blast':       blast_hits,
+            'sample_name':     sample_name,
+            'classifier':      classifier,
+            'taxon_id':        taxon_id,
+            'taxon_name':      taxon_name,
+            'organisms':       organisms,
+            'blast':           blast_hits,
+            'extracted_reads': reads,   # {'read_1_path': ..., 'read_2_path': ...}
         })
 
     return {
-        'results': results,
+        'results':       results,
         'pipeline_info': metaval_pipeline,
     }

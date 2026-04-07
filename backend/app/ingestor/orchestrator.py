@@ -177,6 +177,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             })
             sample_object_id = sample_doc["_id"] if sample_doc else None
 
+            # Upload IGV HTML files
             async def _upload_igv(org):
                 igv_key = None
                 if not org.get("igv_too_large") and org.get("igv_file_path"):
@@ -195,16 +196,31 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
 
             organisms = list(await asyncio.gather(*[_upload_igv(org) for org in r["organisms"]]))
 
+            # Upload extracted reads FASTA files
+            extracted_reads = r.get("extracted_reads", {})
+            reads_keys = {}
+            for read_num, path_key in [("1", "read_1_path"), ("2", "read_2_path")]:
+                fasta_path = extracted_reads.get(path_key)
+                if fasta_path and Path(fasta_path).exists():
+                    blob_key = (
+                        f"extracted_reads/{case_object_id}/{r['sample_name']}/"
+                        f"{r['classifier']}/{r['taxon_name']}_read_{read_num}.fa"
+                    )
+                    content = Path(fasta_path).read_text(encoding="utf-8")
+                    await get_blob_store().put(blob_key, content)
+                    reads_keys[f"read_{read_num}_key"] = blob_key
+
             await db["metaval_results"].insert_one({
-                "case_id":     case_object_id,
-                "sample_id":   sample_object_id,
-                "sample_name": r["sample_name"],
-                "classifier":  r["classifier"],
-                "taxon_id":    r["taxon_id"],
-                "taxon_name":  r["taxon_name"],
-                "organisms":   organisms,
-                "blast":       r["blast"],
-                "ingested_at": now,
+                "case_id":         case_object_id,
+                "sample_id":       sample_object_id,
+                "sample_name":     r["sample_name"],
+                "classifier":      r["classifier"],
+                "taxon_id":        r["taxon_id"],
+                "taxon_name":      r["taxon_name"],
+                "organisms":       organisms,
+                "blast":           r["blast"],
+                "extracted_reads": reads_keys,   # {read_1_key, read_2_key}
+                "ingested_at":     now,
             })
 
     return {

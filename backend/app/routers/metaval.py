@@ -1,7 +1,7 @@
 # app/routers/metaval.py
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 
@@ -27,6 +27,12 @@ def _serialise(doc: dict) -> dict:
     for org in doc.get("organisms", []):
         org.pop("igv_html", None)
         org.pop("igv_key", None)
+    # Strip internal storage keys from extracted_reads — expose only presence
+    reads = doc.get("extracted_reads", {})
+    doc["extracted_reads"] = {
+        "has_read_1": bool(reads.get("read_1_key")),
+        "has_read_2": bool(reads.get("read_2_key")),
+    }
     return doc
 
 
@@ -42,7 +48,7 @@ async def list_metaval_for_sample(
     return [_serialise(d) for d in docs]
 
 
-@router.get("/{metaval_id}", summary="Get a single metaval result with IGV html stripped")
+@router.get("/{metaval_id}", summary="Get a single metaval result")
 async def get_metaval(
     metaval_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -52,6 +58,37 @@ async def get_metaval(
     if not doc:
         raise HTTPException(status_code=404, detail="Metaval result not found")
     return _serialise(doc)
+
+
+@router.get("/{metaval_id}/reads/{read_num}", summary="Serve extracted reads FASTA for read 1 or 2")
+async def get_extracted_reads(
+    metaval_id: str,
+    read_num: int,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
+    if read_num not in (1, 2):
+        raise HTTPException(status_code=422, detail="read_num must be 1 or 2")
+
+    doc = await db["metaval_results"].find_one({"_id": _oid(metaval_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Metaval result not found")
+
+    key = doc.get("extracted_reads", {}).get(f"read_{read_num}_key")
+    if not key:
+        raise HTTPException(status_code=404, detail=f"Extracted reads (read {read_num}) not available")
+
+    from app.database import get_blob_store
+    content = await get_blob_store().get(key)
+    if not content:
+        raise HTTPException(status_code=404, detail="Reads not found in storage")
+
+    taxon_name = doc.get("taxon_name", "reads")
+    filename   = f"{taxon_name}_read_{read_num}.fa"
+    return PlainTextResponse(
+        content=content,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/{metaval_id}/igv/{organism_name}", summary="Serve IGV HTML for a specific organism")
