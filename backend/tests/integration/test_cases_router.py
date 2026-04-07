@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 
 from app.routers.cases import router
-from tests.conftest import make_test_app
+from tests.helpers import make_test_app
 
 
 # ---------------------------------------------------------------------------
@@ -259,3 +259,126 @@ class TestDeleteCase:
     async def test_unknown_case_returns_404(self, client, fake_db):
         resp = client.delete("/api/v1/cases/nonexistent")
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# GET /cases/{case_id}/krona
+# ---------------------------------------------------------------------------
+
+class TestGetCaseKrona:
+
+    async def test_serves_krona_html(self, client, fake_db, fake_blob):
+        oid = await insert_case(fake_db, "testcase")
+        await fake_blob.put(f"krona/{oid}/kraken2.html", "<html>krona</html>")
+        resp = client.get("/api/v1/cases/testcase/krona?classifier=kraken2")
+        assert resp.status_code == 200
+        assert "<html>" in resp.text
+
+    async def test_unknown_case_returns_404(self, client, fake_db):
+        resp = client.get("/api/v1/cases/nonexistent/krona")
+        assert resp.status_code == 404
+
+    async def test_missing_blob_returns_404(self, client, fake_db):
+        await insert_case(fake_db, "testcase")
+        resp = client.get("/api/v1/cases/testcase/krona?classifier=kraken2")
+        assert resp.status_code == 404
+
+    async def test_default_classifier_is_kraken2(self, client, fake_db, fake_blob):
+        oid = await insert_case(fake_db, "testcase")
+        await fake_blob.put(f"krona/{oid}/kraken2.html", "<html>krona</html>")
+        resp = client.get("/api/v1/cases/testcase/krona")
+        assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# GET /cases/{case_id}/samples — extended coverage
+# ---------------------------------------------------------------------------
+
+class TestListSamplesExtended:
+
+    async def test_type_filter_sample(self, client, fake_db):
+        oid = await insert_case(fake_db, "testcase")
+        await insert_sample(fake_db, oid, "SRR001", sample_type="sample")
+        await insert_sample(fake_db, oid, "CTRL01", sample_type="negative_ctrl")
+        resp = client.get("/api/v1/cases/testcase/samples?type=sample")
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+        assert resp.json()[0]["sample"]["sample_id"] == "SRR001"
+
+    async def test_profiles_produce_top_taxa(self, client, fake_db):
+        oid = await insert_case(fake_db, "testcase")
+        await fake_db["samples"].insert_one({
+            "case_id":     oid,
+            "case_id_str": "testcase",
+            "sample_type": "sample",
+            "material":    "DNA",
+            "sample":      {"sample_id": "SRR001"},
+            "taxprofiler": {"classifiers": {}},
+            "profiles": [{
+                "classifier":    "kraken2",
+                "classifier_db": "k2_pluspf",
+                "profile": [
+                    {"taxon_id": 9606, "name": "Homo sapiens",   "abundance": 300.0, "superkingdom": "Eukaryota"},
+                    {"taxon_id": 1279, "name": "Staphylococcus", "abundance": 400.0, "superkingdom": "Bacteria"},
+                ],
+            }],
+            "has_krona":   False,
+            "review":      {"reviewed": False},
+            "ingested_at": datetime.now(timezone.utc),
+        })
+        resp = client.get("/api/v1/cases/testcase/samples")
+        assert resp.status_code == 200
+        top = resp.json()[0]["top_taxa"]["kraken2"]
+        assert top[0]["name"] == "Staphylococcus"
+
+    async def test_subject_id_serialised(self, client, fake_db):
+        oid = await insert_case(fake_db, "testcase")
+        subject_oid = ObjectId()
+        await fake_db["samples"].insert_one({
+            "case_id":     oid,
+            "case_id_str": "testcase",
+            "subject_id":  subject_oid,
+            "sample_type": "sample",
+            "material":    "DNA",
+            "sample":      {"sample_id": "SRR001"},
+            "taxprofiler": {"classifiers": {}},
+            "profiles":    [],
+            "has_krona":   False,
+            "review":      {"reviewed": False},
+            "ingested_at": datetime.now(timezone.utc),
+        })
+        resp = client.get("/api/v1/cases/testcase/samples")
+        assert resp.json()[0]["subject_id"] == str(subject_oid)
+
+# ---------------------------------------------------------------------------
+# DELETE /cases/{case_id}/notes — permission checks
+# ---------------------------------------------------------------------------
+
+class TestDeleteNotePermissions:
+
+    async def test_non_admin_cannot_delete_other_users_note(self, fake_db, fake_blob):
+        app = make_test_app(router, fake_db, fake_blob, role="writer")
+        client = TestClient(app)
+        await insert_case(fake_db, "testcase")
+        await fake_db["cases"].update_one(
+            {"case_id": "testcase"},
+            {"$push": {"notes": {
+                "text": "Other user's note", "author": "otheruser",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }}}
+        )
+        resp = client.delete("/api/v1/cases/testcase/notes/0")
+        assert resp.status_code == 403
+
+    async def test_owner_can_delete_own_note(self, client, fake_db):
+        await insert_case(fake_db, "testcase")
+        await fake_db["cases"].update_one(
+            {"case_id": "testcase"},
+            {"$push": {"notes": {
+                "text": "My note", "author": "testuser",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }}}
+        )
+        resp = client.delete("/api/v1/cases/testcase/notes/0")
+        assert resp.status_code == 200
+        assert resp.json()["deleted"] is True

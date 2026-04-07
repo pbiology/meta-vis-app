@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 
 from app.routers.metaval import router
-from tests.conftest import make_test_app
+from tests.helpers import make_test_app
 
 
 # ---------------------------------------------------------------------------
@@ -177,3 +177,58 @@ class TestBlast:
     async def test_unknown_id_returns_404(self, client, fake_db):
         resp = client.post(f"/api/v1/metaval/{ObjectId()}/blast")
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# GET /metaval/{metaval_id}/igv — edge cases
+# ---------------------------------------------------------------------------
+
+class TestGetIgvEdgeCases:
+
+    async def test_organism_with_no_igv_key_returns_404(self, client, fake_db, fake_blob):
+        oid, _ = await insert_metaval(fake_db, fake_blob, with_igv=False)
+        await fake_db["metaval_results"].update_one(
+            {"_id": oid},
+            {"$push": {"organisms": {
+                "organism_name": "NoKey", "igv_key": None,
+                "igv_file_size_bytes": 100, "igv_too_large": False,
+            }}}
+        )
+        resp = client.get(f"/api/v1/metaval/{oid}/igv/NoKey")
+        assert resp.status_code == 404
+        assert "not available" in resp.json()["detail"]
+
+    async def test_blob_missing_from_store_returns_404(self, client, fake_db, fake_blob):
+        oid, _ = await insert_metaval(fake_db, fake_blob, with_igv=False)
+        await fake_db["metaval_results"].update_one(
+            {"_id": oid},
+            {"$push": {"organisms": {
+                "organism_name": "MissingBlob",
+                "igv_key": "igv/case/SRR001/kraken2/MissingBlob.html",
+                "igv_file_size_bytes": 100, "igv_too_large": False,
+            }}}
+        )
+        resp = client.get(f"/api/v1/metaval/{oid}/igv/MissingBlob")
+        assert resp.status_code == 404
+        assert "not found in storage" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# Serialise — sample_id present and organisms non-empty
+# ---------------------------------------------------------------------------
+
+class TestSerialiseExtended:
+
+    async def test_sample_id_serialised_as_string(self, client, fake_db, fake_blob):
+        oid, sample_oid = await insert_metaval(fake_db, fake_blob)
+        resp = client.get(f"/api/v1/metaval/{oid}")
+        assert isinstance(resp.json()["sample_id"], str)
+        assert resp.json()["sample_id"] == str(sample_oid)
+
+    async def test_serialise_with_organisms_strips_igv_key(self, client, fake_db, fake_blob):
+        oid, _ = await insert_metaval(fake_db, fake_blob, with_igv=True)
+        resp = client.get(f"/api/v1/metaval/{oid}")
+        assert resp.status_code == 200
+        for org in resp.json().get("organisms", []):
+            assert "igv_key" not in org
+        assert "available" in resp.json()["verification_data"]
