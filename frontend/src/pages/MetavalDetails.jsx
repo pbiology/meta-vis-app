@@ -1,122 +1,116 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getMetavalResult, getReadsDownloadUrl } from '../api/metaval'
+import { getMetavalResult, submitBlast } from '../api/metaval'
 
-function ReadCountBadge({ fasta }) {
-  // Count sequences by counting '>' at start of lines
-  const count = (fasta.match(/^>/gm) ?? []).length
+function BlastModal({ readNum, onClose }) {
+  const [status, setStatus] = useState('blasting')
+  const [error,  setError]  = useState(null)
+  const { metavalId } = useParams()
+
+  useEffect(() => {
+    submitBlast(metavalId, readNum)
+      .then(data => {
+        window.open(data.results_url, '_blank')
+        onClose()
+      })
+      .catch(err => {
+        const msg = err?.response?.data?.detail ?? 'BLAST submission failed. Please try again.'
+        setError(msg)
+        setStatus('error')
+      })
+  }, [])
+
   return (
-    <span className="text-xs text-gray-500 tabular-nums">
-      {count.toLocaleString()} {count === 1 ? 'read' : 'reads'}
-    </span>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+      <div className="bg-white rounded-2xl shadow-xl px-8 py-7 max-w-sm w-full mx-4 flex flex-col gap-4">
+        {status === 'blasting' && (
+          <>
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 animate-spin text-blue-500 flex-shrink-0" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" strokeDasharray="28" strokeDashoffset="10"/>
+              </svg>
+              <p className="text-sm font-medium text-gray-800">BLASTing read {readNum}…</p>
+            </div>
+            <p className="text-xs text-gray-400">
+              Submitting to NCBI BLAST. This can take up to 30 seconds.
+            </p>
+          </>
+        )}
+        {status === 'error' && (
+          <>
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 text-red-400 flex-shrink-0" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/>
+                <path d="M8 5v3M8 10.5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+              <p className="text-sm font-medium text-gray-800">Submission failed</p>
+            </div>
+            <p className="text-xs text-red-400">{error}</p>
+            <button
+              onClick={onClose}
+              className="self-end text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              Dismiss
+            </button>
+          </>
+        )}
+      </div>
+    </div>
   )
 }
 
-function ReadsSection({ metavalId, result }) {
+function ReadsSection({ result }) {
+  const [blastingRead, setBlastingRead] = useState(null)
+
   const reads = result?.extracted_reads ?? {}
-
-  const [preview, setPreview] = useState({ 1: null, 2: null })
-  const [loading, setLoading] = useState({ 1: false, 2: false })
-  const [error,   setError]   = useState({ 1: null,  2: null  })
-
-  async function loadPreview(readNum) {
-    setLoading(p => ({ ...p, [readNum]: true }))
-    setError(p =>   ({ ...p, [readNum]: null }))
-    try {
-      const url  = getReadsDownloadUrl(metavalId, readNum)
-      const res  = await fetch(url, { credentials: 'include' })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const text = await res.text()
-      setPreview(p => ({ ...p, [readNum]: text }))
-    } catch (e) {
-      setError(p => ({ ...p, [readNum]: 'Failed to load reads.' }))
-    } finally {
-      setLoading(p => ({ ...p, [readNum]: false }))
-    }
-  }
-
   const rows = [
     { num: 1, label: 'Read 1', available: reads.has_read_1 },
     { num: 2, label: 'Read 2', available: reads.has_read_2 },
   ]
-
   const anyAvailable = rows.some(r => r.available)
 
   return (
-    <section className="bg-white border border-gray-100 rounded-xl">
-      <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2">
-        <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">
-          Extracted reads
-        </p>
-        {!anyAvailable && (
-          <span className="text-xs text-gray-300">Not available</span>
-        )}
-      </div>
-
-      {anyAvailable ? (
-        <div className="divide-y divide-gray-50">
-          {rows.map(({ num, label, available }) => (
-            <div key={num} className="px-5 py-4">
-              <div className="flex items-center gap-3 mb-3">
-                <span className="text-xs font-medium text-gray-600">{label}</span>
-
-                {available ? (
-                  <>
-                    {preview[num] && <ReadCountBadge fasta={preview[num]} />}
-                    <div className="flex items-center gap-2 ml-auto">
-                      <button
-                        onClick={() => loadPreview(num)}
-                        disabled={loading[num]}
-                        className="text-xs text-blue-500 hover:text-blue-700 disabled:opacity-40 transition-colors"
-                      >
-                        {loading[num] ? 'Loading…' : preview[num] ? 'Reload' : 'Preview'}
-                      </button>
-                      <a
-                        href={getReadsDownloadUrl(metavalId, num)}
-                        download
-                        className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-                      >
-                        <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">
-                          <path d="M8 2v8M5 7l3 3 3-3M3 12h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                        Download .fa
-                      </a>
-                    </div>
-                  </>
-                ) : (
-                  <span className="text-xs text-gray-300 ml-auto">Not available</span>
-                )}
-              </div>
-
-              {error[num] && (
-                <p className="text-xs text-red-400">{error[num]}</p>
-              )}
-
-              {preview[num] && !error[num] && (
-                <pre className="text-xs font-mono text-gray-500 bg-gray-50 rounded-lg p-3 overflow-x-auto whitespace-pre leading-relaxed max-h-64 overflow-y-auto">
-                  {/* Show first 10 sequences only */}
-                  {preview[num]
-                    .split('\n')
-                    .reduce((acc, line) => {
-                      if (line.startsWith('>')) acc.headers++
-                      if (acc.headers <= 10) acc.lines.push(line)
-                      return acc
-                    }, { lines: [], headers: 0 })
-                    .lines.join('\n')}
-                  {(preview[num].match(/^>/gm) ?? []).length > 10 && (
-                    '\n…'
-                  )}
-                </pre>
-              )}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="px-5 py-8 text-xs text-gray-300 text-center">
-          No extracted reads were ingested for this taxon.
-        </p>
+    <>
+      {blastingRead && (
+        <BlastModal
+          readNum={blastingRead}
+          onClose={() => setBlastingRead(null)}
+        />
       )}
-    </section>
+      <section className="bg-white border border-gray-100 rounded-xl">
+        <div className="px-5 py-3.5 border-b border-gray-100">
+          <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">Extracted reads</p>
+        </div>
+        {anyAvailable ? (
+          <table className="w-full text-left">
+            <tbody>
+              {rows.map(({ num, label, available }) => (
+                <tr key={num} className="border-t border-gray-50 first:border-t-0">
+                  <td className="px-5 py-2 text-xs font-medium text-gray-600 w-20">{label}</td>
+                  <td className="px-5 py-2 text-xs text-gray-400">
+                    {available ? 'Available' : <span className="text-gray-300">Not available</span>}
+                  </td>
+                  <td className="px-5 py-2 text-right">
+                    {available && (
+                      <button
+                        onClick={() => setBlastingRead(num)}
+                        className="text-xs px-3 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                      >
+                        BLAST read {num}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="px-5 py-8 text-xs text-gray-300 text-center">
+            No extracted reads were ingested for this taxon.
+          </p>
+        )}
+      </section>
+    </>
   )
 }
 
@@ -146,8 +140,6 @@ export default function MetavalDetails() {
 
   return (
     <div className="flex flex-col h-full">
-
-      {/* Topbar */}
       <div className="flex items-center gap-3 px-6 py-4 bg-white border-b border-gray-100 flex-shrink-0">
         <button
           onClick={() => navigate(`/samples/${sampleId}`)}
@@ -158,16 +150,14 @@ export default function MetavalDetails() {
           </svg>
           Back
         </button>
-
         <span className="text-gray-200">/</span>
         <span className="text-xs text-gray-400 font-mono">{result?.sample_name}</span>
         <span className="text-gray-200">/</span>
         <span className="text-xs text-gray-400">{result?.classifier}</span>
         <span className="text-gray-200">/</span>
         <h1 className="text-sm font-medium text-gray-900 italic">{taxonLabel}</h1>
-
         {result?.taxon_id && (
-          <a
+            <a
             href={`https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=${result.taxon_id}`}
             target="_blank"
             rel="noopener noreferrer"
@@ -178,12 +168,9 @@ export default function MetavalDetails() {
           </a>
         )}
       </div>
-
-      {/* Content */}
       <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
-        <ReadsSection metavalId={metavalId} result={result} />
+        <ReadsSection result={result} />
       </div>
-
     </div>
   )
 }
