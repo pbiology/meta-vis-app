@@ -17,6 +17,11 @@ export function getReadsDownloadUrl(metavalId, readNum) {
   return `${base}/metaval/${metavalId}/reads/${readNum}`
 }
 
+export async function submitBlast(metavalId, readNum) {
+  const res = await client.post(`/metaval/${metavalId}/blast/${readNum}`)
+  return res.data
+}
+
 export async function getIgvUrl(metavalId, organismName) {
   const res = await client.get(
     `/metaval/${metavalId}/igv/${encodeURIComponent(organismName)}`,
