@@ -66,39 +66,47 @@ def _read_viral_taxids(metaval_dir: Path) -> dict:
 
 def _read_blast(metaval_dir: Path) -> dict:
     """
-    Scan blast/blastn/{classifier}/ for all summary files.
-    Returns a dict keyed by (name_part, classifier) -> list of hit dicts,
+    Scan blast/blastn/ and blast/blastx/ for summary files.
+    Returns a dict keyed by (name_part, classifier) ->
+      {'blastn': [...rows], 'blastx': [...rows]}
     where name_part is "{sample_name}_{taxon_name}".
-    Only reads *_blast_filtered_summary.txt files with content.
+    Only reads *_filtered_summary.txt files with content.
     """
-    results = {}
-    blastn_dir = metaval_dir / 'blast' / 'blastn'
-    if not blastn_dir.exists():
-        return results
+    results: dict[tuple, dict] = {}
 
-    for clf_dir in blastn_dir.iterdir():
-        if not clf_dir.is_dir():
+    for program in ('blastn', 'blastx'):
+        program_dir = metaval_dir / 'blast' / program
+        if not program_dir.exists():
             continue
-        classifier = clf_dir.name
 
-        for summary_file in clf_dir.glob('*_blast_filtered_summary.txt'):
-            if summary_file.stat().st_size == 0:
+        suffix = f'_blast_filtered_summary.txt' if program == 'blastn' else f'_blastx_filtered_summary.txt'
+
+        for clf_dir in program_dir.iterdir():
+            if not clf_dir.is_dir():
                 continue
+            classifier = clf_dir.name
 
-            stem = summary_file.stem
-            name_part = stem.replace('_blast_filtered_summary', '')
-            rows = []
-            with open(summary_file) as f:
-                lines = f.readlines()
-            if len(lines) < 2:
-                continue
-            headers = lines[0].strip().split('\t')
-            for line in lines[1:]:
-                cols = line.strip().split('\t')
-                if cols and len(cols) == len(headers):
-                    rows.append(dict(zip(headers, cols)))
+            for summary_file in clf_dir.glob(f'*{suffix}'):
+                if summary_file.stat().st_size == 0:
+                    continue
+                stem      = summary_file.stem
+                name_part = stem.replace(f'_blast_filtered_summary' if program == 'blastn' else f'_blastx_filtered_summary', '')
 
-            results[(name_part, classifier)] = rows
+                with open(summary_file) as f:
+                    lines = f.readlines()
+                if len(lines) < 2:
+                    continue
+                headers = lines[0].strip().split('\t')
+                rows = []
+                for line in lines[1:]:
+                    cols = line.strip().split('\t')
+                    if cols and len(cols) == len(headers):
+                        rows.append(dict(zip(headers, cols)))
+
+                key = (name_part, classifier)
+                if key not in results:
+                    results[key] = {'blastn': [], 'blastx': []}
+                results[key][program] = rows
 
     return results
 
@@ -268,7 +276,7 @@ def read_metaval(metaval_dir: str) -> dict:
         taxon_id  = taxid_map.get((classifier, taxon_name))
         name_part = f"{sample_name}_{taxon_name}"
 
-        blast_hits = blast_data.get((name_part, classifier), [])
+        blast_hits = blast_data.get((name_part, classifier), {'blastn': [], 'blastx': []})
 
         # Prefer spades assembly over raw reads if available
         spades = spades_data.get((name_part, classifier))
