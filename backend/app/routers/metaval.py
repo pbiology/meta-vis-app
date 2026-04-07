@@ -2,6 +2,8 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse
+import asyncio
+import requests as http_requests
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 
@@ -89,6 +91,64 @@ async def get_extracted_reads(
         content=content,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.post("/{metaval_id}/blast/{read_num}", summary="Submit extracted reads to NCBI BLAST")
+async def blast_reads(
+    metaval_id: str,
+    read_num: int,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
+    if read_num not in (1, 2):
+        raise HTTPException(status_code=422, detail="read_num must be 1 or 2")
+
+    doc = await db["metaval_results"].find_one({"_id": _oid(metaval_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Metaval result not found")
+
+    key = doc.get("extracted_reads", {}).get(f"read_{read_num}_key")
+    if not key:
+        raise HTTPException(status_code=404, detail=f"Extracted reads (read {read_num}) not available")
+
+    from app.database import get_blob_store
+    fasta = await get_blob_store().get(key)
+    if not fasta:
+        raise HTTPException(status_code=404, detail="Reads not found in storage")
+
+    def _submit_to_ncbi(fasta: str) -> str:
+        response = http_requests.post(
+            "https://blast.ncbi.nlm.nih.gov/blast/Blast.cgi",
+            data={
+                "CMD":          "Put",
+                "PROGRAM":      "blastn",
+                "DATABASE":     "nt",
+                "QUERY":        fasta,
+                "FORMAT_TYPE":  "HTML",
+                "MEGABLAST":    "on",
+                "HITLIST_SIZE": "10",
+            },
+            timeout=60,
+        )
+        response.raise_for_status()
+        import re
+        match = re.search(r"RID = ([A-Z0-9]+)", response.text)
+        if not match:
+            raise ValueError("Could not parse RID from NCBI response")
+        return match.group(1)
+
+    try:
+        loop = asyncio.get_event_loop()
+        rid = await loop.run_in_executor(None, _submit_to_ncbi, fasta)
+    except ValueError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"NCBI BLAST submission failed: {str(e)}")
+
+    return {
+        "rid": rid,
+        "results_url": f"https://blast.ncbi.nlm.nih.gov/blast/Blast.cgi?CMD=Get&FORMAT_TYPE=HTML&RID={rid}",
+    }
 
 
 @router.get("/{metaval_id}/igv/{organism_name}", summary="Serve IGV HTML for a specific organism")
