@@ -55,7 +55,16 @@ def _non_host_total(entries: list, clf_qc: dict = None) -> float:
     if clf_qc and clf_qc.get("classified_reads") is not None:
         return clf_qc["classified_reads"] - host_reads
     root_reads = next((e["abundance"] for e in entries if e.get("taxon_id") == 1), 0)
-    return root_reads - host_reads
+    if root_reads:
+        return root_reads - host_reads
+    # Fallback for classifiers like diamond that don't emit a root entry:
+    # sum all non-host, non-root, classified abundances directly
+    return sum(
+        e["abundance"] for e in entries
+        if e.get("taxon_id") not in HOST_TAXON_IDS
+        and e.get("name") != "unclassified"
+        and not (e.get("name") or "").startswith("unclassified ")
+    )
 
 
 def _top_taxa_for(entries: list, clf_qc: dict = None, n: int = 3) -> list:

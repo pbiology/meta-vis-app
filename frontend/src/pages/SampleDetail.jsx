@@ -49,12 +49,16 @@ function TaxonomyTable({ profile, clfQc, metavalResults, sampleId, outbreakTaxon
   const TAX_PER_PAGE = 50
 
   const allEntries   = profile?.profile ?? []
-  const hostReads    = allEntries.find(t => t.taxon_id === 9606)?.abundance ?? 0
+const hostReads    = allEntries.find(t => t.taxon_id === 9606)?.abundance ?? 0
   const unclassReads = allEntries.find(t => t.taxon_id === 0)?.abundance ?? 0
-  const classifiedReads = clfQc?.classified_reads
-    ?? (allEntries.find(t => t.taxon_id === 1)?.abundance ?? 0)
+  const rootReads    = allEntries.find(t => t.taxon_id === 1)?.abundance ?? 0
+  const classifiedReads = clfQc?.classified_reads ?? rootReads
   const totalReads   = unclassReads + classifiedReads
-  const nonHostTotal = classifiedReads - hostReads
+  const nonHostTotal = classifiedReads > 0
+    ? classifiedReads - hostReads
+    : allEntries
+        .filter(t => !HOST_IDS.has(t.taxon_id) && t.name !== 'unclassified' && !t.name?.startsWith('unclassified '))
+        .reduce((sum, t) => sum + t.abundance, 0)
 
 // NTC profiles for this classifier — list of {sample_id, abundanceMap}
   const ntcForClassifier = ntcProfiles.map(ntc => ({

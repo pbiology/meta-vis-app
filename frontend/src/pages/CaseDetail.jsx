@@ -370,7 +370,7 @@ export default function CaseDetail() {
                 </table>
 
                 {/* Krona for this classifier */}
-                {caseData.has_krona && (
+                {clf.krona_id && (
                   <div className="p-4 border-t border-gray-50">
                     {kronaErrors[clf.name] && (
                       <p className="text-xs text-red-400">Krona file could not be loaded.</p>
