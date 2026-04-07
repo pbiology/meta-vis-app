@@ -159,7 +159,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     )
 
     if request.metaval:
-        metaval_data    = read_metaval(request.metaval.igv_dir)
+        metaval_data    = read_metaval(request.metaval.metaval_dir)
         metaval_results = metaval_data["results"]
 
         if metaval_data.get("pipeline_info"):
