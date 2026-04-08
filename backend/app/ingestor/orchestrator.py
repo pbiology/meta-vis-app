@@ -41,6 +41,58 @@ async def _store_krona(
     await get_blob_store().put(key, html)
 
 
+async def _compute_outbreak_taxa(
+    profiles: list,
+) -> list:
+    """
+    Extract taxa from profiles that match any enabled outbreak config.
+
+    Uses the outbreak configs loaded from outbreak_configs.json at startup.
+    """
+    from app.config import settings
+
+    if not settings.outbreak_configs:
+        return []
+
+    outbreak_taxa = []
+    seen_taxon_ids = set()
+
+    for profile in profiles:
+        classifier_name = profile.get("classifier")
+
+        for entry in profile.get("profile", []):
+            taxon_id = entry.get("taxon_id")
+
+            if taxon_id in seen_taxon_ids:
+                continue
+
+            superkingdom = entry.get("superkingdom")
+            rank = entry.get("rank")
+            abundance = entry.get("abundance", 0)
+
+            # Check if this taxon matches ANY outbreak config
+            for config in settings.outbreak_configs:
+                if (
+                    superkingdom in config["superkingdoms"]
+                    and rank in config["min_rank"]
+                    and abundance > config["min_abundance"]
+                ):
+                    outbreak_taxa.append(
+                        {
+                            "taxon_id": taxon_id,
+                            "name": entry.get("name"),
+                            "superkingdom": superkingdom,
+                            "rank": rank,
+                            "abundance": abundance,
+                            "classifier": classifier_name,
+                        }
+                    )
+                    seen_taxon_ids.add(taxon_id)
+                    break
+
+    return outbreak_taxa
+
+
 async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     now = datetime.now(timezone.utc)
 
@@ -128,6 +180,9 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
 
         base_qc = _extract_base_qc(qc_data, s.sample_id)
 
+        # Compute outbreak_taxa from profiles using active configs
+        outbreak_taxa = await _compute_outbreak_taxa(profiles)
+
         sample_doc = {
             "case_id": case_object_id,
             "case_id_str": request.case_id,
@@ -150,6 +205,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
                 "pipeline_info": pipeline_info,
             },
             "profiles": profiles,
+            "outbreak_taxa": outbreak_taxa,
             "has_krona": any(clf.krona for clf in request.classifiers),
             "review": {
                 "reviewed": False,
