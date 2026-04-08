@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { getCases, deleteCase, getCaseStats } from "../api/cases";
+import { getCases, deleteCase, getCaseStats, getPathogenCases } from "../api/cases";
 import Badge from "../components/Badge";
 import { getOutbreaks } from "../api/alerts";
 import { useAuth } from "../context/AuthContext";
@@ -15,6 +15,7 @@ export default function CaseList() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [outbreakCaseIds, setOutbreakCaseIds] = useState(new Set());
+  const [pathogenCaseIds, setPathogenCaseIds] = useState(new Set());
   const [stats, setStats] = useState({ total: 0, pending: 0, reviewed: 0 });
   const navigate = useNavigate();
   const { role } = useAuth();
@@ -27,6 +28,9 @@ export default function CaseList() {
       setData(result);
       getOutbreaks(14)
         .then((d) => setOutbreakCaseIds(new Set(d.outbreaks.flatMap((o) => o.case_ids))))
+        .catch(() => {});
+      getPathogenCases()
+        .then((d) => setPathogenCaseIds(new Set(d.case_ids)))
         .catch(() => {});
     } catch {
       setError("Failed to load cases.");
@@ -154,6 +158,23 @@ export default function CaseList() {
                           />
                           <path
                             d="M8 6v3M8 11v.5"
+                            stroke="currentColor"
+                            strokeWidth="1.3"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                      )}
+                      {pathogenCaseIds.has(c._id) && (
+                        <svg
+                          className="w-3 h-3 text-red-500 flex-shrink-0"
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          title="Contains known pathogen"
+                        >
+                          <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.3" />
+                          <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.3" />
+                          <path
+                            d="M8 2.5v1.5M8 12v1.5M2.5 8h1.5M12 8h1.5"
                             stroke="currentColor"
                             strokeWidth="1.3"
                             strokeLinecap="round"
