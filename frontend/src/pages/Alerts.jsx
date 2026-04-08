@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
-import { getOutbreaks, getIgnorelist, addToIgnorelist, removeFromIgnorelist } from '../api/alerts'
+import { getOutbreaks, getIgnorelist, addToIgnorelist } from '../api/alerts'
 import { useAuth } from '../context/AuthContext'
 
 export default function Alerts() {
@@ -13,7 +13,6 @@ export default function Alerts() {
   const [error,          setError]          = useState(null)
   const [windowDays,     setWindowDays]     = useState(14)
   const [ignorelist,     setIgnorelist]     = useState([])
-  const [ignorelistOpen, setIgnorelistOpen] = useState(false)
   const [ignoring,       setIgnoring]       = useState(null)  // taxon_id currently being ignored
   const [highlightedId,  setHighlightedId]  = useState(null)
   const sectionRefs = useRef({})
@@ -53,15 +52,6 @@ export default function Alerts() {
       alert('Failed to add taxon to ignorelist.')
     } finally {
       setIgnoring(null)
-    }
-  }
-
-  async function handleUnignore(taxonId) {
-    try {
-      await removeFromIgnorelist(taxonId)
-      load()
-    } catch {
-      alert('Failed to remove taxon from ignorelist.')
     }
   }
 
