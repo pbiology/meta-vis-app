@@ -4,42 +4,59 @@ from datetime import datetime, date, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
-from collections import defaultdict
 from typing import Optional
+
+from app.database import get_db
+from app.auth.utils import get_current_user, require_role
+from app.config import settings
+
+router = APIRouter(prefix="/alerts", tags=["alerts"])
 
 # Simple in-memory cache — keyed by window_days
 _cache: dict[int, dict] = {}
 _cache_computed_at: datetime | None = None
 
-# Cache is explicitly cleared on ingest and ignorelist changes.
+# Cache is explicitly cleared on ignorelist changes.
 # TTL is a safety net only — set high since data changes infrequently.
 CACHE_TTL_SECONDS = 3600
 
-from app.database import get_db
-from app.auth.utils import get_current_user, require_role
 
-router = APIRouter(prefix="/alerts", tags=["alerts"])
+# ============================================================================
+# Models
+# ============================================================================
 
 
 class IgnorePayload(BaseModel):
     taxon_id: int
     taxon_name: str
+    superkingdom: str = "Viruses"  # Default to Viruses, can be overridden
     reason: Optional[str] = None
 
 
-def parse_date(d):
-    if isinstance(d, str):
-        return date.fromisoformat(d)
-    return d
+class IgnoreNotePayload(BaseModel):
+    reason: Optional[str] = None
+
+
+# ============================================================================
+# Ignorelist Endpoints (Updated with Superkingdom Filter)
+# ============================================================================
 
 
 @router.get("/ignorelist", summary="List ignored taxa")
 async def get_ignorelist(
+    superkingdom: Optional[str] = Query(
+        None, description="Filter by superkingdom (e.g., 'Viruses' or 'Bacteria')"
+    ),
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
+    """Get ignored taxa, optionally filtered by superkingdom."""
+    query = {}
+    if superkingdom:
+        query["superkingdom"] = superkingdom
+
     docs = (
-        await db["outbreak_ignorelist"].find().sort("added_at", -1).to_list(length=None)
+        await db["outbreak_ignorelist"].find(query).sort("added_at", -1).to_list(None)
     )
     for doc in docs:
         doc["_id"] = str(doc["_id"])
@@ -52,21 +69,24 @@ async def add_to_ignorelist(
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(require_role("writer", "admin")),
 ):
+    """Add a taxon to ignorelist (writer or admin)."""
     existing = await db["outbreak_ignorelist"].find_one({"taxon_id": payload.taxon_id})
     if existing:
         raise HTTPException(
             status_code=409, detail=f"Taxon {payload.taxon_id} is already ignored"
         )
+
     doc = {
         "taxon_id": payload.taxon_id,
         "taxon_name": payload.taxon_name,
+        "superkingdom": payload.superkingdom,
         "reason": payload.reason,
         "added_by": current_user["username"],
-        "added_at": datetime.now(timezone.utc).isoformat(),
+        "added_at": datetime.now(timezone.utc),
     }
-    await db["outbreak_ignorelist"].insert_one(doc)
-    _cache.clear()  # ignorelist change affects outbreak results
-    doc["_id"] = str(doc["_id"])
+    result = await db["outbreak_ignorelist"].insert_one(doc)
+    _cache.clear()
+    doc["_id"] = str(result.inserted_id)
     return doc
 
 
@@ -78,17 +98,16 @@ async def remove_from_ignorelist(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(require_role("admin")),
 ):
+    """Remove a taxon from ignorelist (admin only)."""
     result = await db["outbreak_ignorelist"].delete_one({"taxon_id": taxon_id})
-    _cache.clear()  # ignorelist change affects outbreak results
+    _cache.clear()
+
     if result.deleted_count == 0:
         raise HTTPException(
             status_code=404, detail=f"Taxon {taxon_id} not found in ignorelist"
         )
+
     return {"deleted": True, "taxon_id": taxon_id}
-
-
-class IgnoreNotePayload(BaseModel):
-    reason: Optional[str] = None
 
 
 @router.patch(
@@ -100,31 +119,53 @@ async def update_ignorelist_note(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(require_role("writer", "admin")),
 ):
+    """Update reason for ignored taxon (writer or admin)."""
     result = await db["outbreak_ignorelist"].update_one(
         {"taxon_id": taxon_id},
         {"$set": {"reason": payload.reason}},
     )
-    _cache.clear()  # ignorelist change affects outbreak results
+    _cache.clear()
+
     if result.matched_count == 0:
         raise HTTPException(
             status_code=404, detail=f"Taxon {taxon_id} not found in ignorelist"
         )
+
     return {"updated": True, "taxon_id": taxon_id}
+
+
+# ============================================================================
+# Outbreak Detection Endpoints
+# ============================================================================
+
+
+def parse_date(d):
+    """Parse date from string or date object."""
+    if isinstance(d, str):
+        return date.fromisoformat(d)
+    return d
 
 
 @router.get(
     "/outbreaks",
-    summary="Detect viral OTUs appearing in multiple cases within a time window",
+    summary="Detect multi-kingdom OTUs appearing in multiple cases within a time window",
 )
 async def get_outbreaks(
     window_days: int = Query(default=14, ge=1, le=365),
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
+    """
+    Detect outbreaks across cases for all configured outbreak types.
+
+    Runs each configured outbreak pattern (e.g., Viral, Bacterial) and returns
+    results grouped by configuration.
+    """
     global _cache_computed_at
 
     # Return cached result if still fresh
     now = datetime.now(timezone.utc)
+
     if (
         window_days in _cache
         and _cache_computed_at is not None
@@ -132,19 +173,40 @@ async def get_outbreaks(
     ):
         return _cache[window_days]
 
-    result = await _compute_outbreaks(window_days, db)
+    # Only include enabled configs
+    configs = [c for c in settings.outbreak_configs if c.get("enabled", True)]
 
+    if not configs:
+        return {"window_days": window_days, "results": []}
+
+    # Compute outbreaks for each config
+    results = []
+    for config in configs:
+        outbreak_data = await _compute_outbreaks_for_config(config, window_days, db)
+        results.append(outbreak_data)
+
+    # Cache result
+    result = {"window_days": window_days, "results": results}
     _cache[window_days] = result
     _cache_computed_at = now
+
     return result
 
 
-async def _compute_outbreaks(window_days: int, db: AsyncIOMotorDatabase) -> dict:
+async def _compute_outbreaks_for_config(
+    config: dict,
+    window_days: int,
+    db: AsyncIOMotorDatabase,
+) -> dict:
+    """
+    Compute outbreaks for a single config using pre-computed outbreak_taxa.
+
+    This is fast because outbreak_taxa is a pre-computed small array,
+    not the full profiles array which would require expensive unwinding.
+    """
     # Load ignorelist
-    ignored = (
-        await db["outbreak_ignorelist"].find({}, {"taxon_id": 1}).to_list(length=None)
-    )
-    ignored_ids = [doc["taxon_id"] for doc in ignored]
+    ignored_docs = await db["outbreak_ignorelist"].find({}).to_list(None)
+    ignored_ids = {doc["taxon_id"] for doc in ignored_docs}
 
     # Only fetch cases within 2× the window
     cutoff = (date.today() - timedelta(days=window_days * 2)).isoformat()
@@ -153,52 +215,57 @@ async def _compute_outbreaks(window_days: int, db: AsyncIOMotorDatabase) -> dict
         .find(
             {"order_date": {"$gte": cutoff}}, {"_id": 1, "case_id": 1, "order_date": 1}
         )
-        .to_list(length=None)
+        .to_list(None)
     )
 
     if not cases:
-        return {"window_days": window_days, "outbreaks": []}
+        return {
+            "config_name": config["name"],
+            "superkingdoms": config["superkingdoms"],
+            "outbreaks": [],
+        }
 
     case_map = {str(c["_id"]): c for c in cases}
     case_oids = [c["_id"] for c in cases]
 
-    # Aggregation pipeline — filtering happens inside MongoDB
+    # Fast aggregation on pre-computed outbreak_taxa
     pipeline = [
-        # Only samples belonging to windowed cases
+        # Only samples from windowed cases
         {"$match": {"case_id": {"$in": case_oids}}},
-        # Unwind classifiers, then individual taxon entries
-        {"$unwind": "$profiles"},
-        {"$unwind": "$profiles.profile"},
-        # Filter to qualifying viral taxa inside MongoDB
+        # Unwind the small outbreak_taxa array
+        {"$unwind": "$outbreak_taxa"},
+        # Filter to this config's superkingdom and criteria
         {
             "$match": {
-                "profiles.profile.superkingdom": "Viruses",
-                "profiles.profile.rank": {
-                    "$in": ["species", "no rank", "serotype", None]
-                },
-                "profiles.profile.abundance": {"$gt": 1},
-                "profiles.profile.taxon_id": {"$nin": ignored_ids},
+                "outbreak_taxa.superkingdom": {"$in": config["superkingdoms"]},
+                "outbreak_taxa.rank": {"$in": config["min_rank"]},
+                "outbreak_taxa.abundance": {"$gt": config["min_abundance"]},
+                "outbreak_taxa.taxon_id": {"$nin": list(ignored_ids)},
             }
         },
-        # Group by taxon — collect distinct case_ids
+        # Group by taxon and collect cases
         {
             "$group": {
                 "_id": {
-                    "taxon_id": "$profiles.profile.taxon_id",
-                    "taxon_name": "$profiles.profile.name",
+                    "taxon_id": "$outbreak_taxa.taxon_id",
+                    "taxon_name": "$outbreak_taxa.name",
                 },
                 "case_ids": {"$addToSet": "$case_id"},
             }
         },
-        # Only taxa seen in 2+ cases
-        {"$match": {"case_ids.1": {"$exists": True}}},
+        # Only taxa seen in min_cases_threshold or more cases
+        {
+            "$match": {
+                "$expr": {
+                    "$gte": [{"$size": "$case_ids"}, config["min_cases_threshold"]]
+                }
+            }
+        },
     ]
 
-    # Note: $match on array length requires checking second element exists.
-    # Motor returns a CommandCursor so we iterate it.
-    raw_results = await db["samples"].aggregate(pipeline).to_list(length=None)
+    raw_results = await db["samples"].aggregate(pipeline).to_list(None)
 
-    # Build taxon_cases from aggregation results — attach order_dates from case_map
+    # Build taxon_cases from aggregation results
     taxon_cases: dict[tuple, list] = {}
 
     for doc in raw_results:
@@ -218,13 +285,14 @@ async def _compute_outbreaks(window_days: int, db: AsyncIOMotorDatabase) -> dict
                         "order_date": case_info["order_date"],
                     }
                 )
+
         taxon_cases[key] = case_entries
 
-    # Time-window clustering — Python only sees one entry per taxon now
+    # Time-window clustering
     outbreaks = []
 
     for (taxon_id, taxon_name), case_entries in taxon_cases.items():
-        if len(case_entries) < 2:
+        if len(case_entries) < config["min_cases_threshold"]:
             continue
 
         sorted_entries = sorted(case_entries, key=lambda x: parse_date(x["order_date"]))
@@ -238,7 +306,8 @@ async def _compute_outbreaks(window_days: int, db: AsyncIOMotorDatabase) -> dict
                     cluster.append(other)
                 else:
                     break
-            if len(cluster) >= 2:
+
+            if len(cluster) >= config["min_cases_threshold"]:
                 for entry in cluster:
                     flagged.add(entry["case_id"])
 
@@ -254,4 +323,8 @@ async def _compute_outbreaks(window_days: int, db: AsyncIOMotorDatabase) -> dict
 
     outbreaks.sort(key=lambda x: len(x["case_ids"]), reverse=True)
 
-    return {"window_days": window_days, "outbreaks": outbreaks}
+    return {
+        "config_name": config["name"],
+        "superkingdoms": config["superkingdoms"],
+        "outbreaks": outbreaks,
+    }

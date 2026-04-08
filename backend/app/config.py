@@ -1,5 +1,7 @@
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
+import json
 
 
 class Settings(BaseSettings):
@@ -26,5 +28,33 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # Outbreak configs loaded from JSON at startup
+    outbreak_configs: list[dict] = []
+
+    def load_outbreak_configs(self):
+        """Load outbreak configurations from JSON file."""
+        config_path = Path(__file__).parent.parent / "outbreak_configs.json"
+
+        if not config_path.exists():
+            print(f"Warning: outbreak_configs.json not found at {config_path}")
+            self.outbreak_configs = []
+            return
+
+        try:
+            with open(config_path, "r") as f:
+                data = json.load(f)
+                self.outbreak_configs = data.get("configs", [])
+                print(
+                    f"Loaded {len(self.outbreak_configs)} outbreak configs from {config_path.name}"
+                )
+        except json.JSONDecodeError as e:
+            print(f"Error parsing outbreak_configs.json: {e}")
+            self.outbreak_configs = []
+        except Exception as e:
+            print(f"Error loading outbreak_configs.json: {e}")
+            self.outbreak_configs = []
+
 
 settings = Settings()
+# Load outbreak configs when app starts
+settings.load_outbreak_configs()
