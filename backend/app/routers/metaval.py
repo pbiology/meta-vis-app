@@ -29,16 +29,16 @@ def _serialise(doc: dict) -> dict:
     for org in doc.get("organisms", []):
         org.pop("igv_html", None)
         org.pop("igv_key", None)
-        # Expose verification_data without internal blob keys
-        vd = doc.get("verification_data", {})
-        doc["verification_data"] = {
-            "type": vd.get("type"),
-            "count": vd.get("count"),
-            "avg_length": vd.get("avg_length"),
-            "file_count": vd.get("file_count", 1),
-            "available": bool(vd.get("blob_key") or vd.get("read_1_key")),
-        }
-        return doc
+    # Expose verification_data without internal blob keys
+    vd = doc.get("verification_data", {})
+    doc["verification_data"] = {
+        "type": vd.get("type"),
+        "count": vd.get("count"),
+        "avg_length": vd.get("avg_length"),
+        "file_count": vd.get("file_count", 1),
+        "available": bool(vd.get("blob_key") or vd.get("read_1_key")),
+    }
+    return doc
 
 
 @router.get("/sample/{sample_id}", summary="List metaval results for a sample")
