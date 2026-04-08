@@ -32,7 +32,7 @@ def _build_mongo_url() -> str:
 
 async def create_user(username: str, password: str, role: str):
     db_name = os.getenv("MONGODB_DB_NAME", "meta-vis-dev")
-    client = AsyncIOMotorClient(_build_mongo_url())
+    client: AsyncIOMotorClient = AsyncIOMotorClient(_build_mongo_url())
     db = client[db_name]
 
     existing = await db["users"].find_one({"username": username})

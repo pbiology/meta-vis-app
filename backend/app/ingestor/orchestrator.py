@@ -244,13 +244,13 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
         from app.database import get_blob_store
 
         for r in metaval_results:
-            sample_doc = await db["samples"].find_one(
+            existing_sample: dict | None = await db["samples"].find_one(
                 {
                     "case_id": case_object_id,
                     "sample.sample_id": r["sample_name"],
                 }
             )
-            sample_object_id = sample_doc["_id"] if sample_doc else None
+            sample_object_id = existing_sample["_id"] if existing_sample else None
 
             # Upload IGV HTML files
             async def _upload_igv(org):
