@@ -1,19 +1,19 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
-import { useAuth } from './context/AuthContext'
-import Login from './pages/Login'
-import SampleList from './pages/SampleList'
-import SampleDetail from './pages/SampleDetail'
-import CaseList from './pages/CaseList'
-import CaseDetail from './pages/CaseDetail'
-import Admin from './pages/Admin'
-import MetavalDetails from './pages/MetavalDetails'
-import Alerts from './pages/Alerts'
-import IgnoreList from './pages/IgnoreList'
-import Layout from './components/Layout'
+import { Routes, Route, Navigate } from "react-router-dom";
+import { useAuth } from "./context/AuthContext";
+import Login from "./pages/Login";
+import SampleList from "./pages/SampleList";
+import SampleDetail from "./pages/SampleDetail";
+import CaseList from "./pages/CaseList";
+import CaseDetail from "./pages/CaseDetail";
+import Admin from "./pages/Admin";
+import MetavalDetails from "./pages/MetavalDetails";
+import Alerts from "./pages/Alerts";
+import IgnoreList from "./pages/IgnoreList";
+import Layout from "./components/Layout";
 
 function ProtectedRoute({ children }) {
-  const { user } = useAuth()
-  return user ? children : <Navigate to="/login" replace />
+  const { user } = useAuth();
+  return user ? children : <Navigate to="/login" replace />;
 }
 
 export default function App() {
@@ -39,5 +39,5 @@ export default function App() {
         <Route path="alerts/ignorelist" element={<IgnoreList />} />
       </Route>
     </Routes>
-  )
+  );
 }
