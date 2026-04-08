@@ -86,5 +86,6 @@ async def close_db():
 
 
 def get_db() -> AsyncIOMotorDatabase:
-    assert client is not None, "Database not connected"
+    if client is None:
+        raise RuntimeError("Database not connected")
     return client[settings.mongodb_db_name]
