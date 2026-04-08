@@ -99,7 +99,9 @@ def _top_taxa_for(entries: list, clf_qc: Optional[dict] = None, n: int = 3) -> l
     ]
 
 
-def _spike_in_for(entries: list, spike_in_ids: set, clf_qc: Optional[dict] = None) -> list:
+def _spike_in_for(
+    entries: list, spike_in_ids: set, clf_qc: Optional[dict] = None
+) -> list:
     if not spike_in_ids:
         return []
     non_host_total = _non_host_total(entries, clf_qc)
