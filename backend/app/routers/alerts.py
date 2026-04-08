@@ -229,7 +229,7 @@ async def _compute_outbreaks_for_config(
     case_oids = [c["_id"] for c in cases]
 
     # Fast aggregation on pre-computed outbreak_taxa
-    pipeline = [
+    pipeline: list[dict] = [
         # Only samples from windowed cases
         {"$match": {"case_id": {"$in": case_oids}}},
         # Unwind the small outbreak_taxa array

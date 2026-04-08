@@ -1,7 +1,7 @@
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from app.config import settings
 
-client: AsyncIOMotorClient = None
+client: AsyncIOMotorClient | None = None
 _blob_store = None
 
 
@@ -86,4 +86,5 @@ async def close_db():
 
 
 def get_db() -> AsyncIOMotorDatabase:
+    assert client is not None, "Database not connected"
     return client[settings.mongodb_db_name]

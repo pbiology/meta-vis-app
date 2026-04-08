@@ -33,7 +33,7 @@ def _read_viral_taxids(metaval_dir: Path) -> dict:
     Read all viral_taxids TSV files and return a dict of
     {(classifier, taxon_name): taxon_id}
     """
-    taxid_map = {}
+    taxid_map: dict[tuple[str, str], int] = {}
     taxids_dir = metaval_dir / "viral_taxids"
     if not taxids_dir.exists():
         return taxid_map
@@ -154,7 +154,7 @@ def _read_extracted_reads(metaval_dir: Path) -> dict:
     Filename pattern:
       {sample_name}_{taxon_name}.extracted_{classifier}_read_{1|2}.fa
     """
-    reads_map = {}
+    reads_map: dict[tuple[str, str], dict] = {}
     reads_dir = metaval_dir / "extracted_reads"
     if not reads_dir.exists():
         return reads_map
@@ -192,7 +192,7 @@ def _read_spades(metaval_dir: Path) -> dict:
       {sample_name}_{taxon_name}.scaffolds.fa
       {sample_name}_{taxon_name}.contigs.fa
     """
-    spades_map = {}
+    spades_map: dict[tuple[str, str], dict] = {}
     spades_dir = metaval_dir / "spades"
     if not spades_dir.exists():
         return spades_map
@@ -250,19 +250,19 @@ def _read_metaval_pipeline_info(metaval_dir: Path) -> Optional[dict]:
 
 
 def read_metaval(metaval_dir: str) -> dict:
-    metaval_dir = Path(metaval_dir)
-    igv_dir = metaval_dir / "igv"
+    metaval_path = Path(metaval_dir)
+    igv_dir = metaval_path / "igv"
 
-    if not metaval_dir.exists():
+    if not metaval_path.exists():
         raise FileNotFoundError(f"Metaval directory not found: {metaval_dir}")
     if not igv_dir.exists():
         raise FileNotFoundError(f"Metaval igv/ subdirectory not found: {igv_dir}")
 
-    taxid_map = _read_viral_taxids(metaval_dir)
-    blast_data = _read_blast(metaval_dir)
-    reads_data = _read_extracted_reads(metaval_dir)
-    spades_data = _read_spades(metaval_dir)
-    metaval_pipeline = _read_metaval_pipeline_info(metaval_dir)
+    taxid_map = _read_viral_taxids(metaval_path)
+    blast_data = _read_blast(metaval_path)
+    reads_data = _read_extracted_reads(metaval_path)
+    spades_data = _read_spades(metaval_path)
+    metaval_pipeline = _read_metaval_pipeline_info(metaval_path)
 
     # Group IGV files by (sample_name, classifier, taxon_name)
     groups: dict[tuple, list] = {}
