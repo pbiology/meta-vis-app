@@ -88,7 +88,7 @@ class S3BlobStore(BlobStore):
             self._s3.create_bucket(Bucket=self._bucket)
 
     async def put(self, key: str, content: str) -> None:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(
             None,
             lambda: self._s3.put_object(
@@ -100,7 +100,7 @@ class S3BlobStore(BlobStore):
         )
 
     async def get(self, key: str) -> Optional[str]:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             response = await loop.run_in_executor(
                 None,
@@ -111,7 +111,7 @@ class S3BlobStore(BlobStore):
             return None
 
     async def delete_prefix(self, prefix: str) -> None:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def _delete():
             paginator = self._s3.get_paginator("list_objects_v2")
