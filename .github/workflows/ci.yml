@@ -69,21 +69,18 @@ jobs:
 
       - name: Check Bandit results
         run: |
-          # Parse JSON and fail if high/medium severity issues found
           python3 << 'EOF'
           import json
           import sys
-          
+
           with open('bandit-report.json') as f:
               report = json.load(f)
-          
-          # Filter out nosec'd issues
+
           issues = [i for i in report.get('results', []) if not i.get('test_id', '').startswith('NOSEC')]
-          
-          # Count by severity
+
           high = [i for i in issues if i.get('severity') == 'HIGH']
           medium = [i for i in issues if i.get('severity') == 'MEDIUM']
-          
+
           if high or medium:
               print(f"\n❌ Found {len(high)} HIGH and {len(medium)} MEDIUM severity issues:")
               for issue in high + medium:
@@ -125,68 +122,68 @@ jobs:
       - name: Run mypy type check
         run: mypy app/
 
-    dependencies-audit:
-      name: Dependency vulnerabilities
-      runs-on: ubuntu-latest
+  dependencies-audit:
+    name: Dependency vulnerabilities
+    runs-on: ubuntu-latest
 
-      strategy:
-        matrix:
-          component: [ backend, frontend ]
+    strategy:
+      matrix:
+        component: [backend, frontend]
 
-      steps:
-        - name: Checkout
-          uses: actions/checkout@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-        - name: Audit backend dependencies
-          if: matrix.component == 'backend'
-          working-directory: backend
-          run: |
-            pip install pip-audit>=2.6.0
-            pip-audit --desc --fail-on high
+      - name: Audit backend dependencies
+        if: matrix.component == 'backend'
+        working-directory: backend
+        run: |
+          pip install pip-audit>=2.6.0
+          pip-audit --desc --fail-on high
 
-        - name: Audit frontend dependencies
-          if: matrix.component == 'frontend'
-          uses: actions/setup-node@v4
-          with:
-            node-version: "18"
-            cache: npm
-            cache-dependency-path: frontend/package-lock.json
+      - name: Set up Node (frontend)
+        if: matrix.component == 'frontend'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
-        - name: Run npm audit (frontend)
-          if: matrix.component == 'frontend'
-          working-directory: frontend
-          run: npm audit --audit-level=high
+      - name: Run npm audit (frontend)
+        if: matrix.component == 'frontend'
+        working-directory: frontend
+        run: npm audit --audit-level=high
 
-    format-check:
-      name: Code formatting
-      runs-on: ubuntu-latest
+  format-check:
+    name: Code formatting
+    runs-on: ubuntu-latest
 
-      strategy:
-        matrix:
-          component: [ backend, frontend ]
+    strategy:
+      matrix:
+        component: [backend, frontend]
 
-      steps:
-        - name: Checkout
-          uses: actions/checkout@v4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-        - name: Check backend formatting (Ruff)
-          if: matrix.component == 'backend'
-          working-directory: backend
-          run: |
-            pip install ruff>=0.4.0
-            ruff format --check app/
+      - name: Check backend formatting (Ruff)
+        if: matrix.component == 'backend'
+        working-directory: backend
+        run: |
+          pip install ruff>=0.4.0
+          ruff format --check app/
 
-        - name: Check frontend formatting (Prettier)
-          if: matrix.component == 'frontend'
-          uses: actions/setup-node@v4
-          with:
-            node-version: "18"
-            cache: npm
-            cache-dependency-path: frontend/package-lock.json
+      - name: Set up Node (frontend)
+        if: matrix.component == 'frontend'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
-        - name: Run Prettier check (frontend)
-          if: matrix.component == 'frontend'
-          working-directory: frontend
-          run: |
-            npm install
-            npm run format:check
+      - name: Run Prettier check (frontend)
+        if: matrix.component == 'frontend'
+        working-directory: frontend
+        run: |
+          npm install
+          npm run format:check
