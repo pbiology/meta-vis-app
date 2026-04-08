@@ -39,6 +39,8 @@ dev = [
     "pandas-stubs>=2.0.0",
     "types-PyYAML>=6.0.0",
     "types-requests>=2.31.0",
+    "types-python-jose",
+    "types-passlib",
 ]
 
 [tool.setuptools.packages.find]
@@ -68,3 +70,4 @@ warn_redundant_casts = true
 warn_no_return = false
 strict_equality = true
 ignore_missing_imports = true
+
