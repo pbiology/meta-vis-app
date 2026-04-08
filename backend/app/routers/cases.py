@@ -19,6 +19,7 @@ from app.config import settings
 
 _controls_taxa_cache: dict | None = None
 
+
 def _load_controls_taxa() -> dict:
     global _controls_taxa_cache
     if _controls_taxa_cache is None:
