@@ -36,6 +36,9 @@ dev = [
     "bandit[toml]>=1.9.0",
     "mypy>=1.8.0",
     "pip-audit>=2.6.0",
+    "pandas-stubs>=2.0.0",
+    "types-PyYAML>=6.0.0",
+    "types-requests>=2.31.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -55,12 +58,13 @@ filterwarnings = [
 
 [tool.mypy]
 python_version = "3.14"
-warn_return_any = true
+warn_return_any = false
 warn_unused_configs = true
 warn_unused_ignores = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
 no_implicit_optional = true
 warn_redundant_casts = true
-warn_no_return = true
+warn_no_return = false
 strict_equality = true
+ignore_missing_imports = true

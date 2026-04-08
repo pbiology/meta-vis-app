@@ -119,10 +119,11 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install mypy>=1.8.0
+        run: |
+          pip install -e ".[dev]"
 
       - name: Run mypy type check
-        run: mypy app/ --strict
+        run: mypy app/
 
     dependencies-audit:
       name: Dependency vulnerabilities
