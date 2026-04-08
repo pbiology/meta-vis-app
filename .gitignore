@@ -21,6 +21,7 @@ venv/
 .coverage
 htmlcov/
 backend/test-data
+ci-check.sh
 
 # Frontend
 frontend/node_modules/
