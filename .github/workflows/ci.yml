@@ -99,3 +99,93 @@ jobs:
         with:
           name: bandit-report
           path: backend/bandit-report.json
+
+  type-check:
+    name: Type checking (mypy)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install mypy>=1.8.0
+
+      - name: Run mypy type check
+        run: mypy app/ --strict
+
+    dependencies-audit:
+      name: Dependency vulnerabilities
+      runs-on: ubuntu-latest
+
+      strategy:
+        matrix:
+          component: [ backend, frontend ]
+
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+
+        - name: Audit backend dependencies
+          if: matrix.component == 'backend'
+          working-directory: backend
+          run: |
+            pip install pip-audit>=2.6.0
+            pip-audit --desc --fail-on high
+
+        - name: Audit frontend dependencies
+          if: matrix.component == 'frontend'
+          uses: actions/setup-node@v4
+          with:
+            node-version: "18"
+            cache: npm
+            cache-dependency-path: frontend/package-lock.json
+
+        - name: Run npm audit (frontend)
+          if: matrix.component == 'frontend'
+          working-directory: frontend
+          run: npm audit --audit-level=high
+
+    format-check:
+      name: Code formatting
+      runs-on: ubuntu-latest
+
+      strategy:
+        matrix:
+          component: [ backend, frontend ]
+
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+
+        - name: Check backend formatting (Ruff)
+          if: matrix.component == 'backend'
+          working-directory: backend
+          run: |
+            pip install ruff>=0.4.0
+            ruff format --check app/
+
+        - name: Check frontend formatting (Prettier)
+          if: matrix.component == 'frontend'
+          uses: actions/setup-node@v4
+          with:
+            node-version: "18"
+            cache: npm
+            cache-dependency-path: frontend/package-lock.json
+
+        - name: Run Prettier check (frontend)
+          if: matrix.component == 'frontend'
+          working-directory: frontend
+          run: |
+            npm install
+            npm run format:check
