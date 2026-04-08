@@ -195,6 +195,22 @@ export default function Layout() {
               </svg>
             }
           />
+          <NavItem
+            to="/pathogens"
+            label="Pathogens"
+            icon={
+              <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.3" />
+                <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.3" />
+                <path
+                  d="M8 2.5v1.5M8 12v1.5M2.5 8h1.5M12 8h1.5"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                  strokeLinecap="round"
+                />
+              </svg>
+            }
+          />
         </nav>
 
         <div className="flex flex-col border-t border-gray-100">
