@@ -71,10 +71,10 @@ def read_taxpasta(
 
     records = []
     for row in df.itertuples(index=False):
-        taxon_id = int(row.taxon_id)
+        taxon_id = int(row.taxon_id)  # type: ignore[arg-type]
         name = row.name if row.name and not pd.isna(row.name) else str(taxon_id)
         lineage = getattr(row, "lineage", None) if has_lineage else None
-        superkingdom = _superkingdom_from_lineage(lineage)
+        superkingdom = _superkingdom_from_lineage(lineage) if isinstance(lineage, str) else None
         rank_val = getattr(row, "rank", None) if "rank" in df.columns else None
         if (
             rank_val is not None
@@ -87,7 +87,7 @@ def read_taxpasta(
                 "taxon_id": taxon_id,
                 "name": name,
                 "rank": rank_val,
-                "abundance": float(row.abundance),
+                "abundance": float(row.abundance),  # type: ignore[arg-type]
                 "superkingdom": superkingdom,
             }
         )

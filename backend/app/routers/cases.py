@@ -19,6 +19,7 @@ from app.config import settings
 
 _controls_taxa_cache: dict | None = None
 
+
 def _load_controls_taxa() -> dict:
     global _controls_taxa_cache
     if _controls_taxa_cache is None:
@@ -57,7 +58,7 @@ def _serialise_sample(doc: dict) -> dict:
 HOST_TAXON_IDS = {9606, 1, 0, 131567}
 
 
-def _non_host_total(entries: list, clf_qc: dict = None) -> float:
+def _non_host_total(entries: list, clf_qc: Optional[dict] = None) -> float:
     host_reads = next((e["abundance"] for e in entries if e.get("taxon_id") == 9606), 0)
     if clf_qc and clf_qc.get("classified_reads") is not None:
         return clf_qc["classified_reads"] - host_reads
@@ -75,7 +76,7 @@ def _non_host_total(entries: list, clf_qc: dict = None) -> float:
     )
 
 
-def _top_taxa_for(entries: list, clf_qc: dict = None, n: int = 3) -> list:
+def _top_taxa_for(entries: list, clf_qc: Optional[dict] = None, n: int = 3) -> list:
     non_host_total = _non_host_total(entries, clf_qc)
     non_host_entries = [
         e
@@ -98,7 +99,7 @@ def _top_taxa_for(entries: list, clf_qc: dict = None, n: int = 3) -> list:
     ]
 
 
-def _spike_in_for(entries: list, spike_in_ids: set, clf_qc: dict = None) -> list:
+def _spike_in_for(entries: list, spike_in_ids: set, clf_qc: Optional[dict] = None) -> list:
     if not spike_in_ids:
         return []
     non_host_total = _non_host_total(entries, clf_qc)
@@ -116,7 +117,7 @@ def _spike_in_for(entries: list, spike_in_ids: set, clf_qc: dict = None) -> list
     ]
 
 
-def _host_pct_for(entries: list, clf_qc: dict = None) -> Optional[float]:
+def _host_pct_for(entries: list, clf_qc: Optional[dict] = None) -> Optional[float]:
     host_reads = next((e["abundance"] for e in entries if e.get("taxon_id") == 9606), 0)
     classified_reads = clf_qc.get("classified_reads") if clf_qc else None
     if classified_reads is None:
@@ -207,7 +208,7 @@ async def get_case(
 @router.get("/{case_id}/samples", summary="List samples for a case")
 async def list_samples_for_case(
     case_id: str,
-    type: str = None,
+    type: Optional[str] = None,
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):

@@ -135,10 +135,12 @@ def make_blob_store(db: AsyncIOMotorDatabase) -> BlobStore:
     from app.config import settings
 
     if settings.object_storage_endpoint:
+        access_key = settings.object_storage_access_key or ""
+        secret_key = settings.object_storage_secret_key or ""
         return S3BlobStore(
             endpoint=settings.object_storage_endpoint,
-            access_key=settings.object_storage_access_key,
-            secret_key=settings.object_storage_secret_key,
+            access_key=access_key,
+            secret_key=secret_key,
             bucket=settings.object_storage_bucket,
         )
     return MongoBlobStore(db)

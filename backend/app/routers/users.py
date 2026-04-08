@@ -73,7 +73,7 @@ async def list_users(
     docs = await db["users"].find({}, {"password_hash": 0}).to_list(length=200)  # nosec B105
 
     # Single aggregation to get all review counts at once
-    pipeline = [
+    pipeline: list[dict] = [
         {"$match": {"review.reviewed": True}},
         {"$group": {"_id": "$review.reviewed_by", "count": {"$sum": 1}}},
     ]

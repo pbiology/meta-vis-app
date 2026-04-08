@@ -1,32 +1,32 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
-import { login as loginApi } from '../api/auth'
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { login as loginApi } from "../api/auth";
 
 export default function Login() {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const { login } = useAuth()
-  const navigate = useNavigate()
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
+  const navigate = useNavigate();
 
   async function handleSubmit(e) {
-    e.preventDefault()
-    setError(null)
-    setLoading(true)
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
     try {
-      const data = await loginApi(username, password)
-      login(data.username, data.role || 'reader')
-      navigate('/')
+      const data = await loginApi(username, password);
+      login(data.username, data.role || "reader");
+      navigate("/");
     } catch (err) {
       setError(
         err.response?.status === 401
-          ? 'Incorrect username or password.'
-          : 'Could not connect to the server.'
-      )
+          ? "Incorrect username or password."
+          : "Could not connect to the server."
+      );
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
@@ -41,9 +41,7 @@ export default function Login() {
         <div className="bg-white border border-gray-100 rounded-xl p-8">
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                Username
-              </label>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Username</label>
               <input
                 type="text"
                 autoComplete="username"
@@ -57,9 +55,7 @@ export default function Login() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">
-                Password
-              </label>
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">Password</label>
               <input
                 type="password"
                 autoComplete="current-password"
@@ -82,11 +78,11 @@ export default function Login() {
               className="w-full py-2 text-sm font-medium bg-gray-900 text-white rounded-lg
                          hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-1"
             >
-              {loading ? 'Signing in…' : 'Sign in'}
+              {loading ? "Signing in…" : "Sign in"}
             </button>
           </form>
         </div>
       </div>
     </div>
-  )
+  );
 }
