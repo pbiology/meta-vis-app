@@ -17,12 +17,18 @@ from app.auth.utils import get_current_user, require_role
 from app.config import settings
 
 
+_controls_taxa_cache: dict | None = None
+
 def _load_controls_taxa() -> dict:
-    path = Path(settings.controls_taxa_path)
-    if path.exists():
-        with open(path) as f:
-            return json.load(f)
-    return {}
+    global _controls_taxa_cache
+    if _controls_taxa_cache is None:
+        path = Path(settings.controls_taxa_path)
+        if path.exists():
+            with open(path) as f:
+                _controls_taxa_cache = json.load(f)
+        else:
+            _controls_taxa_cache = {}
+    return _controls_taxa_cache
 
 
 router = APIRouter(prefix="/cases", tags=["cases"])

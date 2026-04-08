@@ -71,11 +71,16 @@ async def list_users(
     _user: dict = Depends(require_role("admin")),
 ):
     docs = await db["users"].find({}, {"password_hash": 0}).to_list(length=200)
-    result = []
-    for d in docs:
-        count = await _count_reviews(db, d["username"])
-        result.append(_serialise(d, count))
-    return result
+
+    # Single aggregation to get all review counts at once
+    pipeline = [
+        {"$match": {"review.reviewed": True}},
+        {"$group": {"_id": "$review.reviewed_by", "count": {"$sum": 1}}},
+    ]
+    counts_raw = await db["cases"].aggregate(pipeline).to_list(length=500)
+    review_counts = {doc["_id"]: doc["count"] for doc in counts_raw}
+
+    return [_serialise(d, review_counts.get(d["username"], 0)) for d in docs]
 
 
 @router.get("/me/stats", summary="Get review stats for the current user")

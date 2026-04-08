@@ -48,8 +48,9 @@ const [kronaTab,        setKronaTab]        = useState(searchParams.get('classif
         setSamples(samplesData)
 
         if (fetchedCase.has_krona && fetchedCase.classifiers?.length) {
-          const firstClassifier = fetchedCase.classifiers[0].name
-          setKronaTab(firstClassifier)
+          const requestedClassifier = searchParams.get('classifier')
+          const match = fetchedCase.classifiers.find(c => c.name === requestedClassifier)
+          setKronaTab(match ? requestedClassifier : fetchedCase.classifiers[0].name)
           const urlEntries = await Promise.all(
             fetchedCase.classifiers
               .filter(clf => clf.krona_id)
@@ -141,7 +142,7 @@ const [kronaTab,        setKronaTab]        = useState(searchParams.get('classif
   }
 
   const filtered = useMemo(() => {
-    if (filter === 'Sample')     return samples.filter(s => s.sample_type === 'sample<td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">No samples match this filter.</td>FILTERS')
+    if (filter === 'Sample')     return samples.filter(s => s.sample_type === 'sample')
     if (filter === 'Controls') return samples.filter(s =>
       s.sample_type === 'negative_ctrl' || s.sample_type === 'positive_ctrl'
     )
