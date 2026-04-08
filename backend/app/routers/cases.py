@@ -43,7 +43,6 @@ def _serialise_case(doc: dict) -> dict:
     doc["_id"] = str(doc["_id"])
     if "sample_ids" in doc:
         doc["sample_ids"] = [str(sid) for sid in doc["sample_ids"]]
-    # case_id is already a plain string — no conversion needed
     return doc
 
 
@@ -65,8 +64,6 @@ def _non_host_total(entries: list, clf_qc: Optional[dict] = None) -> float:
     root_reads = next((e["abundance"] for e in entries if e.get("taxon_id") == 1), 0)
     if root_reads:
         return root_reads - host_reads
-    # Fallback for classifiers like diamond that don't emit a root entry:
-    # sum all non-host, non-root, classified abundances directly
     return sum(
         e["abundance"]
         for e in entries
@@ -136,6 +133,12 @@ def _host_pct_for(entries: list, clf_qc: Optional[dict] = None) -> Optional[floa
     return round(host_reads / total_reads * 100, 1)
 
 
+# ---------------------------------------------------------------------------
+# Fixed-path routes — must all appear before /{case_id} to avoid being
+# swallowed by the parameterised route.
+# ---------------------------------------------------------------------------
+
+
 @router.get("/stats", summary="Global case counts")
 async def case_stats(
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -145,6 +148,32 @@ async def case_stats(
     pending = await db["cases"].count_documents({"review.reviewed": {"$ne": True}})
     reviewed = await db["cases"].count_documents({"review.reviewed": True})
     return {"total": total, "pending": pending, "reviewed": reviewed}
+
+
+@router.get(
+    "/pathogen_cases",
+    summary="Return IDs of cases that contain a known pathogen taxon",
+)
+async def pathogen_cases(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
+    pathogen_docs = await db["known_pathogens"].find({}, {"taxon_id": 1}).to_list(None)
+    pathogen_ids = [d["taxon_id"] for d in pathogen_docs]
+    if not pathogen_ids:
+        return {"case_ids": []}
+
+    # Unwind both array levels so the match sees individual taxon entries.
+    # A simple dot-path query on doubly-nested arrays is unreliable in MongoDB.
+    pipeline = [
+        {"$unwind": "$profiles"},
+        {"$unwind": "$profiles.profile"},
+        {"$match": {"profiles.profile.taxon_id": {"$in": pathogen_ids}}},
+        {"$group": {"_id": "$case_id"}},
+    ]
+    results = await db["samples"].aggregate(pipeline).to_list(None)
+    case_ids = [str(r["_id"]) for r in results]
+    return {"case_ids": case_ids}
 
 
 PAGE_SIZE = 50
@@ -192,6 +221,11 @@ async def list_cases(
         "pages": max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE),
         "items": result,
     }
+
+
+# ---------------------------------------------------------------------------
+# Parameterised routes — /{case_id} and sub-routes
+# ---------------------------------------------------------------------------
 
 
 @router.get("/{case_id}", summary="Get a single case")
@@ -396,7 +430,6 @@ async def delete_note(
         raise HTTPException(
             status_code=403, detail="You can only delete your own notes"
         )
-    # Remove by index using $unset + $pull trick
     notes.pop(note_index)
     await db["cases"].update_one(
         {"case_id": case_id},
