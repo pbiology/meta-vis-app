@@ -42,3 +42,60 @@ jobs:
         with:
           name: coverage-report
           path: backend/coverage.xml
+
+  security:
+    name: Security scan (Bandit)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install bandit[toml]>=1.7.5
+
+      - name: Run Bandit security scan
+        run: bandit -r app/ -f json -o bandit-report.json || true
+
+      - name: Check Bandit results
+        run: |
+          # Parse JSON and fail if high/medium severity issues found
+          python3 << 'EOF'
+          import json
+          import sys
+          
+          with open('bandit-report.json') as f:
+              report = json.load(f)
+          
+          # Filter out nosec'd issues
+          issues = [i for i in report.get('results', []) if not i.get('test_id', '').startswith('NOSEC')]
+          
+          # Count by severity
+          high = [i for i in issues if i.get('severity') == 'HIGH']
+          medium = [i for i in issues if i.get('severity') == 'MEDIUM']
+          
+          if high or medium:
+              print(f"\n❌ Found {len(high)} HIGH and {len(medium)} MEDIUM severity issues:")
+              for issue in high + medium:
+                  print(f"  [{issue.get('test_id')}] {issue.get('issue_text')} ({issue.get('severity')})")
+              sys.exit(1)
+          else:
+              print("\n✓ No high or medium severity issues found")
+          EOF
+
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: backend/bandit-report.json

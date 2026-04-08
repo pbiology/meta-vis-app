@@ -1,0 +1,12 @@
+[bandit]
+# Exclude test files from scanning
+exclude_dirs = ["/tests", "/__pycache__"]
+
+# Skips specific checks that have acceptable false positives
+skips = []
+
+# High and medium severity issues will fail the build
+severity_level = medium
+
+# Maximum number of excluded issues before failing
+max_nosec = 0
