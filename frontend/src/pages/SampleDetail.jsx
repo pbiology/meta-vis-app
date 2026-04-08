@@ -100,9 +100,7 @@ function TaxonomyTable({
 
   const tableEntries = allEntries.filter(
     (t) =>
-      !HOST_IDS.has(t.taxon_id) &&
-      t.name !== "unclassified" &&
-      !t.name?.startsWith("unclassified ")
+      !HOST_IDS.has(t.taxon_id) && t.name !== "unclassified" && !t.name?.startsWith("unclassified ")
   );
 
   const filtered = tableEntries.filter((t) => {
@@ -415,7 +413,9 @@ function TaxonomyTable({
                                 />
                               ))}
                               <span className="text-xs text-gray-400 ml-0.5">
-                                {readsPerClassifier.map((r) => r.reads.toLocaleString()).join(" / ")}
+                                {readsPerClassifier
+                                  .map((r) => r.reads.toLocaleString())
+                                  .join(" / ")}
                               </span>
                             </div>
                           );
@@ -436,9 +436,7 @@ function TaxonomyTable({
                           const allZero = vals.every((v) => v.count === 0);
                           return (
                             <span
-                              className={
-                                allZero ? "text-gray-300" : "text-amber-600 font-medium"
-                              }
+                              className={allZero ? "text-gray-300" : "text-amber-600 font-medium"}
                               title={vals
                                 .map((v) => `${v.sample_id}: ${v.count.toLocaleString()}`)
                                 .join("\n")}
@@ -481,8 +479,8 @@ function TaxonomyTable({
             ← Prev
           </button>
           <span>
-            {taxPage * TAX_PER_PAGE + 1}–
-            {Math.min((taxPage + 1) * TAX_PER_PAGE, sorted.length)} of {sorted.length}
+            {taxPage * TAX_PER_PAGE + 1}–{Math.min((taxPage + 1) * TAX_PER_PAGE, sorted.length)} of{" "}
+            {sorted.length}
           </span>
           <button
             onClick={() => setTaxPage((p) => Math.min(totalPages - 1, p + 1))}
@@ -545,9 +543,7 @@ export default function SampleDetail() {
 
   if (loading)
     return (
-      <div className="flex items-center justify-center h-full text-sm text-gray-400">
-        Loading…
-      </div>
+      <div className="flex items-center justify-center h-full text-sm text-gray-400">Loading…</div>
     );
   if (error)
     return (
