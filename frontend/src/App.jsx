@@ -9,6 +9,7 @@ import Admin from "./pages/Admin";
 import MetavalDetails from "./pages/MetavalDetails";
 import Alerts from "./pages/Alerts";
 import IgnoreList from "./pages/IgnoreList";
+import KnownPathogens from "./pages/KnownPathogens";
 import Layout from "./components/Layout";
 
 function ProtectedRoute({ children }) {
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="samples/:sampleId/metaval/:metavalId" element={<MetavalDetails />} />
         <Route path="alerts" element={<Alerts />} />
         <Route path="alerts/ignorelist" element={<IgnoreList />} />
+        <Route path="pathogens" element={<KnownPathogens />} />
       </Route>
     </Routes>
   );

@@ -52,3 +52,23 @@ export async function updateIgnorelistNote(taxonId, reason) {
   const res = await client.patch(`/alerts/ignorelist/${taxonId}`, { reason });
   return res.data;
 }
+
+export async function getPathogens() {
+  const res = await client.get("/alerts/pathogens");
+  return res.data;
+}
+
+export async function addToPathogens(taxonId, taxonName, superkingdom = "Viruses", notes = null) {
+  const res = await client.post("/alerts/pathogens", {
+    taxon_id: taxonId,
+    taxon_name: taxonName,
+    superkingdom,
+    reason: notes,
+  });
+  return res.data;
+}
+
+export async function removeFromPathogens(taxonId) {
+  const res = await client.delete(`/alerts/pathogens/${taxonId}`);
+  return res.data;
+}

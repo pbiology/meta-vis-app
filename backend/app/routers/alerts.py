@@ -328,3 +328,57 @@ async def _compute_outbreaks_for_config(
         "superkingdoms": config["superkingdoms"],
         "outbreaks": outbreaks,
     }
+
+
+# ============================================================================
+# Known Pathogens Endpoints
+# ============================================================================
+
+
+@router.get("/pathogens", summary="List known pathogens")
+async def get_pathogens(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
+    docs = await db["known_pathogens"].find().sort("added_at", -1).to_list(None)
+    for doc in docs:
+        doc["_id"] = str(doc["_id"])
+    return docs
+
+
+@router.post("/pathogens", summary="Add a taxon to the known pathogens list")
+async def add_pathogen(
+    payload: IgnorePayload,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: dict = Depends(require_role("writer", "admin")),
+):
+    existing = await db["known_pathogens"].find_one({"taxon_id": payload.taxon_id})
+    if existing:
+        raise HTTPException(
+            status_code=409, detail=f"Taxon {payload.taxon_id} is already on the pathogens list"
+        )
+    doc = {
+        "taxon_id": payload.taxon_id,
+        "taxon_name": payload.taxon_name,
+        "superkingdom": payload.superkingdom,
+        "notes": payload.reason,
+        "added_by": current_user["username"],
+        "added_at": datetime.now(timezone.utc),
+    }
+    result = await db["known_pathogens"].insert_one(doc)
+    doc["_id"] = str(result.inserted_id)
+    return doc
+
+
+@router.delete("/pathogens/{taxon_id}", summary="Remove a taxon from the known pathogens list")
+async def remove_pathogen(
+    taxon_id: int,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _user: dict = Depends(require_role("writer", "admin")),
+):
+    result = await db["known_pathogens"].delete_one({"taxon_id": taxon_id})
+    if result.deleted_count == 0:
+        raise HTTPException(
+            status_code=404, detail=f"Taxon {taxon_id} not found in pathogens list"
+        )
+    return {"deleted": True, "taxon_id": taxon_id}
