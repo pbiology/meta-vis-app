@@ -183,6 +183,15 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
         # Compute outbreak_taxa from profiles using active configs
         outbreak_taxa = await _compute_outbreak_taxa(profiles)
 
+        # Flat set of all taxon IDs across all classifiers — used for fast
+        # pathogen matching at query time without unwinding nested arrays.
+        all_taxon_ids = list({
+            entry["taxon_id"]
+            for p in profiles
+            for entry in p.get("profile", [])
+            if entry.get("taxon_id") is not None
+        })
+
         sample_doc = {
             "case_id": case_object_id,
             "case_id_str": request.case_id,
@@ -206,6 +215,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             },
             "profiles": profiles,
             "outbreak_taxa": outbreak_taxa,
+            "all_taxon_ids": all_taxon_ids,
             "has_krona": any(clf.krona for clf in request.classifiers),
             "review": {
                 "reviewed": False,

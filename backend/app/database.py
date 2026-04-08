@@ -78,6 +78,12 @@ async def _ensure_indexes():
     await db["samples"].create_index("outbreak_taxa.taxon_id")
     await db["samples"].create_index([("order_date", -1), ("case_id", 1)])
 
+    # samples — fast pathogen detection using pre-computed flat taxon ID array
+    await db["samples"].create_index("all_taxon_ids")
+
+    # known_pathogens — fast lookup by taxon_id
+    await db["known_pathogens"].create_index("taxon_id", unique=True)
+
 
 async def close_db():
     global client

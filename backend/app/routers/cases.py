@@ -163,12 +163,10 @@ async def pathogen_cases(
     if not pathogen_ids:
         return {"case_ids": []}
 
-    # Unwind both array levels so the match sees individual taxon entries.
-    # A simple dot-path query on doubly-nested arrays is unreliable in MongoDB.
+    # all_taxon_ids is a pre-computed flat array of taxon IDs stored on each
+    # sample at ingest time, avoiding expensive $unwind on nested profile arrays.
     pipeline = [
-        {"$unwind": "$profiles"},
-        {"$unwind": "$profiles.profile"},
-        {"$match": {"profiles.profile.taxon_id": {"$in": pathogen_ids}}},
+        {"$match": {"all_taxon_ids": {"$in": pathogen_ids}}},
         {"$group": {"_id": "$case_id"}},
     ]
     results = await db["samples"].aggregate(pipeline).to_list(None)
