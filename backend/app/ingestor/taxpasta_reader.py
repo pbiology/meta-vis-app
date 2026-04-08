@@ -74,7 +74,9 @@ def read_taxpasta(
         taxon_id = int(row.taxon_id)  # type: ignore[arg-type]
         name = row.name if row.name and not pd.isna(row.name) else str(taxon_id)
         lineage = getattr(row, "lineage", None) if has_lineage else None
-        superkingdom = _superkingdom_from_lineage(lineage) if isinstance(lineage, str) else None
+        superkingdom = (
+            _superkingdom_from_lineage(lineage) if isinstance(lineage, str) else None
+        )
         rank_val = getattr(row, "rank", None) if "rank" in df.columns else None
         if (
             rank_val is not None
