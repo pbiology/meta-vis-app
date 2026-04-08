@@ -216,9 +216,12 @@ export default function KnownPathogens() {
                 <label className="text-xs text-gray-500">NCBI Taxon ID</label>
                 <div className="flex gap-2">
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={addForm.taxon_id}
                     onChange={(e) => {
+                      if (!/^\d*$/.test(e.target.value)) return;
                       setAddForm((f) => ({ ...EMPTY_FORM, taxon_id: e.target.value, notes: f.notes }));
                       setLookupError(null);
                     }}
