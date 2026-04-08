@@ -138,8 +138,8 @@ jobs:
         if: matrix.component == 'backend'
         working-directory: backend
         run: |
-          pip install pip-audit>=2.6.0
-          pip-audit --desc --fail-on high
+          pip install pip-audit
+          pip-audit
 
       - name: Set up Node (frontend)
         if: matrix.component == 'frontend'
