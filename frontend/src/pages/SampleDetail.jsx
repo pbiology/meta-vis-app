@@ -44,6 +44,7 @@ const HOST_IDS = new Set([9606, 1, 0, 131567]);
 
 function TaxonomyTable({
   profile,
+  allProfiles,
   clfQc,
   metavalResults,
   sampleId,
@@ -56,7 +57,21 @@ function TaxonomyTable({
   const [taxPage, setTaxPage] = useState(0);
   const [metavalOnly, setMetavalOnly] = useState(false);
   const [kingdomOpen, setKingdomOpen] = useState(false);
+  const [concordanceMin, setConcordanceMin] = useState(1);
   const TAX_PER_PAGE = 50;
+
+  // Build a map of taxon_id -> Set of classifier names that detected it
+  // at or above the concordanceMin threshold, across all classifiers for this sample.
+  const allClassifierNames = (allProfiles ?? []).map((p) => p.classifier);
+  const concordanceMap = {};
+  for (const p of allProfiles ?? []) {
+    for (const entry of p.profile ?? []) {
+      if (entry.abundance >= concordanceMin) {
+        if (!concordanceMap[entry.taxon_id]) concordanceMap[entry.taxon_id] = new Set();
+        concordanceMap[entry.taxon_id].add(p.classifier);
+      }
+    }
+  }
 
   const allEntries = profile?.profile ?? [];
   const hostReads = allEntries.find((t) => t.taxon_id === 9606)?.abundance ?? 0;
@@ -108,6 +123,21 @@ function TaxonomyTable({
     if (taxSort.col === "superkingdom")
       return taxSort.dir * (a.superkingdom ?? "").localeCompare(b.superkingdom ?? "");
     if (taxSort.col === "ntc") return taxSort.dir * (ntcSum(a.taxon_id) - ntcSum(b.taxon_id));
+    if (taxSort.col === "concordance") {
+      const aCount = concordanceMap[a.taxon_id]?.size ?? 0;
+      const bCount = concordanceMap[b.taxon_id]?.size ?? 0;
+      if (aCount !== bCount) return taxSort.dir * (aCount - bCount);
+      // Secondary sort: total reads across all classifiers
+      const aReads = (allProfiles ?? []).reduce((sum, p) => {
+        const entry = p.profile?.find((e) => e.taxon_id === a.taxon_id);
+        return sum + (entry?.abundance ?? 0);
+      }, 0);
+      const bReads = (allProfiles ?? []).reduce((sum, p) => {
+        const entry = p.profile?.find((e) => e.taxon_id === b.taxon_id);
+        return sum + (entry?.abundance ?? 0);
+      }, 0);
+      return taxSort.dir * (aReads - bReads);
+    }
     return taxSort.dir * (a.abundance - b.abundance);
   });
 
@@ -164,7 +194,7 @@ function TaxonomyTable({
       </div>
 
       {/* Filters */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 items-center">
         <input
           type="text"
           placeholder="Search organism…"
@@ -200,7 +230,7 @@ function TaxonomyTable({
             </svg>
           </button>
           {kingdomOpen && (
-            <div className="absolute right-0 top-full mt-1 bg-white border border-gray-100 rounded-xl shadow-lg z-20 min-w-36 py-1">
+            <div className="absolute left-0 top-full mt-1 bg-white border border-gray-100 rounded-xl shadow-lg z-20 min-w-36 py-1">
               {kingdoms.map((k) => (
                 <label
                   key={k}
@@ -234,6 +264,19 @@ function TaxonomyTable({
             </div>
           )}
         </div>
+        <div className="flex items-center gap-1.5 border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
+          <span className="text-xs text-gray-400 whitespace-nowrap">Min reads</span>
+          <input
+            type="number"
+            min="1"
+            value={concordanceMin}
+            onChange={(e) => {
+              const v = parseInt(e.target.value, 10);
+              if (!isNaN(v) && v >= 1) setConcordanceMin(v);
+            }}
+            className="w-12 text-xs text-gray-700 outline-none text-center bg-transparent"
+          />
+        </div>
         {metavalResults.length > 0 && (
           <button
             onClick={() => {
@@ -258,12 +301,13 @@ function TaxonomyTable({
         <div className="overflow-x-auto">
           <table className="w-full text-left" style={{ tableLayout: "fixed" }}>
             <colgroup>
-              <col style={{ width: "34%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "14%" }} />
-              <col style={{ width: "22%" }} />
+              <col style={{ width: "30%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "11%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "20%" }} />
             </colgroup>
             <thead>
               <tr>
@@ -272,13 +316,19 @@ function TaxonomyTable({
                   { label: "Rank", col: "rank" },
                   { label: "Kingdom", col: "superkingdom" },
                   { label: "Reads", col: "abundance" },
+                  {
+                    label: "Classifiers",
+                    col: allClassifierNames.length > 1 ? "concordance" : null,
+                  },
                   { label: "Reads in NTC", col: hasNtc ? "ntc" : null },
                   { label: "% of non-host", col: null },
                 ].map(({ label, col }) => (
                   <th
                     key={label}
                     onClick={col ? () => toggleSort(col) : undefined}
-                    className={`pb-2 text-xs font-medium text-gray-400 border-b border-gray-100 ${col ? "cursor-pointer hover:text-gray-600 select-none" : ""}`}
+                    className={`pb-2 text-xs font-medium text-gray-400 border-b border-gray-100 ${
+                      col ? "cursor-pointer hover:text-gray-600 select-none" : ""
+                    }`}
                   >
                     {label}
                     {col ? sortArrow(col) : ""}
@@ -338,6 +388,41 @@ function TaxonomyTable({
                     </td>
                     <td className="py-2 pr-3 text-xs text-gray-500 tabular-nums">
                       {fmt(t.abundance)}
+                    </td>
+                    <td className="py-2 pr-3">
+                      {allClassifierNames.length > 1 ? (
+                        (() => {
+                          const readsPerClassifier = allClassifierNames.map((c) => {
+                            const p = (allProfiles ?? []).find((p) => p.classifier === c);
+                            const entry = p?.profile?.find((e) => e.taxon_id === t.taxon_id);
+                            return { classifier: c, reads: entry?.abundance ?? 0 };
+                          });
+                          return (
+                            <div
+                              className="flex items-center gap-1"
+                              title={readsPerClassifier
+                                .map((r) => `${r.classifier}: ${r.reads.toLocaleString()} reads`)
+                                .join("\n")}
+                            >
+                              {readsPerClassifier.map(({ classifier: c, reads }) => (
+                                <span
+                                  key={c}
+                                  className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                    reads >= concordanceMin ? "bg-blue-500" : "bg-gray-200"
+                                  }`}
+                                />
+                              ))}
+                              <span className="text-xs text-gray-400 ml-0.5">
+                                {readsPerClassifier
+                                  .map((r) => r.reads.toLocaleString())
+                                  .join(" / ")}
+                              </span>
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        <span className="text-gray-300 text-xs">—</span>
+                      )}
                     </td>
                     <td className="py-2 pr-3 text-xs tabular-nums">
                       {!hasNtc ? (
@@ -665,6 +750,7 @@ export default function SampleDetail() {
                   <TaxonomyTable
                     key={clf.classifier}
                     profile={clf}
+                    allProfiles={classifiers}
                     clfQc={qc?.classifiers?.[clf.classifier]}
                     metavalResults={metavalResults}
                     sampleId={sampleId}
