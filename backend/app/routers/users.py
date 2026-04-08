@@ -70,7 +70,7 @@ async def list_users(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(require_role("admin")),
 ):
-    docs = await db["users"].find({}, {"password_hash": 0}).to_list(length=200)
+    docs = await db["users"].find({}, {"password_hash": 0}).to_list(length=200)  # nosec B105
 
     # Single aggregation to get all review counts at once
     pipeline = [
