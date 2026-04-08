@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
-import { getOutbreaks, getIgnorelist, addToIgnorelist } from '../api/alerts'
+import { getOutbreaks, getIgnorelist, addToIgnorelist, removeFromIgnorelist } from '../api/alerts'
 import { useAuth } from '../context/AuthContext'
 
 export default function Alerts() {
@@ -12,13 +12,13 @@ export default function Alerts() {
   const [loading,        setLoading]        = useState(true)
   const [error,          setError]          = useState(null)
   const [windowDays,     setWindowDays]     = useState(14)
-  const [ignorelist, setIgnorelist] = useState([])
+  const [ignorelist,     setIgnorelist]     = useState([])
   const [ignorelistOpen, setIgnorelistOpen] = useState(false)
   const [ignoring,       setIgnoring]       = useState(null)  // taxon_id currently being ignored
   const [highlightedId,  setHighlightedId]  = useState(null)
   const sectionRefs = useRef({})
 
-function load() {
+  function load() {
     setLoading(true)
     Promise.all([getOutbreaks(windowDays), getIgnorelist()])
       .then(([outbreakData, ignoreData]) => {
@@ -45,7 +45,9 @@ function load() {
   async function handleIgnore(outbreak) {
     setIgnoring(outbreak.taxon_id)
     try {
-      await addToIgnorelist(outbreak.taxon_id, outbreak.taxon_name)
+      // Determine superkingdom from outbreak data
+      const superkingdom = outbreak.superkingdoms?.[0] || 'Viruses'
+      await addToIgnorelist(outbreak.taxon_id, outbreak.taxon_name, superkingdom)
       load()
     } catch {
       alert('Failed to add taxon to ignorelist.')
@@ -62,6 +64,9 @@ function load() {
       alert('Failed to remove taxon from ignorelist.')
     }
   }
+
+  const outbreaks = data?.outbreaks || []
+  const ignored = new Set(ignorelist.map(i => i.taxon_id))
 
   return (
     <div className="flex flex-col h-full">
@@ -107,7 +112,7 @@ function load() {
         {error && (
           <div className="flex items-center justify-center h-40 text-sm text-red-500">{error}</div>
         )}
-        {!loading && !error && data?.outbreaks.length === 0 && (
+        {!loading && !error && outbreaks.length === 0 && (
           <div className="flex flex-col items-center justify-center h-40 gap-2">
             <svg className="w-8 h-8 text-green-300" viewBox="0 0 24 24" fill="none">
               <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5"/>
@@ -117,9 +122,9 @@ function load() {
           </div>
         )}
 
-        {!loading && !error && data?.outbreaks.map(outbreak => (
+        {!loading && !error && outbreaks.map(outbreak => (
           <section
-            key={outbreak.taxon_id}
+            key={`${outbreak.taxon_id}-${outbreak.config_name}`}
             id={`taxon-${outbreak.taxon_id}`}
             ref={el => sectionRefs.current[outbreak.taxon_id] = el}
             className={`bg-white border rounded-xl transition-colors duration-500 ${
@@ -133,17 +138,20 @@ function load() {
                 <path d="M8 2L14 13H2L8 2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
                 <path d="M8 6v3M8 11v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
               </svg>
-              <p className="text-xs font-medium text-gray-700 italic flex-1">{outbreak.taxon_name.replace(/-/g, ' ')}</p>
+              <div className="flex-1">
+                <p className="text-xs font-medium text-gray-700 italic">{outbreak.taxon_name.replace(/-/g, ' ')}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{outbreak.config_name}</p>
+              </div>
               <span className="text-xs text-amber-600 font-medium mr-2">
                 {outbreak.case_ids.length} cases · {windowDays}d window
               </span>
               {role !== 'reader' && (
                 <button
                   onClick={() => handleIgnore(outbreak)}
-                  disabled={ignoring === outbreak.taxon_id}
+                  disabled={ignoring === outbreak.taxon_id || ignored.has(outbreak.taxon_id)}
                   className="text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-50"
                 >
-                  {ignoring === outbreak.taxon_id ? 'Ignoring…' : 'Ignore'}
+                  {ignoring === outbreak.taxon_id ? 'Ignoring…' : ignored.has(outbreak.taxon_id) ? 'Ignored' : 'Ignore'}
                 </button>
               )}
             </div>

@@ -69,8 +69,14 @@ async def _ensure_indexes():
     await db["metaval_results"].create_index("sample_id")
     await db["metaval_results"].create_index("case_id")
 
-    # outbreak_ignorelist — fast lookup by taxon_id
+    # outbreak_ignorelist — fast lookup by taxon_id and filtering by superkingdom
     await db["outbreak_ignorelist"].create_index("taxon_id", unique=True)
+    await db["outbreak_ignorelist"].create_index("superkingdom")
+
+    # samples — fast lookup of outbreak_taxa for queries
+    await db["samples"].create_index("outbreak_taxa.superkingdom")
+    await db["samples"].create_index("outbreak_taxa.taxon_id")
+    await db["samples"].create_index([("order_date", -1), ("case_id", 1)])
 
 
 async def close_db():

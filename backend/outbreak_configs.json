@@ -1,0 +1,22 @@
+{
+  "configs": [
+    {
+      "name": "Viral Outbreaks",
+      "description": "Detects viral taxa appearing in 2+ cases within the time window",
+      "superkingdoms": ["Viruses"],
+      "min_rank": ["species", "no rank", "serotype"],
+      "min_abundance": 1,
+      "min_cases_threshold": 2,
+      "enabled": true
+    },
+    {
+      "name": "Bacterial Outbreaks",
+      "description": "Detects bacterial taxa appearing in 2+ cases within the time window",
+      "superkingdoms": ["Bacteria"],
+      "min_rank": ["species", "no rank", "serotype"],
+      "min_abundance": 1,
+      "min_cases_threshold": 2,
+      "enabled": false
+    }
+  ]
+}
