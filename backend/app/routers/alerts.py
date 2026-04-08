@@ -1,6 +1,6 @@
 # app/routers/alerts.py
 
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
@@ -62,7 +62,7 @@ async def add_to_ignorelist(
         "taxon_name": payload.taxon_name,
         "reason": payload.reason,
         "added_by": current_user["username"],
-        "added_at": datetime.utcnow().isoformat(),
+        "added_at": datetime.now(timezone.utc).isoformat(),
     }
     await db["outbreak_ignorelist"].insert_one(doc)
     _cache.clear()  # ignorelist change affects outbreak results
@@ -124,7 +124,7 @@ async def get_outbreaks(
     global _cache_computed_at
 
     # Return cached result if still fresh
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     if (
         window_days in _cache
         and _cache_computed_at is not None

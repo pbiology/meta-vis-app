@@ -1,7 +1,7 @@
 # tests/unit/test_models.py
 
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import ValidationError
 
 from app.models.sample import (
@@ -21,7 +21,7 @@ def minimal_sample_doc(**overrides) -> dict:
         "case_id": "64a1b2c3d4e5f6a7b8c9d0e2",
         "sample_type": "sample",
         "material": "DNA",
-        "ingested_at": datetime.utcnow().isoformat(),
+        "ingested_at": datetime.now(timezone.utc).isoformat(),
     }
     doc.update(overrides)
     return doc
@@ -30,7 +30,7 @@ def minimal_sample_doc(**overrides) -> dict:
 def minimal_case_doc(**overrides) -> dict:
     doc = {
         "case_id": "speedysnake",
-        "ingested_at": datetime.utcnow(),
+        "ingested_at": datetime.now(timezone.utc),
     }
     doc.update(overrides)
     return doc
