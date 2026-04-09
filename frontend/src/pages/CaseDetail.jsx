@@ -301,15 +301,13 @@ export default function CaseDetail() {
                     className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
                   >
                     <td className="px-4 py-3 font-mono text-xs text-gray-700">
-                      {s.sample?.sample_id ?? "—"}
+                      {s.sample_id ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500">{s.material ?? "—"}</td>
                     <td className="px-4 py-3">
                       <Badge type={s.sample_type} />
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-500">
-                      {s.sample?.sample_source ?? "—"}
-                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-500">{s.sample_source ?? "—"}</td>
                     <td className="px-4 py-3 text-xs text-gray-700">
                       {fmt(s.taxprofiler?.fastp?.total_reads_before_filtering)}
                     </td>
