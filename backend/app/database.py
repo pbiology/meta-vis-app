@@ -46,9 +46,7 @@ async def _ensure_indexes():
 
     # samples — fast lookup by case, by case+type+material (NTC profiles),
     # and by viral taxa fields used in the outbreak aggregation pipeline
-    await db["samples"].create_index(
-        [("case_id", 1), ("sample_id", 1)]
-    )
+    await db["samples"].create_index([("case_id", 1), ("sample_id", 1)])
     await db["samples"].create_index(
         [("case_id", 1), ("sample_type", 1), ("material", 1)]
     )
@@ -67,9 +65,7 @@ async def _ensure_indexes():
     await db["blobs"].create_index("key", unique=True)
 
     # metaval_results — fast lookup by sample and case
-    await db["metaval_results"].create_index(
-        [("case_id", 1), ("sample_id", 1)]
-    )
+    await db["metaval_results"].create_index([("case_id", 1), ("sample_id", 1)])
 
     # outbreak_ignorelist — fast lookup by taxon_id and filtering by superkingdom
     await db["outbreak_ignorelist"].create_index("taxon_id", unique=True)
