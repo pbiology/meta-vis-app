@@ -185,6 +185,37 @@ meta-vis/
 
 All ingestion is done via the `ingest.py` script at the repo root. All file paths must be absolute.
 
+## Loading taxonomy reference data
+
+The `taxa` collection provides reference data for the `TaxaDetails` page and
+is required for the taxa endpoints. Populate it by running:
+```bash
+cd backend
+conda activate meta-vis-app
+python load_taxonomy.py
+```
+
+This downloads `new_taxdump.tar.gz` (~110 MB) from the NCBI FTP site,
+parses it, and bulk-upserts ~2.4 million records into the `taxa` collection.
+The script is safe to re-run at any time — taxonomy fields are updated,
+`clinical_notes` added by clinicians are never overwritten.
+
+### Scheduled refresh
+
+NCBI archives a monthly snapshot on the 1st of each month. It is recommended
+to run `load_taxonomy.py` monthly to stay current. Example cron entry:
+
+```
+0 3 2 * *  cd /path/to/meta-vis-app/backend && conda run -n meta-vis-app python load_taxonomy.py
+```
+
+### Stale records
+
+Taxa records created only by the ingest-time fallback (i.e., before
+`load_taxonomy.py` has been run) will have `taxdump_version: null`. The
+`TaxaDetails` page displays a notice when viewing such a taxon, prompting
+an admin to run the loader.
+
 ### Taxprofiler output
 
 ```bash
