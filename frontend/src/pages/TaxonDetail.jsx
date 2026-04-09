@@ -241,13 +241,13 @@ function OccurrencesSection({ taxonId }) {
 export default function TaxonDetail() {
   const { taxonId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, role } = useAuth();
 
   const [taxon, setTaxon] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const canEdit = user?.role === "writer" || user?.role === "admin";
+  const canEdit = role === "writer" || role === "admin";
 
   useEffect(() => {
     getTaxon(Number(taxonId))
