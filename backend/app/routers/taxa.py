@@ -133,7 +133,12 @@ async def get_taxon_literature(
 
             if not pmids:
                 _lit_cache[cache_key] = (now, [])
-                return {"taxon_id": taxon_id, "article_count": 0, "articles": []}
+                return {
+                    "taxon_id": taxon_id,
+                    "article_count": 0,
+                    "articles": [],
+                    "pubmed_query": search_query,
+                }
 
             # Step 2: ESummary — fetch title, journal, and date for each PMID
             summary_res = await http.get(
@@ -164,10 +169,20 @@ async def get_taxon_literature(
 
     except Exception:
         # Network errors, timeouts, or unexpected response shapes — degrade gracefully
-        return {"taxon_id": taxon_id, "article_count": 0, "articles": []}
+        return {
+            "taxon_id": taxon_id,
+            "article_count": 0,
+            "articles": [],
+            "pubmed_query": None,
+        }
 
     _lit_cache[cache_key] = (now, articles)
-    return {"taxon_id": taxon_id, "article_count": len(articles), "articles": articles}
+    return {
+        "taxon_id": taxon_id,
+        "article_count": len(articles),
+        "articles": articles,
+        "pubmed_query": search_query,
+    }
 
 
 @router.get("/{taxon_id}", summary="Get taxon reference data")

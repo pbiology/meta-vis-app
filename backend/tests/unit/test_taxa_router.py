@@ -62,7 +62,9 @@ class TestGetTaxon:
 
     def test_adds_needs_taxonomy_refresh_false_when_taxdump_present(self):
         app, db = make_app()
-        db["taxa"].find_one = AsyncMock(return_value=make_taxon_doc(taxdump_version="2024-01-01"))
+        db["taxa"].find_one = AsyncMock(
+            return_value=make_taxon_doc(taxdump_version="2024-01-01")
+        )
 
         resp = TestClient(app).get("/api/v1/taxa/12637")
 
@@ -70,7 +72,9 @@ class TestGetTaxon:
 
     def test_adds_needs_taxonomy_refresh_true_when_taxdump_missing(self):
         app, db = make_app()
-        db["taxa"].find_one = AsyncMock(return_value=make_taxon_doc(taxdump_version=None))
+        db["taxa"].find_one = AsyncMock(
+            return_value=make_taxon_doc(taxdump_version=None)
+        )
 
         resp = TestClient(app).get("/api/v1/taxa/12637")
 
@@ -154,7 +158,9 @@ class TestGetExternalLinks:
         with patch("app.routers.taxa.httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client.get = AsyncMock(return_value=mock_resp)
-            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client_cls.return_value.__aenter__ = AsyncMock(
+                return_value=mock_client
+            )
             mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
             resp = TestClient(app).get("/api/v1/taxa/12637/external_links")
@@ -172,7 +178,9 @@ class TestGetExternalLinks:
         with patch("app.routers.taxa.httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client.get = AsyncMock(side_effect=Exception("timeout"))
-            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client_cls.return_value.__aenter__ = AsyncMock(
+                return_value=mock_client
+            )
             mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
             resp = TestClient(app).get("/api/v1/taxa/12637/external_links")
@@ -182,13 +190,18 @@ class TestGetExternalLinks:
 
     def test_result_is_cached(self):
         app, _ = make_app()
-        ncbi_payload = {"tax_id": "12637", "wikipedia": "https://en.wikipedia.org/wiki/Dengue_virus"}
+        ncbi_payload = {
+            "tax_id": "12637",
+            "wikipedia": "https://en.wikipedia.org/wiki/Dengue_virus",
+        }
         mock_resp = self._make_httpx_response(ncbi_payload)
 
         with patch("app.routers.taxa.httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client.get = AsyncMock(return_value=mock_resp)
-            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client_cls.return_value.__aenter__ = AsyncMock(
+                return_value=mock_client
+            )
             mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
             TestClient(app).get("/api/v1/taxa/12637/external_links")
@@ -239,7 +252,9 @@ class TestGetTaxonLiterature:
         mock_client = self._mock_pubmed(["12345"], summaries)
 
         with patch("app.routers.taxa.httpx.AsyncClient") as mock_client_cls:
-            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client_cls.return_value.__aenter__ = AsyncMock(
+                return_value=mock_client
+            )
             mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
             resp = TestClient(app).get("/api/v1/taxa/12637/literature")
@@ -263,7 +278,9 @@ class TestGetTaxonLiterature:
         mock_client.get = AsyncMock(return_value=esearch_resp)
 
         with patch("app.routers.taxa.httpx.AsyncClient") as mock_client_cls:
-            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client_cls.return_value.__aenter__ = AsyncMock(
+                return_value=mock_client
+            )
             mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
             resp = TestClient(app).get("/api/v1/taxa/12637/literature")
@@ -280,7 +297,9 @@ class TestGetTaxonLiterature:
         mock_client.get = AsyncMock(side_effect=Exception("connection refused"))
 
         with patch("app.routers.taxa.httpx.AsyncClient") as mock_client_cls:
-            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client_cls.return_value.__aenter__ = AsyncMock(
+                return_value=mock_client
+            )
             mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
             resp = TestClient(app).get("/api/v1/taxa/12637/literature")
@@ -300,7 +319,9 @@ class TestGetTaxonLiterature:
         mock_client.get = AsyncMock(return_value=esearch_resp)
 
         with patch("app.routers.taxa.httpx.AsyncClient") as mock_client_cls:
-            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client_cls.return_value.__aenter__ = AsyncMock(
+                return_value=mock_client
+            )
             mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
             resp = TestClient(app).get("/api/v1/taxa/12637/literature")
@@ -315,19 +336,27 @@ class TestGetTaxonLiterature:
         db["taxa"].find_one = AsyncMock(return_value={"name": "Dengue virus"})
 
         summaries = {
-            "12345": {"title": "Test article", "fulljournalname": "Test Journal", "pubdate": "2024"}
+            "12345": {
+                "title": "Test article",
+                "fulljournalname": "Test Journal",
+                "pubdate": "2024",
+            }
         }
         mock_client = self._mock_pubmed(["12345"], summaries)
 
         with patch("app.routers.taxa.httpx.AsyncClient") as mock_client_cls:
-            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client_cls.return_value.__aenter__ = AsyncMock(
+                return_value=mock_client
+            )
             mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
             TestClient(app).get("/api/v1/taxa/12637/literature")
             TestClient(app).get("/api/v1/taxa/12637/literature")
 
             # httpx should only be called for the first request
-            assert mock_client.get.call_count == 2  # esearch + esummary, only once total
+            assert (
+                mock_client.get.call_count == 2
+            )  # esearch + esummary, only once total
 
     def test_max_results_param_is_respected(self):
         app, db = make_app()
@@ -340,7 +369,9 @@ class TestGetTaxonLiterature:
         mock_client.get = AsyncMock(return_value=esearch_resp)
 
         with patch("app.routers.taxa.httpx.AsyncClient") as mock_client_cls:
-            mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client_cls.return_value.__aenter__ = AsyncMock(
+                return_value=mock_client
+            )
             mock_client_cls.return_value.__aexit__ = AsyncMock(return_value=False)
 
             resp = TestClient(app).get("/api/v1/taxa/12637/literature?max_results=10")
