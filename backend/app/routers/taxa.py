@@ -73,7 +73,7 @@ async def get_taxon_occurrences(
     """
     cutoff = (date.today() - timedelta(days=window_days)).isoformat()
 
-    pipeline = [
+    pipeline: list[dict] = [
         # Scope to the time window and samples that contain the taxon
         {
             "$match": {

@@ -175,9 +175,7 @@ export default function KnownPathogens() {
                           {item.superkingdom}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-xs font-mono text-gray-400">
-                        {item.taxon_id}
-                      </td>
+                      <td className="px-4 py-3 text-xs font-mono text-gray-400">{item.taxon_id}</td>
                       <td className="px-4 py-3 text-xs text-gray-500 min-w-48">
                         {item.notes ?? <span className="text-gray-300">—</span>}
                       </td>
@@ -210,7 +208,6 @@ export default function KnownPathogens() {
           <div className="bg-white rounded-xl border border-gray-100 shadow-lg p-6 w-96 flex flex-col gap-4">
             <p className="text-sm font-medium text-gray-900">Add known pathogen</p>
             <div className="flex flex-col gap-3">
-
               {/* Taxon ID + lookup */}
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-gray-500">NCBI Taxon ID</label>
@@ -222,10 +219,16 @@ export default function KnownPathogens() {
                     value={addForm.taxon_id}
                     onChange={(e) => {
                       if (!/^\d*$/.test(e.target.value)) return;
-                      setAddForm((f) => ({ ...EMPTY_FORM, taxon_id: e.target.value, notes: f.notes }));
+                      setAddForm((f) => ({
+                        ...EMPTY_FORM,
+                        taxon_id: e.target.value,
+                        notes: f.notes,
+                      }));
                       setLookupError(null);
                     }}
-                    onKeyDown={(e) => { if (e.key === "Enter") handleLookup(); }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleLookup();
+                    }}
                     placeholder="e.g. 11520"
                     className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-300"
                   />
@@ -237,9 +240,7 @@ export default function KnownPathogens() {
                     {lookingUp ? "Looking up…" : "Look up"}
                   </button>
                 </div>
-                {lookupError && (
-                  <p className="text-xs text-red-500 mt-0.5">{lookupError}</p>
-                )}
+                {lookupError && <p className="text-xs text-red-500 mt-0.5">{lookupError}</p>}
               </div>
 
               {/* Auto-filled from NCBI — read-only, only shown after successful lookup */}

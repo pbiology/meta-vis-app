@@ -165,7 +165,7 @@ async def pathogen_cases(
 
     # all_taxon_ids is a pre-computed flat array of taxon IDs stored on each
     # sample at ingest time, avoiding expensive $unwind on nested profile arrays.
-    pipeline = [
+    pipeline: list[dict] = [
         {"$match": {"all_taxon_ids": {"$in": pathogen_ids}}},
         {"$group": {"_id": "$case_id"}},
     ]
