@@ -35,12 +35,7 @@ function RefreshWarning() {
           strokeWidth="1.3"
           strokeLinejoin="round"
         />
-        <path
-          d="M8 6v3M8 11v.5"
-          stroke="currentColor"
-          strokeWidth="1.3"
-          strokeLinecap="round"
-        />
+        <path d="M8 6v3M8 11v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
       </svg>
       <span>
         Full taxonomy data for this taxon has not been loaded yet. Run{" "}
@@ -184,8 +179,7 @@ function OccurrencesSection({ taxonId }) {
         <>
           <div className="px-4 py-2.5 border-b border-gray-50 flex items-center gap-2">
             <span className="text-xs text-gray-400">
-              Detected in{" "}
-              <span className="font-medium text-gray-700">{data.total_cases}</span>{" "}
+              Detected in <span className="font-medium text-gray-700">{data.total_cases}</span>{" "}
               {data.total_cases === 1 ? "case" : "cases"} in the last {windowDays} days
             </span>
           </div>
@@ -228,9 +222,7 @@ function OccurrencesSection({ taxonId }) {
                             className="text-xs text-gray-500 tabular-nums"
                             title={s.sample_id}
                           >
-                            <span className="text-gray-400">{s.classifier}</span>
-                            {" "}
-                            {fmt(s.abundance)}
+                            <span className="text-gray-400">{s.classifier}</span> {fmt(s.abundance)}
                           </span>
                         ))}
                       </div>
@@ -266,9 +258,7 @@ export default function TaxonDetail() {
 
   if (loading)
     return (
-      <div className="flex items-center justify-center h-full text-sm text-gray-400">
-        Loading…
-      </div>
+      <div className="flex items-center justify-center h-full text-sm text-gray-400">Loading…</div>
     );
 
   if (error)
@@ -306,10 +296,8 @@ export default function TaxonDetail() {
           Back
         </button>
         <span className="text-gray-200">/</span>
-        <h1 className={`text-sm font-medium italic flex-1 ${nameColour}`}>
-          {taxon.name}
-        </h1>
-
+        <h1 className={`text-sm font-medium italic flex-1 ${nameColour}`}>{taxon.name}</h1>
+        <a
           href={taxon.ncbi_url}
           target="_blank"
           rel="noopener noreferrer"
