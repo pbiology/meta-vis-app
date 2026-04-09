@@ -11,6 +11,7 @@ import Alerts from "./pages/Alerts";
 import IgnoreList from "./pages/IgnoreList";
 import KnownPathogens from "./pages/KnownPathogens";
 import Layout from "./components/Layout";
+import TaxonDetail from "./pages/TaxonDetail";
 
 function ProtectedRoute({ children }) {
   const { user } = useAuth();
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="alerts" element={<Alerts />} />
         <Route path="alerts/ignorelist" element={<IgnoreList />} />
         <Route path="pathogens" element={<KnownPathogens />} />
+        <Route path="taxa/:taxonId" element={<TaxonDetail />} />
       </Route>
     </Routes>
   );
