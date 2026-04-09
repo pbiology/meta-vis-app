@@ -18,3 +18,8 @@ export async function updateClinicalNotes(taxonId, clinicalNotes) {
   });
   return res.data;
 }
+
+export async function getTaxonExternalLinks(taxonId) {
+  const res = await client.get(`/taxa/${taxonId}/external_links`);
+  return res.data;
+}
