@@ -95,6 +95,10 @@ def _parse_names(names_path: Path) -> dict[int, str]:
     return names
 
 
+def _or_none(s: str):
+    return s if s else None
+
+
 def _parse_rankedlineage(
     lineage_path: Path,
 ) -> dict[int, dict]:
@@ -118,9 +122,6 @@ def _parse_rankedlineage(
 
             if len(parts) < 10:
                 continue
-
-            def _or_none(s: str):
-                return s if s else None
 
             lineages[int(parts[0])] = {
                 "species": _or_none(parts[2]),
