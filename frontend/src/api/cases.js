@@ -55,3 +55,8 @@ export async function getCaseStats() {
   const res = await client.get("/cases/stats");
   return res.data;
 }
+
+export async function getPathogenCases() {
+  const res = await client.get("/cases/pathogen_cases");
+  return res.data;
+}

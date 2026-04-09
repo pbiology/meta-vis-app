@@ -5,6 +5,8 @@ from pathlib import Path
 import asyncio
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from typing import Any
+from pymongo import UpdateOne
 
 from app.models.sample import IngestRequest
 from app.ingestor.taxpasta_reader import read_taxpasta
@@ -93,6 +95,68 @@ async def _compute_outbreak_taxa(
     return outbreak_taxa
 
 
+async def _upsert_taxa_from_profiles(profiles: list, db: AsyncIOMotorDatabase) -> None:
+    """
+    Lightweight fallback: upsert minimal taxon records from profile data.
+
+    This ensures every taxon_id seen in a sample has at least a skeleton
+    record in the `taxa` collection, even if load_taxonomy.py has not been
+    run yet or hasn't been refreshed recently.
+
+    Only creates new records ($setOnInsert) — never overwrites existing
+    taxonomy data or clinical_notes populated by load_taxonomy.py.
+    """
+
+    seen: dict[int, dict[str, Any]] = {}
+    for p in profiles:
+        for entry in p.get("profile", []):
+            taxon_id = entry.get("taxon_id")
+            if taxon_id is None or taxon_id in seen:
+                continue
+            seen[taxon_id] = {
+                "name": entry.get("name"),
+                "rank": entry.get("rank"),
+                "superkingdom": entry.get("superkingdom"),
+            }
+
+    if not seen:
+        return
+
+    ops: list[UpdateOne] = []
+    for taxon_id, taxon_fields in seen.items():
+        ops.append(
+            UpdateOne(
+                {"taxon_id": taxon_id},
+                {
+                    "$setOnInsert": {
+                        "taxon_id": taxon_id,
+                        "name": taxon_fields["name"],
+                        "rank": taxon_fields["rank"],
+                        "superkingdom": taxon_fields["superkingdom"],
+                        # Full lineage fields absent — indicates needs refresh
+                        "kingdom": None,
+                        "phylum": None,
+                        "class": None,
+                        "order": None,
+                        "family": None,
+                        "genus": None,
+                        "species": None,
+                        "ncbi_url": (
+                            f"https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/"
+                            f"wwwtax.cgi?id={taxon_id}"
+                        ),
+                        "clinical_notes": None,
+                        "taxdump_version": None,  # None = not yet loaded from dump
+                        "updated_at": None,
+                    }
+                },
+                upsert=True,
+            )
+        )
+
+    await db["taxa"].bulk_write(ops, ordered=False)
+
+
 async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     now = datetime.now(timezone.utc)
 
@@ -178,10 +242,22 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             if clf_qc:
                 classifier_qc[clf.name] = clf_qc
 
+        await _upsert_taxa_from_profiles(profiles, db)
         base_qc = _extract_base_qc(qc_data, s.sample_id)
 
         # Compute outbreak_taxa from profiles using active configs
         outbreak_taxa = await _compute_outbreak_taxa(profiles)
+
+        # Flat set of all taxon IDs across all classifiers — used for fast
+        # pathogen matching at query time without unwinding nested arrays.
+        all_taxon_ids: list[int] = list(
+            {
+                entry["taxon_id"]
+                for p in profiles
+                for entry in p.get("profile", [])
+                if isinstance(entry, dict) and entry.get("taxon_id") is not None
+            }
+        )
 
         sample_doc = {
             "case_id": case_object_id,
@@ -206,6 +282,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             },
             "profiles": profiles,
             "outbreak_taxa": outbreak_taxa,
+            "all_taxon_ids": all_taxon_ids,
             "has_krona": any(clf.krona for clf in request.classifiers),
             "review": {
                 "reviewed": False,
