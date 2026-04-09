@@ -387,7 +387,7 @@ function LiteratureSection({ taxonId }) {
           <ul className="divide-y divide-gray-50">
             {articles.map((a) => (
               <li key={a.pmid} className="px-4 py-3 flex flex-col gap-0.5">
-                < a
+                <a
                   href={a.link}
                   target="_blank"
                   rel="noopener noreferrer"
