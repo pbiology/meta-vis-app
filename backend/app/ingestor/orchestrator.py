@@ -93,9 +93,7 @@ async def _compute_outbreak_taxa(
     return outbreak_taxa
 
 
-async def _upsert_taxa_from_profiles(
-    profiles: list, db: AsyncIOMotorDatabase
-) -> None:
+async def _upsert_taxa_from_profiles(profiles: list, db: AsyncIOMotorDatabase) -> None:
     """
     Lightweight fallback: upsert minimal taxon records from profile data.
 
@@ -250,12 +248,14 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
 
         # Flat set of all taxon IDs across all classifiers — used for fast
         # pathogen matching at query time without unwinding nested arrays.
-        all_taxon_ids = list({
-            entry["taxon_id"]
-            for p in profiles
-            for entry in p.get("profile", [])
-            if entry.get("taxon_id") is not None
-        })
+        all_taxon_ids = list(
+            {
+                entry["taxon_id"]
+                for p in profiles
+                for entry in p.get("profile", [])
+                if entry.get("taxon_id") is not None
+            }
+        )
 
         sample_doc = {
             "case_id": case_object_id,
