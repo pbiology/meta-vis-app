@@ -6,6 +6,7 @@ from typing import Literal
 
 from app.database import get_db
 from app.auth.utils import get_current_user
+from app.constants import HOST_TAXON_IDS
 
 router = APIRouter(prefix="/ntc", tags=["ntc"])
 
@@ -100,6 +101,8 @@ async def get_ntc_trends(
         for entry in kraken2_profile:
             taxon_id = entry.get("taxon_id")
             if taxon_id is None or taxon_id in seen_in_this_doc:
+                continue
+            if taxon_id in HOST_TAXON_IDS:
                 continue
             abundance = entry.get("abundance", 0)
             if abundance <= min_reads:
