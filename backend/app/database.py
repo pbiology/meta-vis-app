@@ -84,6 +84,11 @@ async def _ensure_indexes():
     # known_pathogens — fast lookup by taxon_id
     await db["known_pathogens"].create_index("taxon_id", unique=True)
 
+    # taxa — reference collection populated by load_taxonomy.py
+    await db["taxa"].create_index("taxon_id", unique=True)
+    await db["taxa"].create_index("superkingdom")
+    await db["taxa"].create_index("name")
+
 
 async def close_db():
     global client
