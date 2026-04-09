@@ -2,8 +2,8 @@
 """
 Download and load the NCBI taxonomy dump into the `taxa` collection.
 
-Downloads new_taxdump.tar.gz from the NCBI FTP site, parses rankedlineage.dmp
-and names.dmp, and bulk-upserts all records into MongoDB.
+Downloads new_taxdump.tar.gz from the NCBI FTP site, parses rankedlineage.dmp,
+names.dmp, and nodes.dmp, and bulk-upserts all records into MongoDB.
 
 Existing records are updated for all taxonomy fields. The `clinical_notes`
 field is never overwritten — it is only set on first insert.
@@ -65,7 +65,7 @@ def _download_dump(dest_dir: Path) -> Path:
 
 def _extract_dump(archive: Path, dest_dir: Path) -> None:
     """Extract only the files we need from the archive."""
-    needed = {"rankedlineage.dmp", "names.dmp"}
+    needed = {"rankedlineage.dmp", "names.dmp", "nodes.dmp"}
     log.info("Extracting %s from archive", needed)
     with tarfile.open(archive, "r:gz") as tf:
         for member in tf.getmembers():
@@ -95,13 +95,11 @@ def _parse_names(names_path: Path) -> dict[int, str]:
     return names
 
 
-def _or_none(s: str):
+def _or_none(s: str) -> str | None:
     return s if s else None
 
 
-def _parse_rankedlineage(
-    lineage_path: Path,
-) -> dict[int, dict]:
+def _parse_rankedlineage(lineage_path: Path) -> dict[int, dict]:
     """
     Parse rankedlineage.dmp.
 
@@ -128,7 +126,7 @@ def _parse_rankedlineage(
                 "genus": _or_none(parts[3]),
                 "family": _or_none(parts[4]),
                 "order": _or_none(parts[5]),
-                "class_": _or_none(parts[6]),   # "class" is a Python keyword
+                "class_": _or_none(parts[6]),  # "class" is a Python keyword
                 "phylum": _or_none(parts[7]),
                 "kingdom": _or_none(parts[8]),
                 "superkingdom": _or_none(parts[9]),
@@ -138,34 +136,31 @@ def _parse_rankedlineage(
     return lineages
 
 
-def _derive_rank(taxon_id: int, lineage: dict, name: str) -> str | None:
+def _parse_nodes(nodes_path: Path) -> dict[int, str | None]:
     """
-    Derive a taxon's own rank from the lineage fields.
+    Parse nodes.dmp and return a mapping of taxon_id → rank.
 
-    rankedlineage.dmp gives us the lineage but not the taxon's own rank
-    directly. We approximate by checking which lineage level the taxon's
-    name matches. This covers the common cases; for unusual ranks
-    (no rank, clade, etc.) it returns None.
+    nodes.dmp is the authoritative source for rank. Format is tab-pipe-tab
+    delimited; tax_id is field 0, rank is field 2. 'no rank' is stored as
+    None to be consistent with what the taxpasta reader produces.
     """
-    checks = [
-        ("species", lineage.get("species")),
-        ("genus", lineage.get("genus")),
-        ("family", lineage.get("family")),
-        ("order", lineage.get("order")),
-        ("class", lineage.get("class_")),
-        ("phylum", lineage.get("phylum")),
-        ("kingdom", lineage.get("kingdom")),
-        ("superkingdom", lineage.get("superkingdom")),
-    ]
-    for rank, value in checks:
-        if value and value == name:
-            return rank
-    return None
+    log.info("Parsing nodes.dmp…")
+    ranks: dict[int, str | None] = {}
+    with open(nodes_path, encoding="utf-8") as fh:
+        for line in fh:
+            parts = line.split("\t|\t")
+            if len(parts) < 3:
+                continue
+            rank = parts[2].strip()
+            ranks[int(parts[0].strip())] = rank if rank and rank != "no rank" else None
+    log.info("Parsed %d rank records", len(ranks))
+    return ranks
 
 
 async def load_taxonomy(dump_dir: Path, dry_run: bool) -> None:
     names = _parse_names(dump_dir / "names.dmp")
     lineages = _parse_rankedlineage(dump_dir / "rankedlineage.dmp")
+    ranks = _parse_nodes(dump_dir / "nodes.dmp")
 
     taxon_ids = set(names.keys()) | set(lineages.keys())
     log.info("Total unique taxon IDs to upsert: %d", len(taxon_ids))
@@ -196,7 +191,7 @@ async def load_taxonomy(dump_dir: Path, dry_run: bool) -> None:
         for taxon_id in batch:
             name = names.get(taxon_id, str(taxon_id))
             lin = lineages.get(taxon_id, {})
-            rank = _derive_rank(taxon_id, lin, name)
+            rank = ranks.get(taxon_id)
 
             ncbi_url = (
                 f"https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi"
@@ -240,7 +235,11 @@ async def load_taxonomy(dump_dir: Path, dry_run: bool) -> None:
         pct = min(100, (batch_start + len(batch)) / total * 100)
         log.info(
             "Progress: %.0f%% (%d/%d) — upserted: %d  modified: %d",
-            pct, batch_start + len(batch), total, upserted, modified,
+            pct,
+            batch_start + len(batch),
+            total,
+            upserted,
+            modified,
         )
 
     log.info(
