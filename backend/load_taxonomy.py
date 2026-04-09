@@ -70,7 +70,7 @@ def _extract_dump(archive: Path, dest_dir: Path) -> None:
     with tarfile.open(archive, "r:gz") as tf:
         for member in tf.getmembers():
             if member.name in needed:
-                tf.extract(member, path=dest_dir)
+                tf.extract(member, path=dest_dir, filter="data")
     log.info("Extraction complete")
 
 
