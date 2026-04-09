@@ -1,8 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { getTaxon, getTaxonOccurrences, updateClinicalNotes, getTaxonExternalLinks } from "../api/taxa";
+import {
+  getTaxon,
+  getTaxonOccurrences,
+  updateClinicalNotes,
+  getTaxonExternalLinks,
+} from "../api/taxa";
 import { useAuth } from "../context/AuthContext";
-
 
 function fmt(n) {
   if (n === undefined || n === null) return "—";
