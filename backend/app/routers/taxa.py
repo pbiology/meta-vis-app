@@ -53,7 +53,9 @@ async def update_clinical_notes(
         {
             "$set": {
                 "clinical_notes": payload.clinical_notes,
-                "clinical_notes_author": current_user["username"] if payload.clinical_notes else None,
+                "clinical_notes_author": current_user["username"]
+                if payload.clinical_notes
+                else None,
                 "clinical_notes_updated_at": now if payload.clinical_notes else None,
             }
         },
