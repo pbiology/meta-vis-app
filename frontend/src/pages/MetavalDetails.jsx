@@ -174,6 +174,11 @@ function BlastResultsSection({ blast }) {
 
   function BlastTable({ rows, program }) {
     const [open, setOpen] = useState(true);
+    const [displayCount, setDisplayCount] = useState(10);
+    const sortedData = sortedRows(rows);
+    const displayedRows = sortedData.slice(0, displayCount);
+    const hasMore = displayCount < sortedData.length;
+
     return (
       <div className="border-t border-gray-50 first:border-t-0">
         <button
@@ -206,46 +211,60 @@ function BlastResultsSection({ blast }) {
           (rows.length === 0 ? (
             <p className="px-5 py-4 text-xs text-gray-300">No hits</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr>
-                    {COLUMNS.map((c) => (
-                      <th
-                        key={c.key}
-                        className="px-5 py-2 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap"
-                      >
-                        {c.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedRows(rows).map((row, i) => (
-                    <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
-                      <td
-                        className="px-5 py-2 text-xs font-mono text-gray-600 max-w-48 truncate"
-                        title={row.qseqid}
-                      >
-                        {row.qseqid}
-                      </td>
-                      <td className="px-5 py-2 text-xs italic text-gray-700">{row.ssciname}</td>
-                      <td className="px-5 py-2 text-xs font-mono text-gray-400">{row.staxid}</td>
-                      <td className="px-5 py-2 text-xs text-gray-500 tabular-nums">
-                        {row.median_pident}
-                      </td>
-                      <td className="px-5 py-2 text-xs text-gray-500 tabular-nums">
-                        {row.median_length}
-                      </td>
-                      <td className="px-5 py-2 text-xs text-gray-500 tabular-nums">
-                        {row.median_bitscore}
-                      </td>
-                      <td className="px-5 py-2 text-xs text-gray-500 tabular-nums">{row.count}</td>
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr>
+                      {COLUMNS.map((c) => (
+                        <th
+                          key={c.key}
+                          className="px-5 py-2 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap"
+                        >
+                          {c.label}
+                        </th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {displayedRows.map((row, i) => (
+                      <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
+                        <td
+                          className="px-5 py-2 text-xs font-mono text-gray-600 max-w-48 truncate"
+                          title={row.qseqid}
+                        >
+                          {row.qseqid}
+                        </td>
+                        <td className="px-5 py-2 text-xs italic text-gray-700">{row.ssciname}</td>
+                        <td className="px-5 py-2 text-xs font-mono text-gray-400">{row.staxid}</td>
+                        <td className="px-5 py-2 text-xs text-gray-500 tabular-nums">
+                          {row.median_pident}
+                        </td>
+                        <td className="px-5 py-2 text-xs text-gray-500 tabular-nums">
+                          {row.median_length}
+                        </td>
+                        <td className="px-5 py-2 text-xs text-gray-500 tabular-nums">
+                          {row.median_bitscore}
+                        </td>
+                        <td className="px-5 py-2 text-xs text-gray-500 tabular-nums">
+                          {row.count}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {hasMore && (
+                <div className="px-5 py-3 border-t border-gray-50 flex items-center justify-center">
+                  <button
+                    onClick={() => setDisplayCount((prev) => prev + 10)}
+                    className="text-xs px-4 py-1.5 rounded-lg bg-gray-50 text-gray-600 hover:bg-gray-100 transition-colors font-medium"
+                  >
+                    Load more ({sortedData.length - displayCount} remaining)
+                  </button>
+                </div>
+              )}
+            </>
           ))}
       </div>
     );
