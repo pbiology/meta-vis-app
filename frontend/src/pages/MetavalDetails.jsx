@@ -255,10 +255,10 @@ function BlastResultsSection({ blast }) {
                 </table>
               </div>
               {hasMore && (
-                <div className="px-5 py-3 border-t border-gray-50 flex items-center justify-center">
+                <div className="px-5 py-3 border-t border-gray-50">
                   <button
                     onClick={() => setDisplayCount((prev) => prev + 10)}
-                    className="text-xs px-4 py-1.5 rounded-lg bg-gray-50 text-gray-600 hover:bg-gray-100 transition-colors font-medium"
+                    className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
                   >
                     Load more ({sortedData.length - displayCount} remaining)
                   </button>
