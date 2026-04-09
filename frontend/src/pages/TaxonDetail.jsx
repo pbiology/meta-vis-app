@@ -136,8 +136,7 @@ function ClinicalNotesEditor({ taxonId, initialNotes, notesAuthor, notesUpdatedA
             <p className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">{value}</p>
             {author && (
               <p className="text-xs text-gray-300">
-                Last updated by{" "}
-                <span className="text-gray-400 font-medium">{author}</span>
+                Last updated by <span className="text-gray-400 font-medium">{author}</span>
                 {updatedAt && (
                   <>
                     {" "}
