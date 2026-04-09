@@ -5,6 +5,7 @@ from pathlib import Path
 import asyncio
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from typing import Any
 
 from app.models.sample import IngestRequest
 from app.ingestor.taxpasta_reader import read_taxpasta
@@ -106,7 +107,7 @@ async def _upsert_taxa_from_profiles(profiles: list, db: AsyncIOMotorDatabase) -
     """
     from pymongo import UpdateOne
 
-    seen: dict[int, dict] = {}
+    seen: dict[int, dict[str, Any]] = {}
     for p in profiles:
         for entry in p.get("profile", []):
             taxon_id = entry.get("taxon_id")
