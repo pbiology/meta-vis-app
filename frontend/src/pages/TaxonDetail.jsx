@@ -334,16 +334,21 @@ function ExternalLinksSection({ taxonId }) {
 
 function LiteratureSection({ taxonId }) {
   const [articles, setArticles] = useState([]);
+  const [pubmedQuery, setPubmedQuery] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [maxResults, setMaxResults] = useState(5);
   const [collapsed, setCollapsed] = useState(false);
+  const [queryVisible, setQueryVisible] = useState(false);
 
   useEffect(() => {
     setLoading(true);
     setError(false);
     getTaxonLiterature(taxonId, maxResults)
-      .then((data) => setArticles(data.articles ?? []))
+      .then((data) => {
+        setArticles(data.articles ?? []);
+        setPubmedQuery(data.pubmed_query ?? null);
+      })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, [taxonId, maxResults]);
@@ -410,6 +415,34 @@ function LiteratureSection({ taxonId }) {
               >
                 Show more
               </button>
+            </div>
+          )}
+          {pubmedQuery && (
+            <div className="px-4 py-3 border-t border-gray-50">
+              <button
+                onClick={() => setQueryVisible((v) => !v)}
+                className="flex items-center gap-1 text-xs text-gray-300 hover:text-gray-500 transition-colors"
+              >
+                <svg
+                  className={`w-3 h-3 transition-transform ${queryVisible ? "rotate-90" : ""}`}
+                  viewBox="0 0 16 16"
+                  fill="none"
+                >
+                  <path
+                    d="M6 4l4 4-4 4"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                PubMed query
+              </button>
+              {queryVisible && (
+                <pre className="mt-2 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2 whitespace-pre-wrap break-all font-mono leading-relaxed">
+                  {pubmedQuery}
+                </pre>
+              )}
             </div>
           )}
         </>
