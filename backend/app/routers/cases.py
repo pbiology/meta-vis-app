@@ -181,12 +181,17 @@ PAGE_SIZE = 50
 async def list_cases(
     page: int = 1,
     search: str = "",
+    reviewed: str | None = None,
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    query = {}
+    query: dict[str, object] = {}
     if search.strip():
         query["case_id"] = {"$regex": search.strip()}
+    if reviewed == "pending":
+        query["review.reviewed"] = {"$ne": True}
+    elif reviewed == "reviewed":
+        query["review.reviewed"] = True
 
     total = (
         await db["cases"].estimated_document_count()
