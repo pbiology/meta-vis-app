@@ -6,10 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
 import httpx
-from functools import lru_cache
 import time
 
-from app.database import get_db
 from app.database import get_db
 from app.auth.utils import get_current_user, require_role
 from app.config import settings
@@ -90,9 +88,14 @@ async def get_taxon_literature(
     # Reuse a separate cache keyed by (taxon_id, max_results)
     _lit_cache: dict = _literature_cache  # alias for brevity
     if cache_key in _lit_cache:
-        ts, data = _lit_cache[cache_key]
+        ts, data, cached_query = _lit_cache[cache_key]
         if now - ts < LITERATURE_CACHE_TTL:
-            return {"taxon_id": taxon_id, "article_count": len(data), "articles": data}
+            return {
+                "taxon_id": taxon_id,
+                "article_count": len(data),
+                "articles": data,
+                "pubmed_query": cached_query,
+            }
 
     # Resolve the taxon name from our local taxa collection
     taxon_doc = await db["taxa"].find_one({"taxon_id": taxon_id}, {"name": 1, "_id": 0})
@@ -132,7 +135,7 @@ async def get_taxon_literature(
             )
 
             if not pmids:
-                _lit_cache[cache_key] = (now, [])
+                _lit_cache[cache_key] = (now, [], search_query)
                 return {
                     "taxon_id": taxon_id,
                     "article_count": 0,
@@ -176,7 +179,7 @@ async def get_taxon_literature(
             "pubmed_query": None,
         }
 
-    _lit_cache[cache_key] = (now, articles)
+    _lit_cache[cache_key] = (now, articles, search_query)
     return {
         "taxon_id": taxon_id,
         "article_count": len(articles),
