@@ -25,7 +25,10 @@ _links_cache: dict[int, tuple[float, list]] = {}
 LINKS_CACHE_TTL = 86400  # 24 hours — external links change rarely
 
 
-@router.get("/{taxon_id}/external_links", summary="Get curated external links for a taxon from NCBI")
+@router.get(
+    "/{taxon_id}/external_links",
+    summary="Get curated external links for a taxon from NCBI",
+)
 async def get_external_links(
     taxon_id: int,
     _user: dict = Depends(get_current_user),

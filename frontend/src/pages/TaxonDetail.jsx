@@ -303,7 +303,7 @@ function ExternalLinksSection({ taxonId }) {
       </div>
       <div className="px-4 py-3 flex flex-wrap gap-2">
         {links.map((link, i) => (
-
+          <a
             key={i}
             href={link.url}
             target="_blank"
