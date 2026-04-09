@@ -354,7 +354,6 @@ function CandidateOrganismsSection({ metavalId, organisms, blast }) {
             </thead>
             <tbody>
               {organisms.map((org) => {
-                const taxonId = organismToTaxonId[org.organism_name];
                 return (
                   <tr
                     key={org.organism_name}
