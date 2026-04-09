@@ -337,6 +337,7 @@ function LiteratureSection({ taxonId }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [maxResults, setMaxResults] = useState(5);
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -349,28 +350,44 @@ function LiteratureSection({ taxonId }) {
 
   return (
     <section className="bg-white border border-gray-100 rounded-xl">
-      <div className="px-4 py-3 border-b border-gray-100">
-        <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+      <button
+        onClick={() => setCollapsed((c) => !c)}
+        className="w-full flex items-center gap-2 px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors"
+      >
+        <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1 text-left">
           Clinical literature
         </p>
-      </div>
+        <svg
+          className={`w-3.5 h-3.5 text-gray-300 transition-transform ${collapsed ? "-rotate-90" : ""}`}
+          viewBox="0 0 16 16"
+          fill="none"
+        >
+          <path
+            d="M4 6l4 4 4-4"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
 
-      {loading ? (
+      {!collapsed && loading ? (
         <div className="px-4 py-8 text-xs text-gray-400 text-center">Loading…</div>
-      ) : error ? (
+      ) : !collapsed && error ? (
         <div className="px-4 py-6 text-xs text-gray-400 text-center">
           Could not retrieve literature. Check network connectivity.
         </div>
-      ) : articles.length === 0 ? (
+      ) : !collapsed && articles.length === 0 ? (
         <div className="px-4 py-6 text-xs text-gray-300 text-center italic">
           No case reports or outbreak publications found in PubMed.
         </div>
-      ) : (
+      ) : !collapsed ? (
         <>
           <ul className="divide-y divide-gray-50">
             {articles.map((a) => (
               <li key={a.pmid} className="px-4 py-3 flex flex-col gap-0.5">
-                <a
+                < a
                   href={a.link}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -396,7 +413,7 @@ function LiteratureSection({ taxonId }) {
             </div>
           )}
         </>
-      )}
+      ) : null}
     </section>
   );
 }
