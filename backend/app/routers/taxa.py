@@ -5,6 +5,10 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
+import httpx
+from functools import lru_cache
+import time
+
 
 from app.database import get_db
 from app.auth.utils import get_current_user, require_role
@@ -14,6 +18,43 @@ router = APIRouter(prefix="/taxa", tags=["taxa"])
 
 class ClinicalNotesPayload(BaseModel):
     clinical_notes: Optional[str] = None
+
+
+# Simple in-memory cache: taxon_id -> (timestamp, data)
+_links_cache: dict[int, tuple[float, list]] = {}
+LINKS_CACHE_TTL = 86400  # 24 hours — external links change rarely
+
+
+@router.get("/{taxon_id}/external_links", summary="Get curated external links for a taxon from NCBI")
+async def get_external_links(
+    taxon_id: int,
+    _user: dict = Depends(get_current_user),
+):
+    now = time.time()
+    if taxon_id in _links_cache:
+        ts, data = _links_cache[taxon_id]
+        if now - ts < LINKS_CACHE_TTL:
+            return {"taxon_id": taxon_id, "links": data}
+
+    url = f"https://api.ncbi.nlm.nih.gov/datasets/v2/taxonomy/taxon/{taxon_id}/links"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(url, headers={"Accept": "application/json"})
+            resp.raise_for_status()
+            raw = resp.json()
+    except Exception:
+        return {"taxon_id": taxon_id, "links": []}
+
+    # Response is a flat object: {"tax_id": "...", "wikipedia": "https://...", ...}
+    # Convert to a list of {name, url} dicts, skipping the tax_id field.
+    links = [
+        {"name": key.replace("_", " ").title(), "url": value}
+        for key, value in raw.items()
+        if key != "tax_id" and isinstance(value, str)
+    ]
+
+    _links_cache[taxon_id] = (now, links)
+    return {"taxon_id": taxon_id, "links": links}
 
 
 @router.get("/{taxon_id}", summary="Get taxon reference data")
