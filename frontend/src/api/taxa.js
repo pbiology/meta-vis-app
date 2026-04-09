@@ -23,3 +23,10 @@ export async function getTaxonExternalLinks(taxonId) {
   const res = await client.get(`/taxa/${taxonId}/external_links`);
   return res.data;
 }
+
+export async function getTaxonLiterature(taxonId, maxResults = 5) {
+  const res = await client.get(`/taxa/${taxonId}/literature`, {
+    params: { max_results: maxResults },
+  });
+  return res.data;
+}
