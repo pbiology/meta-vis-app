@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import connect_db, close_db
 from app.config import settings
-from app.routers import auth, ingest, cases, samples, users, metaval, alerts, taxa
+from app.routers import auth, ingest, cases, samples, users, metaval, alerts, taxa, ntc
 
 
 @asynccontextmanager
@@ -39,3 +39,4 @@ app.include_router(users.router, prefix="/api/v1")
 app.include_router(metaval.router, prefix="/api/v1")
 app.include_router(alerts.router, prefix="/api/v1")
 app.include_router(taxa.router, prefix="/api/v1")
+app.include_router(ntc.router, prefix="/api/v1")

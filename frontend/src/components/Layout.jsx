@@ -196,6 +196,23 @@ export default function Layout() {
             }
           />
           <NavItem
+            to="/ntc"
+            label="NTC trends"
+            icon={
+              <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+                <path
+                  d="M1 12 L4 8 L7 9 L10 5 L13 6 L15 3"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <circle cx="4" cy="8" r="1.2" fill="currentColor" />
+                <circle cx="10" cy="5" r="1.2" fill="currentColor" />
+              </svg>
+            }
+          />
+          <NavItem
             to="/pathogens"
             label="Pathogens"
             icon={
