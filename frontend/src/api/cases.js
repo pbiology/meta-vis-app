@@ -2,8 +2,12 @@
 
 import client from "./client";
 
-export async function getCases({ page = 1, search = "" } = {}) {
-  const res = await client.get("/cases", { params: { page, search } });
+export async function getCases({ page = 1, search = "", reviewed = null } = {}) {
+  const params = { page, search };
+  if (reviewed && reviewed !== "all") {
+    params.reviewed = reviewed;
+  }
+  const res = await client.get("/cases", { params });
   return res.data;
 }
 

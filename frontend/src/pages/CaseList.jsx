@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { getCases, deleteCase, getCaseStats, getPathogenCases } from "../api/cases";
 import Badge from "../components/Badge";
 import { getOutbreaks } from "../api/alerts";
@@ -19,12 +19,14 @@ export default function CaseList() {
   const [stats, setStats] = useState({ total: 0, pending: 0, reviewed: 0 });
   const navigate = useNavigate();
   const { role } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filter = searchParams.get("filter") ?? "all";
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await getCases({ page, search });
+      const result = await getCases({ page, search, reviewed: filter });
       setData(result);
       getOutbreaks(14)
         .then((d) => setOutbreakCaseIds(new Set(d.outbreaks.flatMap((o) => o.case_ids))))
@@ -37,7 +39,7 @@ export default function CaseList() {
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, search, filter]);
 
   useEffect(() => {
     load();
@@ -93,13 +95,33 @@ export default function CaseList() {
             className="bg-transparent text-xs text-gray-700 placeholder-gray-400 outline-none w-full"
           />
         </form>
-        <span className="text-xs text-gray-400 mr-2">
-          <span className="text-amber-500 font-medium">{stats.pending}</span> pending
-        </span>
-        <span className="text-xs text-gray-400">
-          <span className="text-green-600 font-medium">{stats.reviewed}</span> reviewed
-        </span>
-        <span className="text-xs text-gray-300">{stats.total} total</span>
+        <div className="flex items-center gap-2 border-l border-gray-200 pl-3">
+          {["all", "pending", "reviewed"].map((f) => (
+            <button
+              key={f}
+              onClick={() => {
+                setPage(1);
+                setSearchParams(f === "all" ? {} : { filter: f });
+              }}
+              className={`text-xs font-medium px-2.5 py-1.5 rounded-md transition-colors ${
+                filter === f ? "bg-blue-100 text-blue-700" : "text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              {f === "all" && <>All Cases</>}
+              {f === "pending" && <>Pending</>}
+              {f === "reviewed" && <>Reviewed</>}
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto pl-3 border-l border-gray-200 flex items-center gap-4">
+          <span className="text-xs text-gray-400">
+            <span className="text-amber-500 font-medium">{stats.pending}</span> pending
+          </span>
+          <span className="text-xs text-gray-400">
+            <span className="text-green-600 font-medium">{stats.reviewed}</span> reviewed
+          </span>
+          <span className="text-xs text-gray-300">{stats.total} total</span>
+        </div>
       </div>
 
       <div className="flex-1 overflow-auto">
