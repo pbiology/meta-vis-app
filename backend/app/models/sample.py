@@ -138,10 +138,11 @@ class SampleResponse(_Base):
     """Validated response model for sample documents read from MongoDB."""
 
     case_id: str
-    subject_id: Optional[str] = None
+    sample_id: str
+    sample_source: Optional[str] = None
     sample_type: Literal["sample", "positive_ctrl", "negative_ctrl"]
     material: Literal["DNA", "RNA"]
-    sample: Optional[SampleMetadata] = None
+    subject_id: Optional[str] = None
     taxprofiler: Optional[TaxprofilerStats] = None
     profiles: List[ClassifierProfile] = []
     has_krona: bool = False

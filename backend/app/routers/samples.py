@@ -47,7 +47,7 @@ async def list_samples(
         query["sample_type"] = {"$in": ["positive_ctrl", "negative_ctrl"]}
 
     if search.strip():
-        query["sample.sample_id"] = {"$regex": search.strip()}
+        query["sample_id"] = {"$regex": search.strip()}
 
     total = (
         await db["samples"].estimated_document_count()
@@ -58,8 +58,8 @@ async def list_samples(
 
     projection = {
         "_id": 1,
+        "sample_id": 1,
         "sample_type": 1,
-        "sample": 1,
         "case_id_str": 1,
         "order_date": 1,
         "ingested_at": 1,
@@ -105,13 +105,12 @@ async def get_profile(
 ):
     doc = await db["samples"].find_one(
         {"_id": _oid(sample_id)},
-        {"profiles": 1, "sample": 1},
+        {"profiles": 1},
     )
     if not doc:
         raise HTTPException(status_code=404, detail=f"Sample '{sample_id}' not found")
     return {
         "sample_id": sample_id,
-        "sample": doc.get("sample"),
         "profiles": doc.get("profiles", []),
     }
 
@@ -140,14 +139,14 @@ async def get_ntc_profiles(
                 "sample_type": "negative_ctrl",
                 "material": sample["material"],
             },
-            {"profiles": 1, "sample": 1},
+            {"profiles": 1, "sample_id": 1},
         )
         .to_list(length=50)
     )
 
     result = []
     for ntc in ntc_docs:
-        ntc_sample_id = ntc.get("sample", {}).get("sample_id", str(ntc["_id"]))
+        ntc_sample_id = ntc.get("sample_id", str(ntc["_id"]))
         classifiers = {}
         for p in ntc.get("profiles", []):
             clf = p.get("classifier")

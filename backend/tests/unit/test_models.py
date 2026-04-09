@@ -19,6 +19,8 @@ from app.models.sample import (
 def minimal_sample_doc(**overrides) -> dict:
     doc = {
         "case_id": "64a1b2c3d4e5f6a7b8c9d0e2",
+        "sample_id": "SRR001",
+        "sample_source": "N/A",
         "sample_type": "sample",
         "material": "DNA",
         "ingested_at": datetime.now(timezone.utc).isoformat(),
@@ -94,11 +96,11 @@ class TestSampleResponse:
         assert result.taxprofiler.fastp.total_reads_before_filtering == 1000000
         assert result.taxprofiler.classifiers["kraken2"].classified_reads == 950000
 
-    def test_nested_sample_metadata_validates(self):
-        doc = minimal_sample_doc(sample={"sample_id": "SRR001", "sample_source": "csf"})
+    def test_flat_sample_fields_validate(self):
+        doc = minimal_sample_doc(sample_id="SRR001", sample_source="csf")
         result = SampleResponse.model_validate(doc)
-        assert result.sample.sample_id == "SRR001"
-        assert result.sample.sample_source == "csf"
+        assert result.sample_id == "SRR001"
+        assert result.sample_source == "csf"
 
     def test_model_dump_json_serialises_datetime(self):
         doc = minimal_sample_doc(ingested_at=datetime(2024, 3, 15, 10, 0, 0))

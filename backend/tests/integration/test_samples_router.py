@@ -37,10 +37,11 @@ async def insert_sample(
         {
             "case_id": case_oid,
             "case_id_str": "testcase",
+            "sample_id": sample_id,
+            "sample_source": "blood",
             "sample_type": sample_type,
             "material": material,
             "has_krona": has_krona,
-            "sample": {"sample_id": sample_id, "sample_source": "blood"},
             "taxprofiler": {"fastp": None, "bowtie2": None, "classifiers": {}},
             "profiles": profiles or [],
             "review": {"reviewed": False},
@@ -67,14 +68,14 @@ class TestListSamples:
         await insert_sample(fake_db, "SRR001")
         resp = client.get("/api/v1/samples")
         assert resp.json()["total"] == 1
-        assert resp.json()["items"][0]["sample"]["sample_id"] == "SRR001"
+        assert resp.json()["items"][0]["sample_id"] == "SRR001"
 
     async def test_search_filters_by_sample_id(self, client, fake_db):
         await insert_sample(fake_db, "SRR001")
         await insert_sample(fake_db, "SRR002")
         resp = client.get("/api/v1/samples?search=SRR001")
         assert resp.json()["total"] == 1
-        assert resp.json()["items"][0]["sample"]["sample_id"] == "SRR001"
+        assert resp.json()["items"][0]["sample_id"] == "SRR001"
 
     async def test_filter_sample_type(self, client, fake_db):
         await insert_sample(fake_db, "SRR001", sample_type="sample")
@@ -87,7 +88,7 @@ class TestListSamples:
         await insert_sample(fake_db, "CTRL01", sample_type="negative_ctrl")
         resp = client.get("/api/v1/samples?filter=controls")
         assert resp.json()["total"] == 1
-        assert resp.json()["items"][0]["sample"]["sample_id"] == "CTRL01"
+        assert resp.json()["items"][0]["sample_id"] == "CTRL01"
 
     async def test_pagination_fields_present(self, client, fake_db):
         resp = client.get("/api/v1/samples")
@@ -107,7 +108,7 @@ class TestGetSample:
         oid, _ = await insert_sample(fake_db, "SRR001")
         resp = client.get(f"/api/v1/samples/{oid}")
         assert resp.status_code == 200
-        assert resp.json()["sample"]["sample_id"] == "SRR001"
+        assert resp.json()["sample_id"] == "SRR001"
 
     async def test_unknown_sample_returns_404(self, client, fake_db):
         resp = client.get(f"/api/v1/samples/{ObjectId()}")
@@ -163,10 +164,10 @@ class TestGetNtcProfiles:
             {
                 "case_id": case_oid,
                 "case_id_str": "testcase",
+                "sample_id": "SRR001",
                 "sample_type": "sample",
                 "material": "DNA",
                 "has_krona": False,
-                "sample": {"sample_id": "SRR001"},
                 "profiles": [],
                 "review": {"reviewed": False},
                 "ingested_at": datetime.now(timezone.utc),
@@ -176,10 +177,10 @@ class TestGetNtcProfiles:
             {
                 "case_id": case_oid,
                 "case_id_str": "testcase",
+                "sample_id": "CTRL01",
                 "sample_type": "negative_ctrl",
                 "material": "DNA",
                 "has_krona": False,
-                "sample": {"sample_id": "CTRL01"},
                 "profiles": [{"classifier": "kraken2", "profile": []}],
                 "review": {"reviewed": False},
                 "ingested_at": datetime.now(timezone.utc),
