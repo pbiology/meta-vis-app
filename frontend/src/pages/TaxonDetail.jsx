@@ -46,11 +46,14 @@ function RefreshWarning() {
   );
 }
 
-function ClinicalNotesEditor({ taxonId, initialNotes, canEdit }) {
+function ClinicalNotesEditor({ taxonId, initialNotes, notesAuthor, notesUpdatedAt, canEdit }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(initialNotes ?? "");
+  const [author, setAuthor] = useState(notesAuthor ?? null);
+  const [updatedAt, setUpdatedAt] = useState(notesUpdatedAt ?? null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const { user } = useAuth();
   const textareaRef = useRef(null);
 
   useEffect(() => {
@@ -64,6 +67,13 @@ function ClinicalNotesEditor({ taxonId, initialNotes, canEdit }) {
     setError(null);
     try {
       await updateClinicalNotes(taxonId, value.trim() || null);
+      if (value.trim()) {
+        setAuthor(user);
+        setUpdatedAt(new Date().toISOString());
+      } else {
+        setAuthor(null);
+        setUpdatedAt(null);
+      }
       setEditing(false);
     } catch {
       setError("Failed to save. Please try again.");
@@ -122,7 +132,28 @@ function ClinicalNotesEditor({ taxonId, initialNotes, canEdit }) {
             </div>
           </div>
         ) : value ? (
-          <p className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">{value}</p>
+          <div className="flex flex-col gap-2">
+            <p className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">{value}</p>
+            {author && (
+              <p className="text-xs text-gray-300">
+                Last updated by{" "}
+                <span className="text-gray-400 font-medium">{author}</span>
+                {updatedAt && (
+                  <>
+                    {" "}
+                    on{" "}
+                    <span className="text-gray-400">
+                      {new Date(updatedAt).toLocaleDateString(undefined, {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
+                  </>
+                )}
+              </p>
+            )}
+          </div>
         ) : (
           <p className="text-xs text-gray-300 italic">No clinical notes recorded.</p>
         )}
@@ -341,6 +372,8 @@ export default function TaxonDetail() {
         <ClinicalNotesEditor
           taxonId={taxon.taxon_id}
           initialNotes={taxon.clinical_notes}
+          notesAuthor={taxon.clinical_notes_author}
+          notesUpdatedAt={taxon.clinical_notes_updated_at}
           canEdit={canEdit}
         />
 

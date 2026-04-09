@@ -1,6 +1,6 @@
 # app/routers/taxa.py
 
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -45,11 +45,18 @@ async def update_clinical_notes(
     taxon_id: int,
     payload: ClinicalNotesPayload,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(require_role("writer", "admin")),
+    current_user: dict = Depends(require_role("writer", "admin")),
 ):
+    now = datetime.now(timezone.utc)
     result = await db["taxa"].update_one(
         {"taxon_id": taxon_id},
-        {"$set": {"clinical_notes": payload.clinical_notes}},
+        {
+            "$set": {
+                "clinical_notes": payload.clinical_notes,
+                "clinical_notes_author": current_user["username"] if payload.clinical_notes else None,
+                "clinical_notes_updated_at": now if payload.clinical_notes else None,
+            }
+        },
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail=f"Taxon {taxon_id} not found")
