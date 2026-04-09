@@ -46,28 +46,26 @@ async def _ensure_indexes():
 
     # samples — fast lookup by case, by case+type+material (NTC profiles),
     # and by viral taxa fields used in the outbreak aggregation pipeline
-    await db["samples"].create_index("case_id")
+    await db["samples"].create_index([("case_id", 1), ("sample_id", 1)])
     await db["samples"].create_index(
         [("case_id", 1), ("sample_type", 1), ("material", 1)]
     )
     await db["samples"].create_index("profiles.profile.superkingdom")
     await db["samples"].create_index("profiles.profile.taxon_id")
     await db["samples"].create_index([("order_date", -1), ("ingested_at", -1)])
-    await db["samples"].create_index("sample.sample_id")
     await db["samples"].create_index("case_id_str")
     await db["samples"].create_index(
         [("sample_type", 1), ("order_date", -1), ("ingested_at", -1)]
     )
     await db["samples"].create_index(
-        [("sample.sample_id", 1), ("order_date", -1), ("ingested_at", -1)]
+        [("sample_id", 1), ("order_date", -1), ("ingested_at", -1)]
     )
 
     # blobs — used by MongoBlobStore when object storage is not configured
     await db["blobs"].create_index("key", unique=True)
 
     # metaval_results — fast lookup by sample and case
-    await db["metaval_results"].create_index("sample_id")
-    await db["metaval_results"].create_index("case_id")
+    await db["metaval_results"].create_index([("case_id", 1), ("sample_id", 1)])
 
     # outbreak_ignorelist — fast lookup by taxon_id and filtering by superkingdom
     await db["outbreak_ignorelist"].create_index("taxon_id", unique=True)
@@ -76,7 +74,6 @@ async def _ensure_indexes():
     # samples — fast lookup of outbreak_taxa for queries
     await db["samples"].create_index("outbreak_taxa.superkingdom")
     await db["samples"].create_index("outbreak_taxa.taxon_id")
-    await db["samples"].create_index([("order_date", -1), ("case_id", 1)])
 
     # samples — fast pathogen detection using pre-computed flat taxon ID array
     await db["samples"].create_index("all_taxon_ids")

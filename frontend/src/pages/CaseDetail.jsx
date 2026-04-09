@@ -394,7 +394,7 @@ export default function CaseDetail() {
                                 className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
                               >
                                 <td className="px-4 py-1.5 font-mono text-xs text-gray-700">
-                                  {s.sample?.sample_id ?? "—"}
+                                  {s.sample_id ?? "—"}
                                 </td>
                                 <td className="px-4 py-1.5 text-xs text-gray-700">
                                   {fmtPct(clfQc?.pct_unclassified)}
