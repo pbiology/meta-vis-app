@@ -6,6 +6,7 @@ import asyncio
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from typing import Any
+from pymongo import UpdateOne
 
 from app.models.sample import IngestRequest
 from app.ingestor.taxpasta_reader import read_taxpasta
@@ -105,7 +106,6 @@ async def _upsert_taxa_from_profiles(profiles: list, db: AsyncIOMotorDatabase) -
     Only creates new records ($setOnInsert) — never overwrites existing
     taxonomy data or clinical_notes populated by load_taxonomy.py.
     """
-    from pymongo import UpdateOne
 
     seen: dict[int, dict[str, Any]] = {}
     for p in profiles:
@@ -122,36 +122,37 @@ async def _upsert_taxa_from_profiles(profiles: list, db: AsyncIOMotorDatabase) -
     if not seen:
         return
 
-    ops = [
-        UpdateOne(
-            {"taxon_id": taxon_id},
-            {
-                "$setOnInsert": {
-                    "taxon_id": taxon_id,
-                    "name": fields["name"],
-                    "rank": fields["rank"],
-                    "superkingdom": fields["superkingdom"],
-                    # Full lineage fields absent — indicates needs refresh
-                    "kingdom": None,
-                    "phylum": None,
-                    "class": None,
-                    "order": None,
-                    "family": None,
-                    "genus": None,
-                    "species": None,
-                    "ncbi_url": (
-                        f"https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/"
-                        f"wwwtax.cgi?id={taxon_id}"
-                    ),
-                    "clinical_notes": None,
-                    "taxdump_version": None,  # None = not yet loaded from dump
-                    "updated_at": None,
-                }
-            },
-            upsert=True,
+    ops: list[UpdateOne] = []
+    for taxon_id, taxon_fields in seen.items():
+        ops.append(
+            UpdateOne(
+                {"taxon_id": taxon_id},
+                {
+                    "$setOnInsert": {
+                        "taxon_id": taxon_id,
+                        "name": taxon_fields["name"],
+                        "rank": taxon_fields["rank"],
+                        "superkingdom": taxon_fields["superkingdom"],
+                        # Full lineage fields absent — indicates needs refresh
+                        "kingdom": None,
+                        "phylum": None,
+                        "class": None,
+                        "order": None,
+                        "family": None,
+                        "genus": None,
+                        "species": None,
+                        "ncbi_url": (
+                            f"https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/"
+                            f"wwwtax.cgi?id={taxon_id}"
+                        ),
+                        "clinical_notes": None,
+                        "taxdump_version": None,  # None = not yet loaded from dump
+                        "updated_at": None,
+                    }
+                },
+                upsert=True,
+            )
         )
-        for taxon_id, fields in seen.items()
-    ]
 
     await db["taxa"].bulk_write(ops, ordered=False)
 
@@ -249,12 +250,12 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
 
         # Flat set of all taxon IDs across all classifiers — used for fast
         # pathogen matching at query time without unwinding nested arrays.
-        all_taxon_ids = list(
+        all_taxon_ids: list[int] = list(
             {
                 entry["taxon_id"]
                 for p in profiles
                 for entry in p.get("profile", [])
-                if entry.get("taxon_id") is not None
+                if isinstance(entry, dict) and entry.get("taxon_id") is not None
             }
         )
 
