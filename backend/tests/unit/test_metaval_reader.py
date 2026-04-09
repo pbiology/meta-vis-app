@@ -25,7 +25,9 @@ def make_igv_dir(tmp_path):
     return igv_dir
 
 
-def make_viral_taxids_dir(tmp_path, classifier="kraken2", entries: Optional[list[tuple]] = None):
+def make_viral_taxids_dir(
+    tmp_path, classifier="kraken2", entries: Optional[list[tuple]] = None
+):
     taxids_dir = tmp_path / "viral_taxids"
     taxids_dir.mkdir(exist_ok=True)
     tsv = taxids_dir / f"SAMPLE1_{classifier}_viral_taxids.tsv"

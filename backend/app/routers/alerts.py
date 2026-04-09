@@ -355,7 +355,8 @@ async def add_pathogen(
     existing = await db["known_pathogens"].find_one({"taxon_id": payload.taxon_id})
     if existing:
         raise HTTPException(
-            status_code=409, detail=f"Taxon {payload.taxon_id} is already on the pathogens list"
+            status_code=409,
+            detail=f"Taxon {payload.taxon_id} is already on the pathogens list",
         )
     doc = {
         "taxon_id": payload.taxon_id,
@@ -370,7 +371,9 @@ async def add_pathogen(
     return doc
 
 
-@router.delete("/pathogens/{taxon_id}", summary="Remove a taxon from the known pathogens list")
+@router.delete(
+    "/pathogens/{taxon_id}", summary="Remove a taxon from the known pathogens list"
+)
 async def remove_pathogen(
     taxon_id: int,
     db: AsyncIOMotorDatabase = Depends(get_db),
