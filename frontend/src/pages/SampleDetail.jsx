@@ -348,7 +348,12 @@ function TaxonomyTable({
                   <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
                     <td className="py-2 pr-3 text-xs text-gray-700">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="italic truncate">{t.name}</span>
+                        <Link
+                          to={`/taxa/${t.taxon_id}`}
+                          className="italic truncate hover:text-blue-600 hover:underline transition-colors"
+                        >
+                          {t.name}
+                        </Link>
                         {mv && (
                           <Link
                             to={`/samples/${sampleId}/metaval/${mv._id}`}
