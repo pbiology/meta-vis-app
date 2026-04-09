@@ -9,9 +9,10 @@ import httpx
 from functools import lru_cache
 import time
 
-
+from app.database import get_db
 from app.database import get_db
 from app.auth.utils import get_current_user, require_role
+from app.config import settings
 
 router = APIRouter(prefix="/taxa", tags=["taxa"])
 
@@ -22,7 +23,9 @@ class ClinicalNotesPayload(BaseModel):
 
 # Simple in-memory cache: taxon_id -> (timestamp, data)
 _links_cache: dict[int, tuple[float, list]] = {}
+_literature_cache: dict[int, tuple[float, list]] = {}
 LINKS_CACHE_TTL = 86400  # 24 hours — external links change rarely
+LITERATURE_CACHE_TTL = 86400  # 24 hours — PubMed results change rarely
 
 
 @router.get(
@@ -58,6 +61,113 @@ async def get_external_links(
 
     _links_cache[taxon_id] = (now, links)
     return {"taxon_id": taxon_id, "links": links}
+
+
+EUTILS_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+
+
+@router.get(
+    "/{taxon_id}/literature",
+    summary="Fetch recent clinical literature from PubMed for a taxon",
+)
+async def get_taxon_literature(
+    taxon_id: int,
+    max_results: int = Query(default=5, ge=1, le=20),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
+    """
+    Queries NCBI PubMed for recent case reports and outbreak publications
+    related to this taxon. Results are cached for 24 hours.
+
+    Uses the taxon name from the local taxa collection to build a reliable
+    PubMed query, combining it with the NCBI taxonomy ID for best coverage.
+    Falls back to an empty list on any network error rather than raising.
+    """
+    now = time.time()
+    cache_key = (taxon_id, max_results)
+
+    # Reuse a separate cache keyed by (taxon_id, max_results)
+    _lit_cache: dict = _literature_cache  # alias for brevity
+    if cache_key in _lit_cache:
+        ts, data = _lit_cache[cache_key]
+        if now - ts < LITERATURE_CACHE_TTL:
+            return {"taxon_id": taxon_id, "article_count": len(data), "articles": data}
+
+    # Resolve the taxon name from our local taxa collection
+    taxon_doc = await db["taxa"].find_one({"taxon_id": taxon_id}, {"name": 1, "_id": 0})
+    organism_name = taxon_doc["name"] if taxon_doc else str(taxon_id)
+
+    # Build a PubMed query that targets clinical publications:
+    # - Match by both NCBI organism tag and free-text name for best recall
+    # - Filter to Case Reports, Disease Outbreaks, or Pathogenicity subheadings
+    search_query = (
+        f'(txid{taxon_id}[Organism] OR "{organism_name}"[Organism] OR "{organism_name}"[All Fields]) '
+        f'AND ("Case Reports"[Publication Type] OR "Disease Outbreaks"[MeSH Terms] '
+        f'OR "Pathogenicity"[MeSH Subheading])'
+    )
+
+    # Optional NCBI API key: raises rate limit from 3 req/s to 10 req/s
+    base_params: dict = (
+        {"api_key": settings.ncbi_api_key} if settings.ncbi_api_key else {}
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as http:
+            # Step 1: ESearch — get PubMed IDs matching the query
+            search_res = await http.get(
+                f"{EUTILS_BASE}/esearch.fcgi",
+                params={
+                    **base_params,
+                    "db": "pubmed",
+                    "term": search_query,
+                    "retmode": "json",
+                    "retmax": max_results,
+                    "sort": "date",
+                },
+            )
+            search_res.raise_for_status()
+            pmids: list[str] = (
+                search_res.json().get("esearchresult", {}).get("idlist", [])
+            )
+
+            if not pmids:
+                _lit_cache[cache_key] = (now, [])
+                return {"taxon_id": taxon_id, "article_count": 0, "articles": []}
+
+            # Step 2: ESummary — fetch title, journal, and date for each PMID
+            summary_res = await http.get(
+                f"{EUTILS_BASE}/esummary.fcgi",
+                params={
+                    **base_params,
+                    "db": "pubmed",
+                    "id": ",".join(pmids),
+                    "retmode": "json",
+                },
+            )
+            summary_res.raise_for_status()
+            result_dict = summary_res.json().get("result", {})
+
+            articles = [
+                {
+                    "pmid": pmid,
+                    "title": result_dict[pmid].get("title", "No title available"),
+                    "journal": result_dict[pmid].get(
+                        "fulljournalname", "Unknown Journal"
+                    ),
+                    "pub_date": result_dict[pmid].get("pubdate", "Unknown date"),
+                    "link": f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
+                }
+                for pmid in pmids
+                if pmid in result_dict
+            ]
+
+    except Exception:
+        # Network errors, timeouts, or unexpected response shapes — degrade gracefully
+        return {"taxon_id": taxon_id, "article_count": 0, "articles": []}
+
+    _lit_cache[cache_key] = (now, articles)
+    return {"taxon_id": taxon_id, "article_count": len(articles), "articles": articles}
 
 
 @router.get("/{taxon_id}", summary="Get taxon reference data")
