@@ -595,7 +595,7 @@ export default function SampleDetail() {
         </button>
         <span className="text-gray-200">/</span>
         <h1 className="text-sm font-medium text-gray-900 flex-1 font-mono">
-          {sample?.sample?.sample_id ?? sampleId}
+          {sample?.sample_id ?? sampleId}
         </h1>
         <Badge type={sample?.sample_type} />
       </div>
