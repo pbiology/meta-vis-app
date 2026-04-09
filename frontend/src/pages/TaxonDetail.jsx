@@ -53,7 +53,7 @@ function ClinicalNotesEditor({ taxonId, initialNotes, notesAuthor, notesUpdatedA
   const [updatedAt, setUpdatedAt] = useState(notesUpdatedAt ?? null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  const { user } = useAuth();
+  const { user: currentUsername } = useAuth();
   const textareaRef = useRef(null);
 
   useEffect(() => {
@@ -68,7 +68,7 @@ function ClinicalNotesEditor({ taxonId, initialNotes, notesAuthor, notesUpdatedA
     try {
       await updateClinicalNotes(taxonId, value.trim() || null);
       if (value.trim()) {
-        setAuthor(user);
+        setAuthor(currentUsername);
         setUpdatedAt(new Date().toISOString());
       } else {
         setAuthor(null);
@@ -271,7 +271,7 @@ function OccurrencesSection({ taxonId }) {
 export default function TaxonDetail() {
   const { taxonId } = useParams();
   const navigate = useNavigate();
-  const { user, role } = useAuth();
+  const { role } = useAuth();
 
   const [taxon, setTaxon] = useState(null);
   const [loading, setLoading] = useState(true);
