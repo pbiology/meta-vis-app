@@ -237,7 +237,7 @@ function BlastResultsSection({ blast }) {
                         </td>
                         <td className="px-5 py-2 text-xs italic text-gray-700">
                           {row.staxid ? (
-                            < a
+                            <a
                               href={`/taxa/${row.staxid}`}
                               onClick={(e) => e.stopPropagation()}
                               className="underline text-gray-700 hover:text-gray-900"
@@ -474,7 +474,11 @@ export default function MetavalDetails() {
       <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
         <VerificationDataSection result={result} />
         <BlastResultsSection blast={result?.blast} />
-        <CandidateOrganismsSection metavalId={metavalId} organisms={result?.organisms} blast={result?.blast} />
+        <CandidateOrganismsSection
+          metavalId={metavalId}
+          organisms={result?.organisms}
+          blast={result?.blast}
+        />
       </div>
     </div>
   );
