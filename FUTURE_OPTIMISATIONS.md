@@ -67,16 +67,3 @@ set that MongoDB can hold in RAM.
 The pre-computed `outbreak_taxa` array on each sample document should
 **not** be slimmed — it is small and already filtered, and the outbreak
 aggregation pipeline reads `name` directly from it to avoid a join.
-
-## Accurate rank derivation in `load_taxonomy.py`
-
-The current `_derive_rank` function approximates a taxon's rank by matching
-its name against lineage level names from `rankedlineage.dmp`. This correctly
-identifies species, genus, family, order, class, phylum, kingdom, and
-superkingdom — but returns `None` for any taxon with a non-standard rank
-(e.g. `no rank`, `clade`, `suborder`, `tribe`, `serotype`).
-
-The authoritative rank for every taxon is in `nodes.dmp` (field 3). When
-`load_taxonomy.py` is next revised, extract `nodes.dmp` alongside
-`rankedlineage.dmp` and build a `taxon_id → rank` map from it. Replace the
-`_derive_rank` call with a direct lookup from that map.
