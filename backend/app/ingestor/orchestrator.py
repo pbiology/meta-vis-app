@@ -319,7 +319,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             existing_sample: dict | None = await db["samples"].find_one(
                 {
                     "case_id": case_object_id,
-                    "sample.sample_id": r["sample_name"],
+                    "sample_id": r["sample_name"],
                 }
             )
             sample_object_id = existing_sample["_id"] if existing_sample else None
