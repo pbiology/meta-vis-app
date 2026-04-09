@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { getNtcTrends } from "../api/ntc";
 import { scaleTime, scaleLinear, scaleOrdinal } from "@visx/scale";
 import { LinePath, Circle } from "@visx/shape";
@@ -8,6 +8,28 @@ import { Group } from "@visx/group";
 import { curveMonotoneX } from "@visx/curve";
 import { useTooltip, TooltipWithBounds } from "@visx/tooltip";
 import { localPoint } from "@visx/event";
+
+// Measures the pixel width of a DOM element, updating on resize.
+function useContainerWidth() {
+  const [width, setWidth] = useState(0);
+  const observerRef = useRef(null);
+
+  const ref = useCallback((node) => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
+    }
+    if (!node) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setWidth(entry.contentRect.width);
+    });
+    observer.observe(node);
+    setWidth(node.getBoundingClientRect().width);
+    observerRef.current = observer;
+  }, []);
+
+  return [ref, width];
+}
 
 // Colour palette — drawn from Tailwind config accent colours, intentionally
 // distinct from the gray/amber/red used for status throughout the app.
@@ -32,33 +54,32 @@ function ReadCountChart({ data, width = 600, height = 200 }) {
   const { showTooltip, hideTooltip, tooltipData, tooltipLeft, tooltipTop, tooltipOpen } =
     useTooltip();
 
+  const containerRef = useRef(null);
   const points = data.filter((d) => d.order_date && d.classified_reads != null);
 
   const innerWidth = width - MARGIN.left - MARGIN.right;
   const innerHeight = height - MARGIN.top - MARGIN.bottom;
 
-  const xScale = useMemo(
-    () =>
-      scaleTime({
-        domain: [
-          new Date(Math.min(...points.map((d) => new Date(d.order_date)))),
-          new Date(Math.max(...points.map((d) => new Date(d.order_date)))),
-        ],
-        range: [0, innerWidth],
-        nice: true,
-      }),
-    [points, innerWidth]
-  );
+  const xScale = useMemo(() => {
+    const dates = points.map((d) => new Date(d.order_date).getTime());
+    const minDate = dates.length ? Math.min(...dates) : Date.now() - 86400000;
+    const maxDate = dates.length ? Math.max(...dates) : Date.now();
+    // Pad by 1 day on each side so single-date datasets don't collapse to a point
+    return scaleTime({
+      domain: [new Date(minDate - 86400000), new Date(maxDate + 86400000)],
+      range: [0, innerWidth],
+      nice: true,
+    });
+  }, [points, innerWidth]);
 
-  const yScale = useMemo(
-    () =>
-      scaleLinear({
-        domain: [0, Math.max(...points.map((d) => d.classified_reads), 100) * 1.1],
-        range: [innerHeight, 0],
-        nice: true,
-      }),
-    [points, innerHeight]
-  );
+  const yScale = useMemo(() => {
+    const maxVal = points.length ? Math.max(...points.map((d) => d.classified_reads)) : 100;
+    return scaleLinear({
+      domain: [0, maxVal * 1.1 || 100],
+      range: [innerHeight, 0],
+      nice: true,
+    });
+  }, [points, innerHeight]);
 
   if (points.length === 0) {
     return (
@@ -67,7 +88,7 @@ function ReadCountChart({ data, width = 600, height = 200 }) {
   }
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <svg width={width} height={height}>
         <Group left={MARGIN.left} top={MARGIN.top}>
           <GridRows
@@ -107,7 +128,7 @@ function ReadCountChart({ data, width = 600, height = 200 }) {
               fillOpacity={0.7}
               style={{ cursor: "pointer" }}
               onMouseMove={(e) => {
-                const coords = localPoint(e);
+                const coords = localPoint(containerRef.current, e);
                 showTooltip({
                   tooltipData: d,
                   tooltipLeft: coords?.x,
@@ -123,26 +144,26 @@ function ReadCountChart({ data, width = 600, height = 200 }) {
             numTicks={6}
             tickStroke="#d1d1d6"
             stroke="#d1d1d6"
-            tickLabelProps={() => ({
+            tickLabelProps={{
               fontSize: 10,
               fill: "#a1a1aa",
               fontFamily: "DM Mono, monospace",
               textAnchor: "middle",
-            })}
+            }}
           />
           <AxisLeft
             scale={yScale}
             numTicks={4}
             tickStroke="#d1d1d6"
             stroke="#d1d1d6"
-            tickLabelProps={() => ({
+            tickLabelProps={{
               fontSize: 10,
               fill: "#a1a1aa",
               fontFamily: "DM Mono, monospace",
               textAnchor: "end",
               dx: -4,
               dy: 3,
-            })}
+            }}
           />
         </Group>
       </svg>
@@ -178,34 +199,32 @@ function ReadCountChart({ data, width = 600, height = 200 }) {
 function RecurringTaxaChart({ taxa, width = 600, height = 240 }) {
   const { showTooltip, hideTooltip, tooltipData, tooltipLeft, tooltipTop, tooltipOpen } =
     useTooltip();
+  const containerRef = useRef(null);
 
   const allPoints = taxa.flatMap((t) => t.occurrences);
 
   const innerWidth = width - MARGIN.left - MARGIN.right;
   const innerHeight = height - MARGIN.top - MARGIN.bottom;
 
-  const xScale = useMemo(
-    () =>
-      scaleTime({
-        domain: [
-          new Date(Math.min(...allPoints.map((d) => new Date(d.order_date)))),
-          new Date(Math.max(...allPoints.map((d) => new Date(d.order_date)))),
-        ],
-        range: [0, innerWidth],
-        nice: true,
-      }),
-    [allPoints, innerWidth]
-  );
+  const xScale = useMemo(() => {
+    const dates = allPoints.map((d) => new Date(d.order_date).getTime());
+    const minDate = dates.length ? Math.min(...dates) : Date.now() - 86400000;
+    const maxDate = dates.length ? Math.max(...dates) : Date.now();
+    return scaleTime({
+      domain: [new Date(minDate - 86400000), new Date(maxDate + 86400000)],
+      range: [0, innerWidth],
+      nice: true,
+    });
+  }, [allPoints, innerWidth]);
 
-  const yScale = useMemo(
-    () =>
-      scaleLinear({
-        domain: [0, Math.max(...allPoints.map((d) => d.abundance), 10) * 1.1],
-        range: [innerHeight, 0],
-        nice: true,
-      }),
-    [allPoints, innerHeight]
-  );
+  const yScale = useMemo(() => {
+    const maxVal = allPoints.length ? Math.max(...allPoints.map((d) => d.abundance)) : 10;
+    return scaleLinear({
+      domain: [0, maxVal * 1.1 || 10],
+      range: [innerHeight, 0],
+      nice: true,
+    });
+  }, [allPoints, innerHeight]);
 
   const colourScale = scaleOrdinal({
     domain: taxa.map((t) => t.taxon_id),
@@ -221,7 +240,7 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240 }) {
   }
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <svg width={width} height={height}>
         <Group left={MARGIN.left} top={MARGIN.top}>
           <GridRows
@@ -254,7 +273,7 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240 }) {
                     fillOpacity={0.85}
                     style={{ cursor: "pointer" }}
                     onMouseMove={(e) => {
-                      const coords = localPoint(e);
+                      const coords = localPoint(containerRef.current, e);
                       showTooltip({
                         tooltipData: { ...d, taxon_name: taxon.taxon_name, colour },
                         tooltipLeft: coords?.x,
@@ -273,26 +292,26 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240 }) {
             numTicks={6}
             tickStroke="#d1d1d6"
             stroke="#d1d1d6"
-            tickLabelProps={() => ({
+            tickLabelProps={{
               fontSize: 10,
               fill: "#a1a1aa",
               fontFamily: "DM Mono, monospace",
               textAnchor: "middle",
-            })}
+            }}
           />
           <AxisLeft
             scale={yScale}
             numTicks={4}
             tickStroke="#d1d1d6"
             stroke="#d1d1d6"
-            tickLabelProps={() => ({
+            tickLabelProps={{
               fontSize: 10,
               fill: "#a1a1aa",
               fontFamily: "DM Mono, monospace",
               textAnchor: "end",
               dx: -4,
               dy: 3,
-            })}
+            }}
           />
         </Group>
       </svg>
@@ -349,8 +368,8 @@ export default function NtcTrends() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Fixed chart width — could be made responsive with a ResizeObserver later
-  const chartWidth = 680;
+  const [readCountRef, readCountWidth] = useContainerWidth();
+  const [recurringRef, recurringWidth] = useContainerWidth();
 
   useEffect(() => {
     setLoading(true);
@@ -431,16 +450,18 @@ export default function NtcTrends() {
             </p>
 
             {/* Total classified reads */}
-            <section className="bg-white border border-gray-100 rounded-xl p-4">
+            <section ref={readCountRef} className="bg-white border border-gray-100 rounded-xl p-4">
               <h2 className="text-xs font-medium text-gray-600 mb-3">Total classified reads</h2>
               <p className="text-xs text-gray-400 mb-3">
                 Each dot is one NTC. Dashed line at 1 000 reads.
               </p>
-              <ReadCountChart data={data.read_counts} width={chartWidth} />
+              {readCountWidth > 0 && (
+                <ReadCountChart data={data.read_counts} width={readCountWidth - 32} />
+              )}
             </section>
 
             {/* Recurring taxa */}
-            <section className="bg-white border border-gray-100 rounded-xl p-4">
+            <section ref={recurringRef} className="bg-white border border-gray-100 rounded-xl p-4">
               <div className="flex items-center justify-between mb-1">
                 <h2 className="text-xs font-medium text-gray-600">Recurring taxa</h2>
                 <span className="text-xs text-gray-400">
@@ -450,7 +471,9 @@ export default function NtcTrends() {
               <p className="text-xs text-gray-400 mb-3">
                 Taxa present in ≥ {data.min_case_count} of {data.total_ntcs} NTCs in this window.
               </p>
-              <RecurringTaxaChart taxa={data.recurring_taxa} width={chartWidth} />
+              {recurringWidth > 0 && (
+                <RecurringTaxaChart taxa={data.recurring_taxa} width={recurringWidth - 32} />
+              )}
             </section>
           </>
         )}
