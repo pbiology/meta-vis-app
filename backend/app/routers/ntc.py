@@ -72,9 +72,7 @@ async def get_ntc_trends(
     read_counts: list[dict] = []
     for doc in ntc_docs:
         kraken2_qc = (
-            doc.get("taxprofiler", {})
-            .get("classifiers", {})
-            .get("kraken2", {})
+            doc.get("taxprofiler", {}).get("classifiers", {}).get("kraken2", {})
         )
         classified = kraken2_qc.get("classified_reads")
 

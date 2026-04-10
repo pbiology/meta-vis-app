@@ -49,7 +49,7 @@ function isoWeek(date) {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
 }
 
 /** Generates one Date per week (Mondays) between two dates. */
@@ -114,12 +114,7 @@ function ReadCountChart({ data, width = 600, height = 200 }) {
 
   return (
     <div className="relative">
-      <svg
-        ref={svgRef}
-        width={width}
-        height={height}
-        onMouseLeave={() => setTooltip(null)}
-      >
+      <svg ref={svgRef} width={width} height={height} onMouseLeave={() => setTooltip(null)}>
         <Group left={MARGIN.left} top={MARGIN.top}>
           <GridRows
             scale={yScale}
@@ -260,12 +255,7 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240 }) {
 
   return (
     <div className="relative">
-      <svg
-        ref={svgRef}
-        width={width}
-        height={height}
-        onMouseLeave={() => setTooltip(null)}
-      >
+      <svg ref={svgRef} width={width} height={height} onMouseLeave={() => setTooltip(null)}>
         <Group left={MARGIN.left} top={MARGIN.top}>
           <GridRows
             scale={yScale}
@@ -423,7 +413,9 @@ export default function NtcTrends() {
             className="text-xs border border-gray-200 rounded-md px-2 py-1 text-gray-600 bg-white focus:outline-none"
           >
             {[1, 3, 5, 10, 20].map((v) => (
-              <option key={v} value={v}>{v}</option>
+              <option key={v} value={v}>
+                {v}
+              </option>
             ))}
           </select>
         </div>
@@ -435,7 +427,9 @@ export default function NtcTrends() {
             className="text-xs border border-gray-200 rounded-md px-2 py-1 text-gray-600 bg-white focus:outline-none"
           >
             {[5, 10, 20, 25, 50].map((v) => (
-              <option key={v} value={v}>{v}%</option>
+              <option key={v} value={v}>
+                {v}%
+              </option>
             ))}
           </select>
         </div>
