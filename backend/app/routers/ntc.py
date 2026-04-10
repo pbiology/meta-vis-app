@@ -101,6 +101,35 @@ async def get_ntc_trends(
             }
         )
 
+    # --- Build kingdom_breakdown: per-NTC read counts by superkingdom ---
+    kingdom_breakdown: list[dict] = []
+    for doc in ntc_docs:
+        tally: dict[str, int] = {
+            "Bacteria": 0,
+            "Viruses": 0,
+            "Eukaryota": 0,
+            "Archaea": 0,
+            "Other": 0,
+        }
+        for p in doc.get("profiles", []):
+            if p.get("classifier") != "kraken2":
+                continue
+            for entry in p.get("profile", []):
+                if entry.get("taxon_id") in HOST_TAXON_IDS:
+                    continue
+                sk = entry.get("superkingdom") or "Other"
+                if sk not in tally:
+                    sk = "Other"
+                tally[sk] += int(entry.get("abundance", 0))
+        kingdom_breakdown.append(
+            {
+                "sample_id": doc["sample_id"],
+                "case_id": doc["case_id_str"],
+                "order_date": doc.get("order_date"),
+                **tally,
+            }
+        )
+
     # --- Build recurring_taxa: aggregate across NTC profiles ---
     # For each NTC find its kraken2 profile and collect taxa above min_reads.
     # Then keep only taxa seen in >= min_case_count distinct cases.
@@ -161,5 +190,6 @@ async def get_ntc_trends(
         "total_ntcs": total_ntcs,
         "min_case_count": min_case_count,
         "read_counts": read_counts,
+        "kingdom_breakdown": kingdom_breakdown,
         "recurring_taxa": recurring_taxa,
     }

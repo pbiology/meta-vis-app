@@ -66,6 +66,179 @@ function weekTicks(minDate, maxDate) {
 }
 
 // ---------------------------------------------------------------------------
+// Kingdom colours
+// ---------------------------------------------------------------------------
+
+const KINGDOM_COLOURS = {
+  Bacteria: "#3b82f6", // blue-500
+  Viruses: "#ef4444", // red-500
+  Eukaryota: "#10b981", // emerald-500
+  Archaea: "#f59e0b", // amber-500
+  Other: "#d1d1d6", // gray-300
+};
+
+const KINGDOMS = ["Bacteria", "Viruses", "Eukaryota", "Archaea", "Other"];
+
+// ---------------------------------------------------------------------------
+// Stacked bar chart — kingdom breakdown per NTC
+// ---------------------------------------------------------------------------
+
+function KingdomBreakdownChart({ data, width = 600, height = 220 }) {
+  const [tooltip, setTooltip] = useState(null);
+  const svgRef = useRef(null);
+
+  const points = data.filter((d) => d.order_date);
+  const innerWidth = width - MARGIN.left - MARGIN.right;
+  const innerHeight = height - MARGIN.top - MARGIN.bottom;
+
+  const xScale = useMemo(() => {
+    const dates = points.map((d) => new Date(d.order_date).getTime());
+    const minDate = dates.length ? Math.min(...dates) : Date.now() - 86400000;
+    const maxDate = dates.length ? Math.max(...dates) : Date.now();
+    return scaleTime({
+      domain: [new Date(minDate - 86400000), new Date(maxDate + 86400000)],
+      range: [0, innerWidth],
+      nice: true,
+    });
+  }, [points, innerWidth]);
+
+  const yScale = useMemo(() => {
+    const maxTotal = points.length
+      ? Math.max(...points.map((d) => KINGDOMS.reduce((s, k) => s + (d[k] || 0), 0)))
+      : 10;
+    return scaleLinear({
+      domain: [0, maxTotal * 1.1 || 10],
+      range: [innerHeight, 0],
+      nice: true,
+    });
+  }, [points, innerHeight]);
+
+  // Bar half-width in pixels — keeps bars narrow and centred on their date
+  const BAR_HALF = Math.max(2, Math.min(8, innerWidth / (points.length * 4)));
+
+  if (points.length === 0) {
+    return (
+      <p className="text-xs text-gray-400 text-center py-8">No kingdom data in this window.</p>
+    );
+  }
+
+  function handleMouseMove(e, d) {
+    const rect = svgRef.current.getBoundingClientRect();
+    setTooltip({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+      data: d,
+    });
+  }
+
+  return (
+    <div className="relative">
+      <svg ref={svgRef} width={width} height={height} onMouseLeave={() => setTooltip(null)}>
+        <Group left={MARGIN.left} top={MARGIN.top}>
+          <GridRows
+            scale={yScale}
+            width={innerWidth}
+            stroke="#f4f4f5"
+            strokeDasharray="3,3"
+            numTicks={4}
+          />
+          {points.map((d, i) => {
+            const x = xScale(new Date(d.order_date));
+            let yOffset = innerHeight;
+            return (
+              <g key={i} onMouseMove={(e) => handleMouseMove(e, d)}>
+                {KINGDOMS.map((kingdom) => {
+                  const val = d[kingdom] || 0;
+                  if (val === 0) return null;
+                  const barHeight = innerHeight - yScale(val);
+                  yOffset -= barHeight;
+                  return (
+                    <rect
+                      key={kingdom}
+                      x={x - BAR_HALF}
+                      y={yOffset}
+                      width={BAR_HALF * 2}
+                      height={barHeight}
+                      fill={KINGDOM_COLOURS[kingdom]}
+                      fillOpacity={0.85}
+                    />
+                  );
+                })}
+              </g>
+            );
+          })}
+          <AxisBottom
+            top={innerHeight}
+            scale={xScale}
+            tickValues={weekTicks(xScale.domain()[0], xScale.domain()[1])}
+            tickFormat={(d) => `W${isoWeek(d)}`}
+            tickStroke="#d1d1d6"
+            stroke="#d1d1d6"
+            tickLabelProps={{
+              fontSize: 10,
+              fill: "#a1a1aa",
+              fontFamily: "DM Mono, monospace",
+              textAnchor: "middle",
+            }}
+          />
+          <AxisLeft
+            scale={yScale}
+            numTicks={4}
+            tickStroke="#d1d1d6"
+            stroke="#d1d1d6"
+            tickLabelProps={{
+              fontSize: 10,
+              fill: "#a1a1aa",
+              fontFamily: "DM Mono, monospace",
+              textAnchor: "end",
+              dx: -4,
+              dy: 3,
+            }}
+          />
+        </Group>
+      </svg>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 pl-[60px]">
+        {KINGDOMS.map((k) => (
+          <div key={k} className="flex items-center gap-1.5">
+            <span
+              className="inline-block w-2.5 h-2.5 rounded-sm"
+              style={{ backgroundColor: KINGDOM_COLOURS[k] }}
+            />
+            <span className="text-xs text-gray-500">{k}</span>
+          </div>
+        ))}
+      </div>
+
+      {tooltip && (
+        <div
+          className="absolute pointer-events-none bg-white border border-gray-200 rounded-lg shadow-sm px-2.5 py-1.5 text-xs font-mono text-gray-700"
+          style={{ left: tooltip.x + 12, top: tooltip.y - 10 }}
+        >
+          <div className="font-medium">{tooltip.data.sample_id}</div>
+          <div className="text-gray-400 mb-1">{tooltip.data.order_date}</div>
+          {KINGDOMS.map((k) =>
+            tooltip.data[k] > 0 ? (
+              <div key={k} className="flex items-center gap-1.5">
+                <span
+                  className="inline-block w-2 h-2 rounded-sm flex-shrink-0"
+                  style={{ backgroundColor: KINGDOM_COLOURS[k] }}
+                />
+                <span style={{ color: KINGDOM_COLOURS[k] }}>{k}</span>
+                <span className="text-gray-400 ml-auto pl-3">
+                  {tooltip.data[k].toLocaleString()}
+                </span>
+              </div>
+            ) : null
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Scatter chart — total classified reads per NTC
 // ---------------------------------------------------------------------------
 
@@ -370,6 +543,7 @@ export default function NtcTrends() {
   const [error, setError] = useState(null);
 
   const [readCountRef, readCountWidth] = useContainerWidth();
+  const [kingdomRef, kingdomWidth] = useContainerWidth();
   const [recurringRef, recurringWidth] = useContainerWidth();
 
   useEffect(() => {
@@ -478,6 +652,17 @@ export default function NtcTrends() {
                 <span className="text-green-500 font-medium ml-1">· no recurring taxa</span>
               )}
             </p>
+
+            {/* Kingdom breakdown */}
+            <section ref={kingdomRef} className="bg-white border border-gray-100 rounded-xl p-4">
+              <h2 className="text-xs font-medium text-gray-600 mb-3">Kingdom breakdown</h2>
+              <p className="text-xs text-gray-400 mb-3">
+                Classified reads per NTC by superkingdom. Host and structural nodes excluded.
+              </p>
+              {kingdomWidth > 0 && (
+                <KingdomBreakdownChart data={data.kingdom_breakdown} width={kingdomWidth - 32} />
+              )}
+            </section>
 
             {/* Total classified reads */}
             <section ref={readCountRef} className="bg-white border border-gray-100 rounded-xl p-4">
