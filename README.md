@@ -6,19 +6,52 @@ A web application for visualising and reviewing the output of [nf-core/taxprofil
 
 ## What the app does
 
-meta-vis-app organises taxprofiler output into **cases** — one per pipeline run — each containing one or more **samples**. For each case the app provides:
+meta-vis-app is a **clinical interpretation tool for metagenomic quality control and pathogen detection**. It transforms complex taxonomic profiling data into actionable intelligence for clinicians and lab teams.
 
-- A case overview with per-sample general QC metrics (read counts, Q30, host removal)
-- Per-classifier QC tables (unclassified %, host %, species count, genera count, top taxa) with tabs to switch between classifiers
-- Krona interactive taxonomy plots, tabbed per classifier
-- A taxonomy table per classifier with search, kingdom filter, and rank display
-- A provenance section showing pipeline and tool versions (taxprofiler and metaval)
-- Case-level review status (mark as reviewed / unmark)
-- Case-level notes, allowing reviewers to record observations while viewing the data
+### Core Features
 
-When metaval output is also ingested, taxa in the taxonomy table that have been verified by metaval gain a clickable pill linking to a details page showing IGV coverage reports and BLASTN results.
+**Organize & Review Cases**
 
-The app also includes an **outbreak detection** feature that monitors viral taxa appearing across multiple cases within a configurable time window.
+- Ingest taxonomic profiling results from nf-core/taxprofiler with a single command
+- Organize results into cases (one per run) with multiple samples
+- Review sample-level quality metrics (read counts, host removal, contamination)
+- Mark cases as reviewed and add clinical notes
+
+**Interpret Taxonomy Results**
+
+- View organism detection across three classifiers (Kraken2, Centrifuge, DIAMOND)
+- Search and filter organisms by name, kingdom, and abundance
+- Interactive Krona visualizations for intuitive taxonomy exploration
+- Cross-classifier comparison to validate detections
+
+**Verify Findings with Confidence**
+
+- When metaval results available: See IGV coverage plots and BLASTN alignments for detected organisms
+- Confirms organisms are truly present in reads (not artifacts)
+- Links sequence evidence directly to organism calls
+- Reduces false positives and increases confidence in clinical reporting
+
+**Monitor for Outbreaks & Contamination**
+
+- **Outbreak alerts:** Automatically detects when same viral pathogen appears in 2+ cases
+- **Quality control:** Track negative test control (NTC) contamination over time
+- **Flexible monitoring:** Configurable time windows (7/14/30 days) and abundance thresholds
+- **Team communication:** Orange alerts flag problematic patterns for immediate investigation
+
+**Manage Quality Standards**
+
+- Build curated lists of known contaminants to track
+- Exclude environmental organisms from alerting
+- Assign alert thresholds per organism
+- Maintain audit trail of who added/removed list items
+
+### Why It Matters
+
+- ✓ **Clinical confidence** — Verification data (IGV + BLASTN) confirms organisms are real
+- ✓ **Faster interpretation** — Organized interface reduces review time
+- ✓ **Quality assurance** — Built-in contamination monitoring
+- ✓ **Early warning** — Outbreak detection catches patterns before they spread
+- ✓ **Compliance-ready** — Full audit trail and user-level access control
 
 ## Quick Start
 
