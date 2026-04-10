@@ -8,8 +8,8 @@ A web application for visualising and reviewing the output of `nf-core/taxprofil
 
 .. image:: ../assets/logo.svg
    :alt: meta-vis logo
-   :width: 200px
-   :align: center
+   :width: 600px
+   :align: left
 
 What the app does
 =================
@@ -28,6 +28,8 @@ When metaval output is also ingested, taxa in the taxonomy table that have been 
 
 The app also includes an **outbreak detection** feature that monitors viral taxa appearing across multiple cases within a configurable time window.
 
+The app also includes **NTC Trends** and **Quality Control** monitoring for negative test controls to track contamination patterns and ensure sample quality.
+
 Quick start
 ===========
 
@@ -42,6 +44,7 @@ For clinicians
 - :doc:`user-guide/taxonomy-browser`
 - :doc:`user-guide/metaval-integration`
 - :doc:`user-guide/outbreak-detection`
+- :doc:`user-guide/ntc-monitoring`
 
 For administrators
 ==================
@@ -96,6 +99,7 @@ Reference
    user-guide/taxonomy-browser
    user-guide/metaval-integration
    user-guide/outbreak-detection
+   user-guide/ntc-monitoring
    user-guide/user-roles
 
 .. toctree::
