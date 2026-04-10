@@ -123,12 +123,12 @@ function KingdomBreakdownChart({ data, width = 600, height = 220 }) {
     );
   }
 
-  function handleMouseMove(e, d) {
+  function handleMouseMove(e, d, taxon_name, taxon_id, colour) {
     const rect = svgRef.current.getBoundingClientRect();
     setTooltip({
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
-      data: d,
+      data: { ...d, taxon_name, taxon_id, colour },
     });
   }
 
@@ -418,12 +418,12 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240 }) {
     );
   }
 
-  function handleMouseMove(e, d, taxon_name, colour) {
+  function handleMouseMove(e, d, taxon_name, taxon_id, colour) {
     const rect = svgRef.current.getBoundingClientRect();
     setTooltip({
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
-      data: { ...d, taxon_name, colour },
+      data: { ...d, taxon_name, taxon_id, colour },
     });
   }
 
@@ -460,7 +460,9 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240 }) {
                     fill={colour}
                     fillOpacity={0.85}
                     style={{ cursor: "pointer" }}
-                    onMouseMove={(e) => handleMouseMove(e, d, taxon.taxon_name, colour)}
+                    onMouseMove={(e) =>
+                      handleMouseMove(e, d, taxon.taxon_name, taxon.taxon_id, colour)
+                    }
                   />
                 ))}
               </g>
@@ -521,6 +523,7 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240 }) {
           <div className="font-medium italic" style={{ color: tooltip.data.colour }}>
             {tooltip.data.taxon_name.replace(/-/g, " ")}
           </div>
+          <div className="text-gray-400">taxid:{tooltip.data.taxon_id}</div>
           <div className="text-gray-400">{tooltip.data.case_id}</div>
           <div>{tooltip.data.abundance.toLocaleString()} reads</div>
           <div className="text-gray-400">{tooltip.data.order_date}</div>
