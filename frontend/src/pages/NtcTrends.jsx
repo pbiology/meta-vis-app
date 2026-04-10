@@ -471,8 +471,8 @@ export default function NtcTrends() {
               {data.total_ntcs !== 1 ? "s" : ""} in the last {windowDays} days
               {data.recurring_taxa.length > 0 ? (
                 <span className="text-amber-500 font-medium ml-1">
-                  · {data.recurring_taxa.length} recurring taxon
-                  {data.recurring_taxa.length !== 1 ? "a" : ""}
+                  · {data.recurring_taxa.length} recurring{" "}
+                  {data.recurring_taxa.length === 1 ? "taxon" : "taxa"}
                 </span>
               ) : (
                 <span className="text-green-500 font-medium ml-1">· no recurring taxa</span>
