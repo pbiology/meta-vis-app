@@ -44,6 +44,27 @@ const TAXON_COLOURS = [
 
 const MARGIN = { top: 16, right: 24, bottom: 48, left: 60 };
 
+/** Returns the ISO week number (1–53) for a given date. */
+function isoWeek(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
+/** Generates one Date per week (Mondays) between two dates. */
+function weekTicks(minDate, maxDate) {
+  const ticks = [];
+  const d = new Date(minDate);
+  // Advance to next Monday
+  d.setDate(d.getDate() + ((1 - d.getDay() + 7) % 7 || 7));
+  while (d <= maxDate) {
+    ticks.push(new Date(d));
+    d.setDate(d.getDate() + 7);
+  }
+  return ticks;
+}
+
 // ---------------------------------------------------------------------------
 // Scatter chart — total classified reads per NTC
 // ---------------------------------------------------------------------------
@@ -141,7 +162,8 @@ function ReadCountChart({ data, width = 600, height = 200 }) {
           <AxisBottom
             top={innerHeight}
             scale={xScale}
-            numTicks={6}
+            tickValues={weekTicks(xScale.domain()[0], xScale.domain()[1])}
+            tickFormat={(d) => `W${isoWeek(d)}`}
             tickStroke="#d1d1d6"
             stroke="#d1d1d6"
             tickLabelProps={{
@@ -283,7 +305,8 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240 }) {
           <AxisBottom
             top={innerHeight}
             scale={xScale}
-            numTicks={6}
+            tickValues={weekTicks(xScale.domain()[0], xScale.domain()[1])}
+            tickFormat={(d) => `W${isoWeek(d)}`}
             tickStroke="#d1d1d6"
             stroke="#d1d1d6"
             tickLabelProps={{
@@ -389,9 +412,7 @@ export default function NtcTrends() {
               {m}
             </button>
           ))}
-        </div><span className="text-xs text-gray-400">
-                  ≥ {minCasePct}% of cases · &gt; {minReads} reads · kraken2
-                </span>>
+        </div>
 
         {/* Filter controls */}
         <div className="flex items-center gap-2 border-l border-gray-100 pl-3">
