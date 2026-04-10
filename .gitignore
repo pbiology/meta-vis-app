@@ -32,3 +32,8 @@ frontend/dist/
 
 # macOS
 .DS_Store
+
+# Sphinx documentation
+docs/_build/
+docs/.doctrees/
+.readthedocs.yml.bak
