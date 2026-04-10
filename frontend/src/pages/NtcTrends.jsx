@@ -350,6 +350,8 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240 }) {
 export default function NtcTrends() {
   const [material, setMaterial] = useState("DNA");
   const [windowDays, setWindowDays] = useState(90);
+  const [minReads, setMinReads] = useState(3);
+  const [minCasePct, setMinCasePct] = useState(10);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -360,11 +362,11 @@ export default function NtcTrends() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    getNtcTrends({ material, windowDays })
+    getNtcTrends({ material, windowDays, minReads, minCasePct: minCasePct / 100 })
       .then(setData)
       .catch(() => setError("Failed to load NTC trends."))
       .finally(() => setLoading(false));
-  }, [material, windowDays]);
+  }, [material, windowDays, minReads, minCasePct]);
 
   return (
     <div className="flex flex-col h-full">
@@ -387,8 +389,35 @@ export default function NtcTrends() {
               {m}
             </button>
           ))}
-        </div>
+        </div><span className="text-xs text-gray-400">
+                  ≥ {minCasePct}% of cases · &gt; {minReads} reads · kraken2
+                </span>>
 
+        {/* Filter controls */}
+        <div className="flex items-center gap-2 border-l border-gray-100 pl-3">
+          <span className="text-xs text-gray-400">Min reads</span>
+          <select
+            value={minReads}
+            onChange={(e) => setMinReads(Number(e.target.value))}
+            className="text-xs border border-gray-200 rounded-md px-2 py-1 text-gray-600 bg-white focus:outline-none"
+          >
+            {[1, 3, 5, 10, 20].map((v) => (
+              <option key={v} value={v}>{v}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2 border-l border-gray-100 pl-3">
+          <span className="text-xs text-gray-400">Min cases</span>
+          <select
+            value={minCasePct}
+            onChange={(e) => setMinCasePct(Number(e.target.value))}
+            className="text-xs border border-gray-200 rounded-md px-2 py-1 text-gray-600 bg-white focus:outline-none"
+          >
+            {[5, 10, 20, 25, 50].map((v) => (
+              <option key={v} value={v}>{v}%</option>
+            ))}
+          </select>
+        </div>
         {/* Window selector */}
         <div className="flex items-center gap-2 border-l border-gray-100 pl-3">
           <span className="text-xs text-gray-400">Window</span>
@@ -451,7 +480,7 @@ export default function NtcTrends() {
               <div className="flex items-center justify-between mb-1">
                 <h2 className="text-xs font-medium text-gray-600">Recurring taxa</h2>
                 <span className="text-xs text-gray-400">
-                  ≥ 10% of cases · &gt; 3 reads · kraken2
+                  ≥ {minCasePct}% of cases · &gt; {minReads} reads · kraken2
                 </span>
               </div>
               <p className="text-xs text-gray-400 mb-3">
