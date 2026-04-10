@@ -13,6 +13,7 @@ import KnownPathogens from "./pages/KnownPathogens";
 import Layout from "./components/Layout";
 import TaxonDetail from "./pages/TaxonDetail";
 import NtcTrends from "./pages/NtcTrends";
+import NtcListsPage from "./pages/NtcListsPage";
 
 function ProtectedRoute({ children }) {
   const { user } = useAuth();
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="pathogens" element={<KnownPathogens />} />
         <Route path="taxa/:taxonId" element={<TaxonDetail />} />
         <Route path="ntc" element={<NtcTrends />} />
+        <Route path="ntc/lists" element={<NtcListsPage />} />
       </Route>
     </Routes>
   );

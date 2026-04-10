@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { getNtcTrends } from "../api/ntc";
+import { Link } from "react-router-dom";
+import { getNtcTrends, getNtcContaminantAlerts } from "../api/ntc";
 import { scaleTime, scaleLinear, scaleOrdinal } from "@visx/scale";
 import { LinePath, Circle } from "@visx/shape";
 import { AxisBottom, AxisLeft } from "@visx/axis";
@@ -541,6 +542,7 @@ export default function NtcTrends() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [contaminantAlerts, setContaminantAlerts] = useState([]);
 
   const [readCountRef, readCountWidth] = useContainerWidth();
   const [kingdomRef, kingdomWidth] = useContainerWidth();
@@ -553,6 +555,9 @@ export default function NtcTrends() {
       .then(setData)
       .catch(() => setError("Failed to load NTC trends."))
       .finally(() => setLoading(false));
+    getNtcContaminantAlerts()
+      .then((d) => setContaminantAlerts(d.alerts ?? []))
+      .catch(() => {});
   }, [material, windowDays, minReads, minCasePct]);
 
   return (
@@ -607,6 +612,16 @@ export default function NtcTrends() {
             ))}
           </select>
         </div>
+        <Link
+          to="/ntc/lists"
+          className="flex items-center gap-1.5 text-xs border border-gray-200 rounded-lg px-3 py-1.5 text-gray-500 hover:bg-gray-50 transition-colors"
+        >
+          <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3" />
+            <path d="M5 8h6M8 5v6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          </svg>
+          NTC lists
+        </Link>
         {/* Window selector */}
         <div className="flex items-center gap-2 border-l border-gray-100 pl-3">
           <span className="text-xs text-gray-400">Window</span>
@@ -639,6 +654,50 @@ export default function NtcTrends() {
 
         {!loading && !error && data && (
           <>
+            {/* Contaminant alert banner */}
+            {contaminantAlerts.length > 0 && (
+              <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <svg
+                    className="w-3.5 h-3.5 text-orange-500 flex-shrink-0"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                  >
+                    <path
+                      d="M8 3a3 3 0 0 1 3 3v1.5h.5a1 1 0 0 1 1 1V13a1 1 0 0 1-1 1H4.5a1 1 0 0 1-1-1V8.5a1 1 0 0 1 1-1H5V6a3 3 0 0 1 3-3z"
+                      stroke="currentColor"
+                      strokeWidth="1.3"
+                      strokeLinejoin="round"
+                    />
+                    <circle cx="8" cy="10.5" r="0.75" fill="currentColor" />
+                  </svg>
+                  <span className="text-xs font-medium text-orange-700">
+                    Known contaminant{contaminantAlerts.length !== 1 ? "s" : ""} detected in NTCs
+                  </span>
+                  <Link
+                    to="/ntc/lists"
+                    className="ml-auto text-xs text-orange-500 hover:text-orange-700 underline underline-offset-2"
+                  >
+                    Manage lists
+                  </Link>
+                </div>
+                {contaminantAlerts.map((alert) => (
+                  <div
+                    key={alert.taxon_id}
+                    className="flex items-center gap-2 text-xs text-orange-700"
+                  >
+                    <span className="italic">{alert.taxon_name.replace(/-/g, " ")}</span>
+                    <span className="text-orange-400">·</span>
+                    <span className="text-orange-500">
+                      {alert.case_count} case{alert.case_count !== 1 ? "s" : ""}
+                    </span>
+                    <span className="text-orange-400">·</span>
+                    <span className="text-orange-400">&gt; {alert.min_reads} reads threshold</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Summary line */}
             <p className="text-xs text-gray-400">
               {data.total_ntcs} {material} NTC
