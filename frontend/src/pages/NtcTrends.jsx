@@ -6,8 +6,6 @@ import { AxisBottom, AxisLeft } from "@visx/axis";
 import { GridRows } from "@visx/grid";
 import { Group } from "@visx/group";
 import { curveMonotoneX } from "@visx/curve";
-import { useTooltip, TooltipWithBounds } from "@visx/tooltip";
-import { localPoint } from "@visx/event";
 
 // Measures the pixel width of a DOM element, updating on resize.
 function useContainerWidth() {
@@ -51,12 +49,10 @@ const MARGIN = { top: 16, right: 24, bottom: 48, left: 60 };
 // ---------------------------------------------------------------------------
 
 function ReadCountChart({ data, width = 600, height = 200 }) {
-  const { showTooltip, hideTooltip, tooltipData, tooltipLeft, tooltipTop, tooltipOpen } =
-    useTooltip();
+  const [tooltip, setTooltip] = useState(null);
+  const svgRef = useRef(null);
 
-  const containerRef = useRef(null);
   const points = data.filter((d) => d.order_date && d.classified_reads != null);
-
   const innerWidth = width - MARGIN.left - MARGIN.right;
   const innerHeight = height - MARGIN.top - MARGIN.bottom;
 
@@ -64,7 +60,6 @@ function ReadCountChart({ data, width = 600, height = 200 }) {
     const dates = points.map((d) => new Date(d.order_date).getTime());
     const minDate = dates.length ? Math.min(...dates) : Date.now() - 86400000;
     const maxDate = dates.length ? Math.max(...dates) : Date.now();
-    // Pad by 1 day on each side so single-date datasets don't collapse to a point
     return scaleTime({
       domain: [new Date(minDate - 86400000), new Date(maxDate + 86400000)],
       range: [0, innerWidth],
@@ -87,9 +82,23 @@ function ReadCountChart({ data, width = 600, height = 200 }) {
     );
   }
 
+  function handleMouseMove(e, d) {
+    const rect = svgRef.current.getBoundingClientRect();
+    setTooltip({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+      data: d,
+    });
+  }
+
   return (
-    <div ref={containerRef} className="relative">
-      <svg width={width} height={height}>
+    <div className="relative">
+      <svg
+        ref={svgRef}
+        width={width}
+        height={height}
+        onMouseLeave={() => setTooltip(null)}
+      >
         <Group left={MARGIN.left} top={MARGIN.top}>
           <GridRows
             scale={yScale}
@@ -98,7 +107,6 @@ function ReadCountChart({ data, width = 600, height = 200 }) {
             strokeDasharray="3,3"
             numTicks={4}
           />
-          {/* Threshold line at 1000 reads */}
           <line
             x1={0}
             x2={innerWidth}
@@ -127,15 +135,7 @@ function ReadCountChart({ data, width = 600, height = 200 }) {
               fill="#3b82f6"
               fillOpacity={0.7}
               style={{ cursor: "pointer" }}
-              onMouseMove={(e) => {
-                const coords = localPoint(containerRef.current, e);
-                showTooltip({
-                  tooltipData: d,
-                  tooltipLeft: coords?.x,
-                  tooltipTop: coords?.y,
-                });
-              }}
-              onMouseLeave={hideTooltip}
+              onMouseMove={(e) => handleMouseMove(e, d)}
             />
           ))}
           <AxisBottom
@@ -167,26 +167,16 @@ function ReadCountChart({ data, width = 600, height = 200 }) {
           />
         </Group>
       </svg>
-      {tooltipOpen && tooltipData && (
-        <TooltipWithBounds
-          left={tooltipLeft}
-          top={tooltipTop}
-          style={{
-            background: "white",
-            border: "1px solid #e4e4e7",
-            borderRadius: 6,
-            padding: "6px 10px",
-            fontSize: 11,
-            fontFamily: "DM Mono, monospace",
-            color: "#3f3f46",
-            pointerEvents: "none",
-          }}
+      {tooltip && (
+        <div
+          className="absolute pointer-events-none bg-white border border-gray-200 rounded-lg shadow-sm px-2.5 py-1.5 text-xs font-mono text-gray-700"
+          style={{ left: tooltip.x + 12, top: tooltip.y - 10 }}
         >
-          <div className="font-medium">{tooltipData.sample_id}</div>
-          <div className="text-gray-400">{tooltipData.case_id}</div>
-          <div>{tooltipData.classified_reads.toLocaleString()} classified reads</div>
-          <div className="text-gray-400">{tooltipData.order_date}</div>
-        </TooltipWithBounds>
+          <div className="font-medium">{tooltip.data.sample_id}</div>
+          <div className="text-gray-400">{tooltip.data.case_id}</div>
+          <div>{tooltip.data.classified_reads.toLocaleString()} classified reads</div>
+          <div className="text-gray-400">{tooltip.data.order_date}</div>
+        </div>
       )}
     </div>
   );
@@ -197,12 +187,10 @@ function ReadCountChart({ data, width = 600, height = 200 }) {
 // ---------------------------------------------------------------------------
 
 function RecurringTaxaChart({ taxa, width = 600, height = 240 }) {
-  const { showTooltip, hideTooltip, tooltipData, tooltipLeft, tooltipTop, tooltipOpen } =
-    useTooltip();
-  const containerRef = useRef(null);
+  const [tooltip, setTooltip] = useState(null);
+  const svgRef = useRef(null);
 
   const allPoints = taxa.flatMap((t) => t.occurrences);
-
   const innerWidth = width - MARGIN.left - MARGIN.right;
   const innerHeight = height - MARGIN.top - MARGIN.bottom;
 
@@ -239,9 +227,23 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240 }) {
     );
   }
 
+  function handleMouseMove(e, d, taxon_name, colour) {
+    const rect = svgRef.current.getBoundingClientRect();
+    setTooltip({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+      data: { ...d, taxon_name, colour },
+    });
+  }
+
   return (
-    <div ref={containerRef} className="relative">
-      <svg width={width} height={height}>
+    <div className="relative">
+      <svg
+        ref={svgRef}
+        width={width}
+        height={height}
+        onMouseLeave={() => setTooltip(null)}
+      >
         <Group left={MARGIN.left} top={MARGIN.top}>
           <GridRows
             scale={yScale}
@@ -272,15 +274,7 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240 }) {
                     fill={colour}
                     fillOpacity={0.85}
                     style={{ cursor: "pointer" }}
-                    onMouseMove={(e) => {
-                      const coords = localPoint(containerRef.current, e);
-                      showTooltip({
-                        tooltipData: { ...d, taxon_name: taxon.taxon_name, colour },
-                        tooltipLeft: coords?.x,
-                        tooltipTop: coords?.y,
-                      });
-                    }}
-                    onMouseLeave={hideTooltip}
+                    onMouseMove={(e) => handleMouseMove(e, d, taxon.taxon_name, colour)}
                   />
                 ))}
               </g>
@@ -332,26 +326,18 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240 }) {
         ))}
       </div>
 
-      {tooltipOpen && tooltipData && (
-        <TooltipWithBounds
-          left={tooltipLeft}
-          top={tooltipTop}
-          style={{
-            background: "white",
-            border: "1px solid #e4e4e7",
-            borderRadius: 6,
-            padding: "6px 10px",
-            fontSize: 11,
-            fontFamily: "DM Mono, monospace",
-            color: "#3f3f46",
-            pointerEvents: "none",
-          }}
+      {tooltip && (
+        <div
+          className="absolute pointer-events-none bg-white border border-gray-200 rounded-lg shadow-sm px-2.5 py-1.5 text-xs font-mono text-gray-700"
+          style={{ left: tooltip.x + 12, top: tooltip.y - 10 }}
         >
-          <div className="font-medium italic">{tooltipData.taxon_name.replace(/-/g, " ")}</div>
-          <div className="text-gray-400">{tooltipData.case_id}</div>
-          <div>{tooltipData.abundance.toLocaleString()} reads</div>
-          <div className="text-gray-400">{tooltipData.order_date}</div>
-        </TooltipWithBounds>
+          <div className="font-medium italic" style={{ color: tooltip.data.colour }}>
+            {tooltip.data.taxon_name.replace(/-/g, " ")}
+          </div>
+          <div className="text-gray-400">{tooltip.data.case_id}</div>
+          <div>{tooltip.data.abundance.toLocaleString()} reads</div>
+          <div className="text-gray-400">{tooltip.data.order_date}</div>
+        </div>
       )}
     </div>
   );
