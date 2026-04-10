@@ -6,7 +6,7 @@ A web application for visualising and reviewing the output of [nf-core/taxprofil
 
 ## What the app does
 
-meta-vis-app is a **clinical dashboard for metagenomic quality control and pathogen detection**. It transforms complex taxonomic profiling data into actionable intelligence for clinicians and lab teams.
+meta-vis-app is a **clinical interpretation tool for metagenomic quality control and pathogen detection**. It transforms complex taxonomic profiling data into actionable intelligence for clinicians and lab teams.
 
 ### Core Features
 
