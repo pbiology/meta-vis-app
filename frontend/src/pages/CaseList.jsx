@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { getCases, deleteCase, getCaseStats, getPathogenCases } from "../api/cases";
 import Badge from "../components/Badge";
 import { getOutbreaks } from "../api/alerts";
+import { getNtcContaminantCaseIds } from "../api/ntc";
 import { useAuth } from "../context/AuthContext";
 
 export default function CaseList() {
@@ -16,6 +17,7 @@ export default function CaseList() {
   const [deleting, setDeleting] = useState(false);
   const [outbreakCaseIds, setOutbreakCaseIds] = useState(new Set());
   const [pathogenCaseIds, setPathogenCaseIds] = useState(new Set());
+  const [ntcContaminantCaseIds, setNtcContaminantCaseIds] = useState(new Set());
   const [stats, setStats] = useState({ total: 0, pending: 0, reviewed: 0 });
   const navigate = useNavigate();
   const { role } = useAuth();
@@ -34,9 +36,18 @@ export default function CaseList() {
       getPathogenCases()
         .then((d) => setPathogenCaseIds(new Set(d.case_ids)))
         .catch(() => {});
+      getNtcContaminantCaseIds()
+        .then((d) => setNtcContaminantCaseIds(new Set(d.case_ids)))
+        .catch(() => {});
     } catch {
       setError("Failed to load cases.");
     } finally {
+      getPathogenCases()
+        .then((d) => setPathogenCaseIds(new Set(d.case_ids)))
+        .catch(() => {});
+      getNtcContaminantCaseIds()
+        .then((d) => setNtcContaminantCaseIds(new Set(d.case_ids)))
+        .catch(() => {});
       setLoading(false);
     }
   }, [page, search, filter]);
@@ -201,6 +212,22 @@ export default function CaseList() {
                             strokeWidth="1.3"
                             strokeLinecap="round"
                           />
+                        </svg>
+                      )}
+                      {ntcContaminantCaseIds.has(c._id) && (
+                        <svg
+                          className="w-3 h-3 text-orange-500 flex-shrink-0"
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          title="NTC contains known contaminant"
+                        >
+                          <path
+                            d="M8 3a3 3 0 0 1 3 3v1.5h.5a1 1 0 0 1 1 1V13a1 1 0 0 1-1 1H4.5a1 1 0 0 1-1-1V8.5a1 1 0 0 1 1-1H5V6a3 3 0 0 1 3-3z"
+                            stroke="currentColor"
+                            strokeWidth="1.3"
+                            strokeLinejoin="round"
+                          />
+                          <circle cx="8" cy="10.5" r="0.75" fill="currentColor" />
                         </svg>
                       )}
                     </div>

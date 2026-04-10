@@ -81,6 +81,12 @@ async def _ensure_indexes():
     # known_pathogens — fast lookup by taxon_id
     await db["known_pathogens"].create_index("taxon_id", unique=True)
 
+    # ntc_ignorelist — fast lookup by taxon_id
+    await db["ntc_ignorelist"].create_index("taxon_id", unique=True)
+
+    # ntc_known_contaminants — fast lookup by taxon_id
+    await db["ntc_known_contaminants"].create_index("taxon_id", unique=True)
+
     # taxa — reference collection populated by load_taxonomy.py
     await db["taxa"].create_index("taxon_id", unique=True)
     await db["taxa"].create_index("superkingdom")

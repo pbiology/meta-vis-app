@@ -15,6 +15,7 @@ from pathlib import Path
 from app.database import get_db
 from app.auth.utils import get_current_user, require_role
 from app.config import settings
+from app.constants import HOST_TAXON_IDS
 
 
 _controls_taxa_cache: dict | None = None
@@ -52,9 +53,6 @@ def _serialise_sample(doc: dict) -> dict:
     if doc.get("subject_id"):
         doc["subject_id"] = str(doc["subject_id"])
     return doc
-
-
-HOST_TAXON_IDS = {9606, 1, 0, 131567}
 
 
 def _non_host_total(entries: list, clf_qc: Optional[dict] = None) -> float:
