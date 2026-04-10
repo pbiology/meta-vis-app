@@ -72,9 +72,28 @@ async def get_ntc_trends(
     read_counts: list[dict] = []
     for doc in ntc_docs:
         kraken2_qc = (
-            doc.get("taxprofiler", {}).get("classifiers", {}).get("kraken2", {})
+            doc.get("taxprofiler", {})
+            .get("classifiers", {})
+            .get("kraken2", {})
         )
         classified = kraken2_qc.get("classified_reads")
+
+        # Fallback: derive classified reads directly from the kraken2 profile.
+        # The root node (taxon_id=1) in kraken2 output represents total classified
+        # reads. This is used when multiqc data is absent (e.g. synthetic test data).
+        if classified is None:
+            for p in doc.get("profiles", []):
+                if p.get("classifier") == "kraken2":
+                    classified = next(
+                        (
+                            int(e["abundance"])
+                            for e in p.get("profile", [])
+                            if e.get("taxon_id") == 1
+                        ),
+                        None,
+                    )
+                    break
+
         read_counts.append(
             {
                 "sample_id": doc["sample_id"],
