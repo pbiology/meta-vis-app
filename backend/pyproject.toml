@@ -42,6 +42,9 @@ dev = [
     "types-requests>=2.31.0",
     "types-python-jose",
     "types-passlib",
+    "sphinx>=7.0.0",
+    "furo>=2024.01.29",
+    "sphinx-rtd-theme>=2.0.0",
 ]
 
 [tool.setuptools.packages.find]
