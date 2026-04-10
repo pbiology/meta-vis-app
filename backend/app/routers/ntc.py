@@ -82,6 +82,15 @@ async def add_to_ntc_ignorelist(
             status_code=409,
             detail=f"Taxon {payload.taxon_id} is already on the NTC ignorelist",
         )
+    on_contaminants = await db["ntc_known_contaminants"].find_one(
+        {"taxon_id": payload.taxon_id}
+    )
+    if on_contaminants:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Taxon {payload.taxon_id} is already on the known contaminants list. "
+            f"Remove it from there before adding it to the ignorelist.",
+        )
     doc = {
         "taxon_id": payload.taxon_id,
         "taxon_name": payload.taxon_name,
@@ -161,6 +170,13 @@ async def add_ntc_contaminant(
         raise HTTPException(
             status_code=409,
             detail=f"Taxon {payload.taxon_id} is already on the known contaminants list",
+        )
+    on_ignorelist = await db["ntc_ignorelist"].find_one({"taxon_id": payload.taxon_id})
+    if on_ignorelist:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Taxon {payload.taxon_id} is already on the NTC ignorelist. "
+            f"Remove it from there before adding it to the known contaminants list.",
         )
     doc = {
         "taxon_id": payload.taxon_id,

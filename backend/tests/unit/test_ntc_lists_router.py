@@ -162,6 +162,25 @@ class TestNtcIgnorelistPost:
         )
         assert ntc_module._contaminant_alert_cache is None
 
+    async def test_cannot_add_to_ignorelist_if_on_contaminants(self, fake_db):
+        await fake_db["ntc_known_contaminants"].insert_one(
+            {
+                "taxon_id": 1743,
+                "taxon_name": "Cutibacterium acnes",
+                "min_reads": 3,
+            }
+        )
+        app = make_app(fake_db)
+        resp = TestClient(app).post(
+            "/api/v1/ntc/ignorelist",
+            json={
+                "taxon_id": 1743,
+                "taxon_name": "Cutibacterium acnes",
+            },
+        )
+        assert resp.status_code == 409
+        assert "known contaminants" in resp.json()["detail"]
+
 
 # ---------------------------------------------------------------------------
 # NTC ignorelist — PATCH
@@ -317,6 +336,24 @@ class TestNtcContaminantsPost:
             },
         )
         assert ntc_module._contaminant_alert_cache is None
+
+    async def test_cannot_add_to_contaminants_if_on_ignorelist(self, fake_db):
+        await fake_db["ntc_ignorelist"].insert_one(
+            {
+                "taxon_id": 1743,
+                "taxon_name": "Cutibacterium acnes",
+            }
+        )
+        app = make_app(fake_db)
+        resp = TestClient(app).post(
+            "/api/v1/ntc/contaminants",
+            json={
+                "taxon_id": 1743,
+                "taxon_name": "Cutibacterium acnes",
+            },
+        )
+        assert resp.status_code == 409
+        assert "ignorelist" in resp.json()["detail"]
 
 
 # ---------------------------------------------------------------------------
