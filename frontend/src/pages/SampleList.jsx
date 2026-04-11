@@ -137,7 +137,7 @@ export default function SampleList() {
                   className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
                 >
                   <td className="px-4 py-3 font-mono text-xs text-gray-700">
-                    {s.sample?.sample_id ?? "—"}
+                    {s.sample_id ?? "—"}
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500">{s.order_date ?? "—"}</td>
                   <td className="px-4 py-3 text-xs text-gray-400 font-mono">
@@ -153,7 +153,7 @@ export default function SampleList() {
                     {fmt(s.taxprofiler?.classifiers?.kraken2?.num_species)}
                   </td>
                   <td className="px-4 py-3">
-                    <Badge type={s.case_review?.reviewed ? "reviewed" : "pending"} />
+                    <Badge type={s.review?.reviewed ? "reviewed" : "pending"} />
                   </td>
                 </tr>
               ))}
