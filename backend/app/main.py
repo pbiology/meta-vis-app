@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import connect_db, close_db
-from app.config import settings
+from app.config import settings, validate_jwt_secret
 from app.routers import auth, ingest, cases, samples, users, metaval, alerts, taxa, ntc
 
 
