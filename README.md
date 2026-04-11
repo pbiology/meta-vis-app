@@ -119,13 +119,13 @@ Full documentation is available at: **https://meta-vis-app.readthedocs.io**
 
 ## Stack
 
-| Layer | Technology |
-|---|---|
+| Layer | Technology                             |
+|---|----------------------------------------|
 | Backend | FastAPI + Motor (async MongoDB driver) |
-| Database | MongoDB 7.0 (Docker) |
-| Object storage | MinIO (Docker) — optional, see docs |
-| Frontend | React 18 + Vite + Tailwind CSS |
-| Runtime | Python 3.11 (conda), Node.js ≥18 |
+| Database | MongoDB 7.0 (Docker)                   |
+| Object storage | MinIO (Docker) — optional, see docs    |
+| Frontend | React 18 + Vite + Tailwind CSS         |
+| Runtime | Python 3.13 (conda), Node.js ≥18       |
 
 ## License
 
