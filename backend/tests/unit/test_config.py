@@ -14,9 +14,15 @@ def test_cors_origins_parsing():
     assert origins == ["http://localhost:5173", "https://example.com"]
 
     # Test with whitespace
-    settings = Settings(cors_origins="http://localhost:5173, https://example.com , https://another.com")
+    settings = Settings(
+        cors_origins="http://localhost:5173, https://example.com , https://another.com"
+    )
     origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
-    assert origins == ["http://localhost:5173", "https://example.com", "https://another.com"]
+    assert origins == [
+        "http://localhost:5173",
+        "https://example.com",
+        "https://another.com",
+    ]
 
     # Test default
     settings = Settings()

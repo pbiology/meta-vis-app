@@ -63,6 +63,7 @@ async def list_samples(
         "case_id_str": 1,
         "order_date": 1,
         "ingested_at": 1,
+        "review.reviewed": 1,
         "taxprofiler.classifiers.kraken2.pct_unclassified": 1,
         "taxprofiler.classifiers.kraken2.num_species": 1,
     }
