@@ -11,6 +11,10 @@ from app.routers import auth, ingest, cases, samples, users, metaval, alerts, ta
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Validate configuration before connecting to database
+    # This ensures the app fails fast with a clear error if settings are invalid
+    validate_jwt_secret(settings.jwt_secret)
+
     await connect_db()
     yield
     await close_db()

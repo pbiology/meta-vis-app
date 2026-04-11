@@ -82,7 +82,5 @@ def validate_jwt_secret(jwt_secret: str) -> None:
 
 
 settings = Settings()
-# Validate JWT secret before app starts
-validate_jwt_secret(settings.jwt_secret)
 # Load outbreak configs when app starts
 settings.load_outbreak_configs()
