@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     jwt_secret: str = ""
     controls_taxa_path: str = "controls_taxa.json"
 
+    # CORS — comma-separated list of allowed origins
+    cors_origins: str = "http://localhost:5173"
+
     # NCBI E-utilities — optional API key, raises rate limit from 3 to 10 req/s
     ncbi_api_key: Optional[str] = None
 
