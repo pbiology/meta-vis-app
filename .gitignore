@@ -10,8 +10,10 @@ build/
 .venv/
 venv/
 
-# Environment
+# Environment — NEVER commit .env files with real secrets
 .env
+.env.*
+!.env.example
 
 # MongoDB
 *.db
@@ -32,6 +34,10 @@ frontend/dist/
 
 # macOS
 .DS_Store
+
+# Build artifacts
+app.egg-info/
+meta_vis_app.egg-info/
 
 # Sphinx documentation
 docs/_build/
