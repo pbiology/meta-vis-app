@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     # Outbreak configs loaded from JSON at startup
     outbreak_configs: list[dict] = []
 
-    def load_outbreak_configs(self):
+    def load_outbreak_configs(self) -> None:
         """Load outbreak configurations from JSON file."""
         config_path = Path(__file__).parent.parent / "outbreak_configs.json"
 
@@ -58,6 +58,31 @@ class Settings(BaseSettings):
             self.outbreak_configs = []
 
 
+def validate_jwt_secret(jwt_secret: str) -> None:
+    """
+    Validate JWT secret meets minimum security requirements.
+
+    Args:
+        jwt_secret: The JWT secret string from configuration.
+
+    Raises:
+        ValueError: If jwt_secret is less than 32 characters (256 bits).
+
+    Why 32 characters?
+    - NIST recommends symmetric keys of at least 128 bits for sensitive operations
+    - JWT secrets should ideally be 256+ bits (32+ chars in base64)
+    - This prevents brute-force attacks on JWT tokens
+    """
+    min_length = 32
+    if len(jwt_secret) < min_length:
+        raise ValueError(
+            f"JWT_SECRET must be at least {min_length} characters long. "
+            "Configure it in backend/.env or set the JWT_SECRET environment variable."
+        )
+
+
 settings = Settings()
+# Validate JWT secret before app starts
+validate_jwt_secret(settings.jwt_secret)
 # Load outbreak configs when app starts
 settings.load_outbreak_configs()
