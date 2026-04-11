@@ -366,7 +366,6 @@ class TestReadExtractedReads:
         reads_dir.mkdir(parents=True, exist_ok=True)
         fa = reads_dir / "SAMPLE1_Virus-A.extracted_kraken2_read_1.fa"
         fa.write_text(FASTA_CONTENT)
-        # No read_2 file created
         result = _read_extracted_reads(tmp_path)
         assert result[("SAMPLE1_Virus-A", "kraken2")]["file_count"] == 1
 
@@ -418,7 +417,7 @@ class TestReadMetavalVerificationData:
         make_extracted_reads_dir(tmp_path, "kraken2", "SAMPLE1_Virus-A")
         make_spades_dir(tmp_path, "kraken2", "SAMPLE1_Virus-A", "scaffolds")
         result = read_metaval(str(tmp_path))
-        assert result["results"][0]["verification_data"]["type"] == "scaffolds"
+        assert result.results[0].verification_data.type == "scaffolds"
 
     def test_falls_back_to_raw_reads_when_no_spades(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
@@ -427,7 +426,7 @@ class TestReadMetavalVerificationData:
         ).write_text("<html/>")
         make_extracted_reads_dir(tmp_path, "kraken2", "SAMPLE1_Virus-A")
         result = read_metaval(str(tmp_path))
-        assert result["results"][0]["verification_data"]["type"] == "raw_reads"
+        assert result.results[0].verification_data.type == "raw_reads"
 
     def test_verification_data_has_stats(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
@@ -436,9 +435,9 @@ class TestReadMetavalVerificationData:
         ).write_text("<html/>")
         make_extracted_reads_dir(tmp_path, "kraken2", "SAMPLE1_Virus-A")
         result = read_metaval(str(tmp_path))
-        vd = result["results"][0]["verification_data"]
-        assert vd["count"] == 2
-        assert vd["avg_length"] == 10.0
+        vd = result.results[0].verification_data
+        assert vd.count == 2
+        assert vd.avg_length == 10.0
 
     def test_no_verification_data_gives_empty_dict(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
@@ -446,9 +445,9 @@ class TestReadMetavalVerificationData:
             igv_dir / "SAMPLE1_kraken2_Virus-A_mappingorganism_Virus-A_report.html"
         ).write_text("<html/>")
         result = read_metaval(str(tmp_path))
-        vd = result["results"][0]["verification_data"]
-        assert vd["type"] == "raw_reads"
-        assert vd["count"] == 0
+        vd = result.results[0].verification_data
+        assert vd.type == "raw_reads"
+        assert vd.count == 0
 
 
 # ---------------------------------------------------------------------------
@@ -464,7 +463,7 @@ class TestReadMetaval:
     def test_empty_igv_directory_returns_empty_results(self, tmp_path):
         make_igv_dir(tmp_path)
         result = read_metaval(str(tmp_path))
-        assert result["results"] == []
+        assert result.results == []
 
     def test_happy_path_groups_by_sample_classifier_taxon(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
@@ -477,8 +476,8 @@ class TestReadMetaval:
             / "SRR13439790_kraken2_Shigella-virus-Moo19_mappingorganism_Escherichia-phage-IME11_report.html"
         ).write_text("<html/>")
         result = read_metaval(str(tmp_path))
-        assert len(result["results"]) == 1
-        assert len(result["results"][0]["organisms"]) == 2
+        assert len(result.results) == 1
+        assert len(result.results[0].organisms) == 2
 
     def test_taxon_id_resolved_from_taxid_map(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
@@ -488,7 +487,7 @@ class TestReadMetaval:
         ).write_text("<html/>")
         make_viral_taxids_dir(tmp_path, "kraken2", [(2886042, "Shigella-virus-Moo19")])
         result = read_metaval(str(tmp_path))
-        assert result["results"][0]["taxon_id"] == 2886042
+        assert result.results[0].taxon_id == 2886042
 
     def test_taxon_id_is_none_when_not_in_taxid_map(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
@@ -497,7 +496,7 @@ class TestReadMetaval:
             / "SRR13439790_kraken2_Unknown-virus_mappingorganism_Unknown-virus_report.html"
         ).write_text("<html/>")
         result = read_metaval(str(tmp_path))
-        assert result["results"][0]["taxon_id"] is None
+        assert result.results[0].taxon_id is None
 
     def test_igv_within_size_limit_is_read(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
@@ -507,9 +506,9 @@ class TestReadMetaval:
         )
         html_file.write_text("<html>content</html>")
         result = read_metaval(str(tmp_path))
-        org = result["results"][0]["organisms"][0]
-        assert org["igv_file_path"] == str(html_file)
-        assert org["igv_too_large"] is False
+        org = result.results[0].organisms[0]
+        assert org.igv_file_path == str(html_file)
+        assert org.igv_too_large is False
 
     def test_igv_exceeding_size_limit_sets_too_large(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
@@ -519,9 +518,9 @@ class TestReadMetaval:
         )
         large_file.write_bytes(b"x" * (10 * 1024 * 1024 + 1))
         result = read_metaval(str(tmp_path))
-        org = result["results"][0]["organisms"][0]
-        assert org["igv_too_large"] is True
-        assert org["igv_file_path"] == str(large_file)
+        org = result.results[0].organisms[0]
+        assert org.igv_too_large is True
+        assert org.igv_file_path == str(large_file)
 
     def test_blastn_hits_matched_to_result(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
@@ -537,7 +536,7 @@ class TestReadMetaval:
             program="blastn",
         )
         result = read_metaval(str(tmp_path))
-        assert len(result["results"][0]["blast"]["blastn"]) == 2
+        assert len(result.results[0].blast.blastn) == 2
 
     def test_blastx_hits_matched_to_result(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
@@ -553,27 +552,28 @@ class TestReadMetaval:
             program="blastx",
         )
         result = read_metaval(str(tmp_path))
-        assert len(result["results"][0]["blast"]["blastx"]) == 1
+        assert len(result.results[0].blast.blastx) == 1
 
-    def test_no_blast_data_gives_empty_dicts(self, tmp_path):
+    def test_no_blast_data_gives_empty_lists(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
         (
             igv_dir
             / "SRR13439790_kraken2_Shigella-virus-Moo19_mappingorganism_Shigella-virus-Moo19_report.html"
         ).write_text("<html/>")
         result = read_metaval(str(tmp_path))
-        assert result["results"][0]["blast"] == {"blastn": [], "blastx": []}
+        assert result.results[0].blast.blastn == []
+        assert result.results[0].blast.blastx == []
 
     def test_unrecognised_igv_filenames_ignored(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)
         (igv_dir / "not_a_valid_filename.html").write_text("<html/>")
         result = read_metaval(str(tmp_path))
-        assert result["results"] == []
+        assert result.results == []
 
-    def test_pipeline_info_key_present_in_result(self, tmp_path):
+    def test_pipeline_info_attribute_present(self, tmp_path):
         make_igv_dir(tmp_path)
         result = read_metaval(str(tmp_path))
-        assert "pipeline_info" in result
+        assert hasattr(result, "pipeline_info")
 
 
 # ---------------------------------------------------------------------------
@@ -601,16 +601,15 @@ class TestReadMetavalPipelineInfo:
         result = _read_metaval_pipeline_info(tmp_path)
         assert result is not None
         assert (
-            result["pipeline_configuration"]["pipeline_name"]
+            result.pipeline_configuration.pipeline_name
             == "genomic-medicine-sweden/metaval"
         )
-        assert result["pipeline_configuration"]["nextflow"] == "23.10.1"
+        assert result.pipeline_configuration.nextflow == "23.10.1"
 
     def test_returns_none_when_yml_is_invalid(self, tmp_path):
         pipeline_info_dir = tmp_path / "pipeline_info"
         pipeline_info_dir.mkdir()
         yml = pipeline_info_dir / "versions.yml"
         yml.write_text("not: a: valid: pipeline: info\n")
-        # Missing 'Workflow' key — read_pipeline_info raises ValueError, caught silently
         result = _read_metaval_pipeline_info(tmp_path)
         assert result is None

@@ -13,6 +13,12 @@ from app.ingestor.taxpasta_reader import read_taxpasta
 from app.ingestor.multiqc_reader import read_multiqc
 from app.ingestor.pipeline_info_reader import read_pipeline_info
 from app.ingestor.metaval_reader import read_metaval
+from app.ingestor.models import (
+    MetavalOutput,
+    MultiQCRaw,
+    PipelineInfoOutput,
+    TaxonEntry,
+)
 
 
 async def _upsert_subject(db: AsyncIOMotorDatabase, subject_id: str) -> ObjectId:
@@ -160,8 +166,8 @@ async def _upsert_taxa_from_profiles(profiles: list, db: AsyncIOMotorDatabase) -
 async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     now = datetime.now(timezone.utc)
 
-    pipeline_info = read_pipeline_info(request.pipeline_info_path)
-    qc_data = read_multiqc(request.multiqc_path)
+    pipeline_info: PipelineInfoOutput = read_pipeline_info(request.pipeline_info_path)
+    qc_data: MultiQCRaw = read_multiqc(request.multiqc_path)
 
     existing_case = await db["cases"].find_one({"case_id": request.case_id})
     if existing_case:
@@ -181,7 +187,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
         "sample_ids": [],
         "classifiers": classifier_docs,
         "has_krona": any(clf.krona for clf in request.classifiers),
-        "pipeline_info": pipeline_info,
+        "pipeline_info": pipeline_info.model_dump(),
         "review": {
             "reviewed": False,
             "reviewed_by": None,
@@ -230,12 +236,12 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             col = s.columns.get(clf.name)
             if not col:
                 continue
-            profile = read_taxpasta(clf.taxpasta, col)
+            taxon_entries: list[TaxonEntry] = read_taxpasta(clf.taxpasta, col)
             profiles.append(
                 {
                     "classifier": clf.name,
                     "classifier_db": clf.db,
-                    "profile": profile,
+                    "profile": [e.model_dump() for e in taxon_entries],
                 }
             )
             clf_qc = _extract_classifier_qc(qc_data, clf.name, col)
@@ -273,7 +279,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             "taxprofiler": {
                 **base_qc,
                 "classifiers": classifier_qc,
-                "pipeline_info": pipeline_info,
+                "pipeline_info": pipeline_info.model_dump(),
             },
             "profiles": profiles,
             "outbreak_taxa": outbreak_taxa,
@@ -304,13 +310,17 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     )
 
     if request.metaval:
-        metaval_data = read_metaval(request.metaval.metaval_dir)
-        metaval_results = metaval_data["results"]
+        metaval_data: MetavalOutput = read_metaval(request.metaval.metaval_dir)
+        metaval_results = metaval_data.results
 
-        if metaval_data.get("pipeline_info"):
+        if metaval_data.pipeline_info:
             await db["cases"].update_one(
                 {"_id": case_object_id},
-                {"$set": {"metaval_pipeline_info": metaval_data["pipeline_info"]}},
+                {
+                    "$set": {
+                        "metaval_pipeline_info": metaval_data.pipeline_info.model_dump()
+                    }
+                },
             )
 
         from app.database import get_blob_store
@@ -319,7 +329,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             existing_sample: dict | None = await db["samples"].find_one(
                 {
                     "case_id": case_object_id,
-                    "sample_id": r["sample_name"],
+                    "sample_id": r.sample_name,
                 }
             )
             sample_object_id = existing_sample["_id"] if existing_sample else None
@@ -327,53 +337,53 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             # Upload IGV HTML files
             async def _upload_igv(org):
                 igv_key = None
-                if not org.get("igv_too_large") and org.get("igv_file_path"):
+                if not org.igv_too_large and org.igv_file_path:
                     igv_key = (
-                        f"igv/{case_object_id}/{r['sample_name']}/"
-                        f"{r['classifier']}/{org['organism_name']}.html"
+                        f"igv/{case_object_id}/{r.sample_name}/"
+                        f"{r.classifier}/{org.organism_name}.html"
                     )
-                    html = Path(org["igv_file_path"]).read_text(encoding="utf-8")
+                    html = Path(org.igv_file_path).read_text(encoding="utf-8")
                     await get_blob_store().put(igv_key, html)
                 return {
-                    "organism_name": org["organism_name"],
+                    "organism_name": org.organism_name,
                     "igv_key": igv_key,
-                    "igv_file_size_bytes": org["igv_file_size_bytes"],
-                    "igv_too_large": org["igv_too_large"],
+                    "igv_file_size_bytes": org.igv_file_size_bytes,
+                    "igv_too_large": org.igv_too_large,
                 }
 
             organisms = list(
-                await asyncio.gather(*[_upload_igv(org) for org in r["organisms"]])
+                await asyncio.gather(*[_upload_igv(org) for org in r.organisms])
             )
 
             # Upload verification data (scaffolds, contigs, or raw reads)
-            vd = r.get("verification_data", {})
-            vd_type = vd.get("type")
-            vd_store = {
-                "type": vd_type,
-                "count": vd.get("count", 0),
-                "avg_length": vd.get("avg_length", 0),
-                "file_count": vd.get("file_count", 1),
+            vd = r.verification_data
+            vd_store: dict[str, object] = {
+                "type": vd.type,
+                "count": vd.count,
+                "avg_length": vd.avg_length,
+                "file_count": vd.file_count,
             }
 
-            if vd_type in ("scaffolds", "contigs"):
-                fasta_path = vd.get("path")
-                if fasta_path and Path(fasta_path).exists():
+            if vd.type in ("scaffolds", "contigs"):
+                if vd.path and Path(vd.path).exists():
                     blob_key = (
-                        f"verification_data/{case_object_id}/{r['sample_name']}/"
-                        f"{r['classifier']}/{r['taxon_name']}_{vd_type}.fa"
+                        f"verification_data/{case_object_id}/{r.sample_name}/"
+                        f"{r.classifier}/{r.taxon_name}_{vd.type}.fa"
                     )
-                    content = Path(fasta_path).read_text(encoding="utf-8")
+                    content = Path(vd.path).read_text(encoding="utf-8")
                     await get_blob_store().put(blob_key, content)
                     vd_store["blob_key"] = blob_key
-            elif vd_type == "raw_reads":
-                for read_num, path_key in [("1", "read_1_path"), ("2", "read_2_path")]:
-                    fasta_path = vd.get(path_key)
-                    if fasta_path and Path(fasta_path).exists():
+            elif vd.type == "raw_reads":
+                for read_num, path_val in [
+                    ("1", vd.read_1_path),
+                    ("2", vd.read_2_path),
+                ]:
+                    if path_val and Path(path_val).exists():
                         blob_key = (
-                            f"verification_data/{case_object_id}/{r['sample_name']}/"
-                            f"{r['classifier']}/{r['taxon_name']}_read_{read_num}.fa"
+                            f"verification_data/{case_object_id}/{r.sample_name}/"
+                            f"{r.classifier}/{r.taxon_name}_read_{read_num}.fa"
                         )
-                        content = Path(fasta_path).read_text(encoding="utf-8")
+                        content = Path(path_val).read_text(encoding="utf-8")
                         await get_blob_store().put(blob_key, content)
                         vd_store[f"read_{read_num}_key"] = blob_key
 
@@ -381,12 +391,12 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
                 {
                     "case_id": case_object_id,
                     "sample_id": sample_object_id,
-                    "sample_name": r["sample_name"],
-                    "classifier": r["classifier"],
-                    "taxon_id": r["taxon_id"],
-                    "taxon_name": r["taxon_name"],
+                    "sample_name": r.sample_name,
+                    "classifier": r.classifier,
+                    "taxon_id": r.taxon_id,
+                    "taxon_name": r.taxon_name,
                     "organisms": organisms,
-                    "blast": r["blast"],
+                    "blast": r.blast.model_dump(),
                     "verification_data": vd_store,
                     "ingested_at": now,
                 }
@@ -400,14 +410,14 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     }
 
 
-def _extract_classifier_qc(qc_data: dict, classifier_name: str, col: str) -> dict:
+def _extract_classifier_qc(qc_data: MultiQCRaw, classifier_name: str, col: str) -> dict:
     """Extract classifier-specific QC stats from multiqc data."""
 
     if classifier_name == "kraken2":
         key = col.split(".kraken2")[0]
-        records = qc_data.get("kraken2", {}).get(key)
+        records = qc_data.kraken2.get(key)
     elif classifier_name == "centrifuge":
-        records = qc_data.get("centrifuge", {}).get(col)
+        records = qc_data.centrifuge.get(col)
     else:
         return {}
 
@@ -442,12 +452,12 @@ def _extract_classifier_qc(qc_data: dict, classifier_name: str, col: str) -> dic
     }
 
 
-def _extract_base_qc(qc_data: dict, sample_id: str) -> dict:
+def _extract_base_qc(qc_data: MultiQCRaw, sample_id: str) -> dict:
     """Extract classifier-agnostic QC stats: fastp, bowtie2, fastqc."""
     stats = {}
 
-    fastp_all = qc_data.get("fastp", {})
-    bowtie2_all = qc_data.get("bowtie2", {})
+    fastp_all = qc_data.fastp
+    bowtie2_all = qc_data.bowtie2
 
     fastp_lanes = {
         k: v
@@ -536,7 +546,7 @@ def _extract_base_qc(qc_data: dict, sample_id: str) -> dict:
             "overall_alignment_rate": overall_rate,
         }
 
-    fastqc_all = qc_data.get("fastqc", {})
+    fastqc_all = qc_data.fastqc
     fastqc_fwd_lanes = {
         k: v
         for k, v in fastqc_all.items()

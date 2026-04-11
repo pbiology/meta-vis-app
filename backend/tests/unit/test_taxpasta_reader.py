@@ -50,18 +50,18 @@ def test_read_taxpasta_returns_records(tmp_path):
 def test_read_taxpasta_record_fields(tmp_path):
     path = write_tsv(tmp_path, MINIMAL_TSV)
     records = read_taxpasta(path, "SAMPLE1")
-    record = next(r for r in records if r["taxon_id"] == 9606)
-    assert record["name"] == "Homo sapiens"
-    assert record["rank"] == "species"
-    assert record["abundance"] == 100.0
-    assert record["superkingdom"] == "Eukaryota"
+    record = next(r for r in records if r.taxon_id == 9606)
+    assert record.name == "Homo sapiens"
+    assert record.rank == "species"
+    assert record.abundance == 100.0
+    assert record.superkingdom == "Eukaryota"
 
 
 def test_read_taxpasta_superkingdom_bacteria(tmp_path):
     path = write_tsv(tmp_path, MINIMAL_TSV)
     records = read_taxpasta(path, "SAMPLE1")
-    record = next(r for r in records if r["taxon_id"] == 1279)
-    assert record["superkingdom"] == "Bacteria"
+    record = next(r for r in records if r.taxon_id == 1279)
+    assert record.superkingdom == "Bacteria"
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +83,7 @@ def test_zero_abundance_rows_filtered(tmp_path):
 def test_no_lineage_column_superkingdom_is_none(tmp_path):
     path = write_tsv(tmp_path, NO_LINEAGE_TSV)
     records = read_taxpasta(path, "SAMPLE1")
-    assert all(r["superkingdom"] is None for r in records)
+    assert all(r.superkingdom is None for r in records)
 
 
 # ---------------------------------------------------------------------------
