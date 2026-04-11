@@ -4,6 +4,8 @@ import pandas as pd
 from pathlib import Path
 from typing import Optional
 
+from app.ingestor.models import TaxonEntry
+
 
 # Superkingdom names as they appear in the lineage string
 SUPERKINGDOM_NAMES = {
@@ -28,7 +30,7 @@ def _superkingdom_from_lineage(lineage: str) -> Optional[str]:
 def read_taxpasta(
     file_path: str,
     sample_column: str,
-) -> list[dict]:
+) -> list[TaxonEntry]:
     path = Path(file_path)
 
     if not path.exists():
@@ -69,10 +71,13 @@ def read_taxpasta(
         )
     ].copy()
 
-    records = []
+    records: list[TaxonEntry] = []
     for row in df.itertuples(index=False):
         taxon_id = int(row.taxon_id)  # type: ignore[arg-type]
-        name = row.name if row.name and not pd.isna(row.name) else str(taxon_id)
+        raw_name = getattr(row, "name", None)
+        name: str = (
+            str(raw_name) if raw_name and not pd.isna(raw_name) else str(taxon_id)
+        )
         lineage = getattr(row, "lineage", None) if has_lineage else None
         superkingdom = (
             _superkingdom_from_lineage(lineage) if isinstance(lineage, str) else None
@@ -85,13 +90,13 @@ def read_taxpasta(
         ):
             rank_val = None
         records.append(
-            {
-                "taxon_id": taxon_id,
-                "name": name,
-                "rank": rank_val,
-                "abundance": float(row.abundance),  # type: ignore[arg-type]
-                "superkingdom": superkingdom,
-            }
+            TaxonEntry(
+                taxon_id=taxon_id,
+                name=name,
+                rank=rank_val,
+                abundance=float(row.abundance),  # type: ignore[arg-type]
+                superkingdom=superkingdom,
+            )
         )
 
     return records

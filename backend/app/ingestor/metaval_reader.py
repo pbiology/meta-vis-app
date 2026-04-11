@@ -1,15 +1,23 @@
 # app/ingestor/metaval_reader.py
 
-import os
 import re
 from pathlib import Path
 from typing import Optional
+
+from app.ingestor.models import (
+    BlastHits,
+    IgvOrganism,
+    MetavalOutput,
+    MetavalResult,
+    PipelineInfoOutput,
+    VerificationData,
+)
 
 
 MAX_IGV_SIZE = 10 * 1024 * 1024  # 10 MB
 
 
-def _parse_igv_filename(filename: str) -> Optional[dict]:
+def _parse_igv_filename(filename: str) -> Optional[dict[str, str]]:
     """
     Parse an IGV report filename into its components.
     Pattern: {sample_name}_{classifier}_{taxon_name}_mappingorganism_{organism_name}_report.html
@@ -28,7 +36,7 @@ def _parse_igv_filename(filename: str) -> Optional[dict]:
     }
 
 
-def _read_viral_taxids(metaval_dir: Path) -> dict:
+def _read_viral_taxids(metaval_dir: Path) -> dict[tuple[str, str], int]:
     """
     Read all viral_taxids TSV files and return a dict of
     {(classifier, taxon_name): taxon_id}
@@ -39,11 +47,9 @@ def _read_viral_taxids(metaval_dir: Path) -> dict:
         return taxid_map
 
     for tsv_file in taxids_dir.glob("*_viral_taxids.tsv"):
-        # filename: {sample_name}_{classifier}_viral_taxids.tsv
         stem = tsv_file.stem  # e.g. SRR13439790_kraken2_viral_taxids
         parts = stem.split("_")
-        # find classifier
-        clf = None
+        clf: Optional[str] = None
         for c in ["kraken2", "centrifuge", "diamond"]:
             if c in parts:
                 clf = c
@@ -66,15 +72,16 @@ def _read_viral_taxids(metaval_dir: Path) -> dict:
     return taxid_map
 
 
-def _read_blast(metaval_dir: Path) -> dict:
+def _read_blast(
+    metaval_dir: Path,
+) -> dict[tuple[str, str], dict[str, list[dict[str, str]]]]:
     """
     Scan blast/blastn/ and blast/blastx/ for summary files.
     Returns a dict keyed by (name_part, classifier) ->
       {'blastn': [...rows], 'blastx': [...rows]}
-    where name_part is "{sample_name}_{taxon_name}".
     Only reads *_filtered_summary.txt files with content.
     """
-    results: dict[tuple, dict] = {}
+    results: dict[tuple[str, str], dict[str, list[dict[str, str]]]] = {}
 
     for program in ("blastn", "blastx"):
         program_dir = metaval_dir / "blast" / program
@@ -82,9 +89,9 @@ def _read_blast(metaval_dir: Path) -> dict:
             continue
 
         suffix = (
-            f"_blast_filtered_summary.txt"
+            "_blast_filtered_summary.txt"
             if program == "blastn"
-            else f"_blastx_filtered_summary.txt"
+            else "_blastx_filtered_summary.txt"
         )
 
         for clf_dir in program_dir.iterdir():
@@ -97,9 +104,9 @@ def _read_blast(metaval_dir: Path) -> dict:
                     continue
                 stem = summary_file.stem
                 name_part = stem.replace(
-                    f"_blast_filtered_summary"
+                    "_blast_filtered_summary"
                     if program == "blastn"
-                    else f"_blastx_filtered_summary",
+                    else "_blastx_filtered_summary",
                     "",
                 )
 
@@ -108,7 +115,7 @@ def _read_blast(metaval_dir: Path) -> dict:
                 if len(lines) < 2:
                     continue
                 headers = lines[0].strip().split("\t")
-                rows = []
+                rows: list[dict[str, str]] = []
                 for line in lines[1:]:
                     cols = line.strip().split("\t")
                     if cols and len(cols) == len(headers):
@@ -122,11 +129,11 @@ def _read_blast(metaval_dir: Path) -> dict:
     return results
 
 
-def _fasta_stats(path: Path) -> dict:
+def _fasta_stats(path: Path) -> dict[str, int | float]:
     """
     Compute sequence count and average length for a FASTA file.
     """
-    sequences = []
+    sequences: list[int] = []
     current_len = 0
     with open(path) as f:
         for line in f:
@@ -144,17 +151,14 @@ def _fasta_stats(path: Path) -> dict:
     return {"count": count, "avg_length": avg}
 
 
-def _read_extracted_reads(metaval_dir: Path) -> dict:
+def _read_extracted_reads(
+    metaval_dir: Path,
+) -> dict[tuple[str, str], dict[str, object]]:
     """
     Scan extracted_reads/{classifier}/ for paired FASTA files.
-    Returns a dict keyed by (name_part, classifier) ->
-      {'read_1_path': str, 'read_2_path': str | None, 'count': int, 'avg_length': float}
-    where name_part is "{sample_name}_{taxon_name}" (same convention as blast).
-
-    Filename pattern:
-      {sample_name}_{taxon_name}.extracted_{classifier}_read_{1|2}.fa
+    Returns intermediate dicts keyed by (name_part, classifier).
     """
-    reads_map: dict[tuple[str, str], dict] = {}
+    reads_map: dict[tuple[str, str], dict[str, object]] = {}
     reads_dir = metaval_dir / "extracted_reads"
     if not reads_dir.exists():
         return reads_map
@@ -167,7 +171,7 @@ def _read_extracted_reads(metaval_dir: Path) -> dict:
         for fa_file in clf_dir.glob(f"*.extracted_{classifier}_read_1.fa"):
             name_part = fa_file.name.replace(f".extracted_{classifier}_read_1.fa", "")
             read_2 = clf_dir / fa_file.name.replace("_read_1.fa", "_read_2.fa")
-            read_2_path = str(read_2) if read_2.exists() else None
+            read_2_path: Optional[str] = str(read_2) if read_2.exists() else None
             stats = _fasta_stats(fa_file)
             reads_map[(name_part, classifier)] = {
                 "read_1_path": str(fa_file),
@@ -180,19 +184,13 @@ def _read_extracted_reads(metaval_dir: Path) -> dict:
     return reads_map
 
 
-def _read_spades(metaval_dir: Path) -> dict:
+def _read_spades(metaval_dir: Path) -> dict[tuple[str, str], dict[str, object]]:
     """
     Scan spades/{classifier}/ for assembly output.
     Prefers scaffolds.fa over contigs.fa.
-    Returns a dict keyed by (name_part, classifier) ->
-      {'type': 'scaffolds'|'contigs', 'path': str, 'count': int, 'avg_length': float}
-    where name_part is "{sample_name}_{taxon_name}".
-
-    Filename pattern:
-      {sample_name}_{taxon_name}.scaffolds.fa
-      {sample_name}_{taxon_name}.contigs.fa
+    Returns intermediate dicts keyed by (name_part, classifier).
     """
-    spades_map: dict[tuple[str, str], dict] = {}
+    spades_map: dict[tuple[str, str], dict[str, object]] = {}
     spades_dir = metaval_dir / "spades"
     if not spades_dir.exists():
         return spades_map
@@ -202,7 +200,6 @@ def _read_spades(metaval_dir: Path) -> dict:
             continue
         classifier = clf_dir.name
 
-        # Index available files by name_part
         scaffolds = {
             f.name.replace(".scaffolds.fa", ""): f
             for f in clf_dir.glob("*.scaffolds.fa")
@@ -230,10 +227,10 @@ def _read_spades(metaval_dir: Path) -> dict:
     return spades_map
 
 
-def _read_metaval_pipeline_info(metaval_dir: Path) -> Optional[dict]:
+def _read_metaval_pipeline_info(metaval_dir: Path) -> Optional[PipelineInfoOutput]:
     """
     Read the metaval software versions file from pipeline_info/.
-    Returns the same structure as pipeline_info_reader.read_pipeline_info.
+    Returns a PipelineInfoOutput or None if the file is absent or invalid.
     """
     pipeline_info_dir = metaval_dir / "pipeline_info"
     if not pipeline_info_dir.exists():
@@ -249,7 +246,7 @@ def _read_metaval_pipeline_info(metaval_dir: Path) -> Optional[dict]:
         return None
 
 
-def read_metaval(metaval_dir: str) -> dict:
+def read_metaval(metaval_dir: str) -> MetavalOutput:
     metaval_path = Path(metaval_dir)
     igv_dir = metaval_path / "igv"
 
@@ -265,7 +262,7 @@ def read_metaval(metaval_dir: str) -> dict:
     metaval_pipeline = _read_metaval_pipeline_info(metaval_path)
 
     # Group IGV files by (sample_name, classifier, taxon_name)
-    groups: dict[tuple, list] = {}
+    groups: dict[tuple[str, str, str], list[IgvOrganism]] = {}
     for html_file in sorted(igv_dir.glob("*_report.html")):
         parsed = _parse_igv_filename(html_file.name)
         if not parsed:
@@ -274,58 +271,73 @@ def read_metaval(metaval_dir: str) -> dict:
         if key not in groups:
             groups[key] = []
         file_size = html_file.stat().st_size
-        too_large = file_size > MAX_IGV_SIZE
         groups[key].append(
-            {
-                "organism_name": parsed["organism_name"],
-                "igv_file_path": str(html_file),
-                "igv_file_size_bytes": file_size,
-                "igv_too_large": too_large,
-            }
+            IgvOrganism(
+                organism_name=parsed["organism_name"],
+                igv_file_path=str(html_file),
+                igv_file_size_bytes=file_size,
+                igv_too_large=file_size > MAX_IGV_SIZE,
+            )
         )
 
-    results = []
+    results: list[MetavalResult] = []
     for (sample_name, classifier, taxon_name), organisms in groups.items():
         taxon_id = taxid_map.get((classifier, taxon_name))
         name_part = f"{sample_name}_{taxon_name}"
 
-        blast_hits = blast_data.get(
+        raw_blast = blast_data.get(
             (name_part, classifier), {"blastn": [], "blastx": []}
         )
-
-        # Prefer spades assembly over raw reads if available
-        spades = spades_data.get((name_part, classifier))
-        reads = reads_data.get((name_part, classifier), {})
-        if spades:
-            verification_data = {
-                "type": spades["type"],  # 'scaffolds' or 'contigs'
-                "path": spades["path"],
-                "count": spades["count"],
-                "avg_length": spades["avg_length"],
-            }
-        else:
-            verification_data = {
-                "type": "raw_reads",
-                "read_1_path": reads.get("read_1_path"),
-                "read_2_path": reads.get("read_2_path"),
-                "file_count": reads.get("file_count", 1),
-                "count": reads.get("count", 0),
-                "avg_length": reads.get("avg_length", 0),
-            }
-
-        results.append(
-            {
-                "sample_name": sample_name,
-                "classifier": classifier,
-                "taxon_id": taxon_id,
-                "taxon_name": taxon_name,
-                "organisms": organisms,
-                "blast": blast_hits,
-                "verification_data": verification_data,
-            }
+        blast_hits = BlastHits(
+            blastn=raw_blast["blastn"],
+            blastx=raw_blast["blastx"],
         )
 
-    return {
-        "results": results,
-        "pipeline_info": metaval_pipeline,
-    }
+        spades = spades_data.get((name_part, classifier))
+        reads = reads_data.get((name_part, classifier), {})
+
+        if spades:
+            spades_count = spades["count"]
+            spades_avg = spades["avg_length"]
+            assert isinstance(spades_count, (int, float))
+            assert isinstance(spades_avg, (int, float))
+            verification_data = VerificationData(
+                type=str(spades["type"]),
+                path=str(spades["path"]),
+                count=int(spades_count),
+                avg_length=float(spades_avg),
+            )
+        else:
+            reads_count = reads.get("count", 0)
+            reads_avg = reads.get("avg_length", 0)
+            reads_file_count = reads.get("file_count")
+            assert isinstance(reads_count, (int, float))
+            assert isinstance(reads_avg, (int, float))
+            verification_data = VerificationData(
+                type="raw_reads",
+                read_1_path=str(reads["read_1_path"])
+                if reads.get("read_1_path")
+                else None,
+                read_2_path=str(reads["read_2_path"])
+                if reads.get("read_2_path")
+                else None,
+                file_count=int(reads_file_count)
+                if isinstance(reads_file_count, (int, float))
+                else 1,
+                count=int(reads_count),
+                avg_length=float(reads_avg),
+            )
+
+        results.append(
+            MetavalResult(
+                sample_name=sample_name,
+                classifier=classifier,
+                taxon_id=taxon_id,
+                taxon_name=taxon_name,
+                organisms=organisms,
+                blast=blast_hits,
+                verification_data=verification_data,
+            )
+        )
+
+    return MetavalOutput(results=results, pipeline_info=metaval_pipeline)

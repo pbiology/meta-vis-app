@@ -4,6 +4,12 @@ from datetime import datetime, date
 from typing import Optional, List, Literal, Dict, Any
 from pydantic import BaseModel, ConfigDict
 
+from app.ingestor.models import (
+    TaxonEntry as TaxonEntry,
+    PipelineConfiguration as PipelineConfiguration,
+    PipelineInfoOutput as PipelineInfo,  # re-exported under the existing name used by the API layer
+)
+
 
 class _Base(BaseModel):
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
@@ -12,14 +18,6 @@ class _Base(BaseModel):
 # ---------------------------------------------------------------------------
 # Taxonomic profile
 # ---------------------------------------------------------------------------
-
-
-class TaxonEntry(BaseModel):
-    taxon_id: int
-    name: str
-    rank: Optional[str] = None
-    abundance: float
-    superkingdom: Optional[str] = None  # Bacteria | Archaea | Eukaryota | Viruses
 
 
 class ClassifierProfile(BaseModel):
@@ -68,17 +66,6 @@ class Bowtie2Stats(_Base):
     aligned_multi: Optional[int] = None
     aligned_none: Optional[int] = None
     overall_alignment_rate: Optional[float] = None
-
-
-class PipelineConfiguration(_Base):
-    pipeline_name: Optional[str] = None
-    pipeline_version: Optional[str] = None
-    nextflow: Optional[str] = None
-
-
-class PipelineInfo(_Base):
-    software_used: Optional[Dict[str, Any]] = None
-    pipeline_configuration: Optional[PipelineConfiguration] = None
 
 
 class TaxprofilerStats(_Base):
