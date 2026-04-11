@@ -1,12 +1,29 @@
 # tests/unit/test_orchestrator.py
 
 import pytest
+from app.ingestor.models import MultiQCRaw
 from app.ingestor.orchestrator import _extract_classifier_qc, _extract_base_qc
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def make_multiqc(
+    kraken2: dict | None = None,
+    centrifuge: dict | None = None,
+    fastqc: dict | None = None,
+    fastp: dict | None = None,
+    bowtie2: dict | None = None,
+) -> MultiQCRaw:
+    return MultiQCRaw(
+        kraken2=kraken2 or {},
+        centrifuge=centrifuge or {},
+        fastqc=fastqc or {},
+        fastp=fastp or {},
+        bowtie2=bowtie2 or {},
+    )
 
 
 def make_kraken2_records(
@@ -76,9 +93,9 @@ def make_bowtie2_lane(total=900000, one=100000, multi=50000, none=750000, rate=1
 class TestExtractClassifierQcKraken2:
     def _qc_data(self, col="SAMPLE1_k2_pluspf.kraken2.kraken2.report", records=None):
         key = col.split(".kraken2")[0]
-        return {
-            "kraken2": {key: make_kraken2_records() if records is None else records}
-        }
+        return make_multiqc(
+            kraken2={key: make_kraken2_records() if records is None else records}
+        )
 
     def test_happy_path_returns_expected_fields(self):
         result = _extract_classifier_qc(
@@ -124,7 +141,7 @@ class TestExtractClassifierQcKraken2:
     def test_column_suffix_stripped_correctly(self):
         col = "MYSAMPLE_k2_pluspf.kraken2.kraken2.report"
         key = "MYSAMPLE_k2_pluspf"
-        qc_data = {"kraken2": {key: make_kraken2_records()}}
+        qc_data = make_multiqc(kraken2={key: make_kraken2_records()})
         result = _extract_classifier_qc(qc_data, "kraken2", col)
         assert result != {}
 
@@ -153,7 +170,9 @@ class TestExtractClassifierQcKraken2:
 
     def test_missing_key_returns_empty_dict(self):
         result = _extract_classifier_qc(
-            {"kraken2": {}}, "kraken2", "SAMPLE1_k2_pluspf.kraken2.kraken2.report"
+            make_multiqc(kraken2={}),
+            "kraken2",
+            "SAMPLE1_k2_pluspf.kraken2.kraken2.report",
         )
         assert result == {}
 
@@ -173,7 +192,7 @@ class TestExtractClassifierQcKraken2:
 
 class TestExtractClassifierQcCentrifuge:
     def _qc_data(self, col="SAMPLE1_p_compressed+h+v.centrifuge", records=None):
-        return {"centrifuge": {col: records or make_centrifuge_records()}}
+        return make_multiqc(centrifuge={col: records or make_centrifuge_records()})
 
     def test_happy_path_returns_expected_fields(self):
         result = _extract_classifier_qc(
@@ -208,7 +227,7 @@ class TestExtractClassifierQcCentrifuge:
 
 
 def test_unknown_classifier_returns_empty_dict():
-    result = _extract_classifier_qc({"diamond": {}}, "diamond", "SAMPLE1")
+    result = _extract_classifier_qc(make_multiqc(), "diamond", "SAMPLE1")
     assert result == {}
 
 
@@ -219,11 +238,9 @@ def test_unknown_classifier_returns_empty_dict():
 
 class TestExtractBaseQcFastp:
     def _qc_data(self, sample_id="SAMPLE1", lane_suffix="_1", **kwargs):
-        return {
-            "fastp": {f"{sample_id}{lane_suffix}": make_fastp_lane(**kwargs)},
-            "bowtie2": {},
-            "fastqc": {},
-        }
+        return make_multiqc(
+            fastp={f"{sample_id}{lane_suffix}": make_fastp_lane(**kwargs)}
+        )
 
     def test_happy_path_fields_present(self):
         result = _extract_base_qc(self._qc_data(), "SAMPLE1")
@@ -248,31 +265,27 @@ class TestExtractBaseQcFastp:
         assert result["fastp"]["q30_rate"] == 0.92
 
     def test_multi_lane_reads_summed(self):
-        qc_data = {
-            "fastp": {
+        qc_data = make_multiqc(
+            fastp={
                 "SAMPLE1_1": make_fastp_lane(total_before=500000),
                 "SAMPLE1_2": make_fastp_lane(total_before=500000),
-            },
-            "bowtie2": {},
-            "fastqc": {},
-        }
+            }
+        )
         result = _extract_base_qc(qc_data, "SAMPLE1")
         assert result["fastp"]["total_reads_before_filtering"] == 1000000
 
     def test_multi_lane_rates_averaged(self):
-        qc_data = {
-            "fastp": {
+        qc_data = make_multiqc(
+            fastp={
                 "SAMPLE1_1": make_fastp_lane(q30=0.90),
                 "SAMPLE1_2": make_fastp_lane(q30=0.80),
-            },
-            "bowtie2": {},
-            "fastqc": {},
-        }
+            }
+        )
         result = _extract_base_qc(qc_data, "SAMPLE1")
         assert result["fastp"]["q30_rate"] == 0.85
 
     def test_sample_not_present_no_fastp_key(self):
-        result = _extract_base_qc({"fastp": {}, "bowtie2": {}, "fastqc": {}}, "SAMPLE1")
+        result = _extract_base_qc(make_multiqc(), "SAMPLE1")
         assert "fastp" not in result
 
 
@@ -283,11 +296,9 @@ class TestExtractBaseQcFastp:
 
 class TestExtractBaseQcBowtie2:
     def _qc_data(self, sample_id="SAMPLE1", lane_suffix="_1", **kwargs):
-        return {
-            "fastp": {},
-            "bowtie2": {f"{sample_id}{lane_suffix}": make_bowtie2_lane(**kwargs)},
-            "fastqc": {},
-        }
+        return make_multiqc(
+            bowtie2={f"{sample_id}{lane_suffix}": make_bowtie2_lane(**kwargs)}
+        )
 
     def test_happy_path_fields_present(self):
         result = _extract_base_qc(self._qc_data(), "SAMPLE1")
@@ -303,7 +314,7 @@ class TestExtractBaseQcBowtie2:
         assert result["bowtie2"]["total_reads"] == 900000
 
     def test_sample_not_present_no_bowtie2_key(self):
-        result = _extract_base_qc({"fastp": {}, "bowtie2": {}, "fastqc": {}}, "SAMPLE1")
+        result = _extract_base_qc(make_multiqc(), "SAMPLE1")
         assert "bowtie2" not in result
 
 
@@ -314,10 +325,8 @@ class TestExtractBaseQcBowtie2:
 
 class TestExtractBaseQcFastqc:
     def _qc_data(self, sample_id="SAMPLE1"):
-        return {
-            "fastp": {},
-            "bowtie2": {},
-            "fastqc": {
+        return make_multiqc(
+            fastqc={
                 f"{sample_id}_1_raw_1": {
                     "total_sequences": 500000,
                     "avg_sequence_length": 150.0,
@@ -330,8 +339,8 @@ class TestExtractBaseQcFastqc:
                     "percent_gc": 50.0,
                     "percent_fails": 3.0,
                 },
-            },
-        }
+            }
+        )
 
     def test_happy_path_fields_present(self):
         result = _extract_base_qc(self._qc_data(), "SAMPLE1")
@@ -348,7 +357,7 @@ class TestExtractBaseQcFastqc:
         assert result["fastqc"]["pct_gc_reverse"] == 50.0
 
     def test_sample_not_present_no_fastqc_key(self):
-        result = _extract_base_qc({"fastp": {}, "bowtie2": {}, "fastqc": {}}, "SAMPLE1")
+        result = _extract_base_qc(make_multiqc(), "SAMPLE1")
         assert "fastqc" not in result
 
 
@@ -358,19 +367,19 @@ class TestExtractBaseQcFastqc:
 
 
 def test_fastp_present_bowtie2_absent():
-    qc_data = {"fastp": {"SAMPLE1_1": make_fastp_lane()}, "bowtie2": {}, "fastqc": {}}
+    qc_data = make_multiqc(fastp={"SAMPLE1_1": make_fastp_lane()})
     result = _extract_base_qc(qc_data, "SAMPLE1")
     assert "fastp" in result
     assert "bowtie2" not in result
 
 
 def test_bowtie2_present_fastp_absent():
-    qc_data = {"fastp": {}, "bowtie2": {"SAMPLE1_1": make_bowtie2_lane()}, "fastqc": {}}
+    qc_data = make_multiqc(bowtie2={"SAMPLE1_1": make_bowtie2_lane()})
     result = _extract_base_qc(qc_data, "SAMPLE1")
     assert "bowtie2" in result
     assert "fastp" not in result
 
 
 def test_empty_qc_data_returns_empty_dict():
-    result = _extract_base_qc({"fastp": {}, "bowtie2": {}, "fastqc": {}}, "SAMPLE1")
+    result = _extract_base_qc(make_multiqc(), "SAMPLE1")
     assert result == {}

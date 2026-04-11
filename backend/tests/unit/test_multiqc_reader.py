@@ -28,16 +28,25 @@ FULL_MULTIQC = {
 
 
 def test_read_multiqc_returns_all_keys(tmp_path):
+    from app.ingestor.models import MultiQCRaw
+
     path = write_multiqc(tmp_path, FULL_MULTIQC)
     result = read_multiqc(path)
-    assert set(result.keys()) == {"kraken2", "centrifuge", "fastqc", "fastp", "bowtie2"}
+    assert isinstance(result, MultiQCRaw)
+    assert set(MultiQCRaw.model_fields.keys()) == {
+        "kraken2",
+        "centrifuge",
+        "fastqc",
+        "fastp",
+        "bowtie2",
+    }
 
 
 def test_read_multiqc_data_correct(tmp_path):
     path = write_multiqc(tmp_path, FULL_MULTIQC)
     result = read_multiqc(path)
-    assert result["kraken2"] == {"sample1": {"foo": 1}}
-    assert result["fastp"] == {"sample1": {"qux": 4}}
+    assert result.kraken2 == {"sample1": {"foo": 1}}
+    assert result.fastp == {"sample1": {"qux": 4}}
 
 
 # ---------------------------------------------------------------------------
@@ -48,16 +57,16 @@ def test_read_multiqc_data_correct(tmp_path):
 def test_missing_report_saved_raw_data_returns_empty_dicts(tmp_path):
     path = write_multiqc(tmp_path, {"something_else": {}})
     result = read_multiqc(path)
-    assert all(v == {} for v in result.values())
+    assert all(v == {} for v in result.model_dump().values())
 
 
 def test_partial_keys_missing_returns_empty_dict(tmp_path):
     data = {"report_saved_raw_data": {"multiqc_kraken": {"s": {}}}}
     path = write_multiqc(tmp_path, data)
     result = read_multiqc(path)
-    assert result["kraken2"] == {"s": {}}
-    assert result["centrifuge"] == {}
-    assert result["fastp"] == {}
+    assert result.kraken2 == {"s": {}}
+    assert result.centrifuge == {}
+    assert result.fastp == {}
 
 
 # ---------------------------------------------------------------------------

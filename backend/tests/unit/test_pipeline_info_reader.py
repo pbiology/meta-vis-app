@@ -30,33 +30,35 @@ VALID_PIPELINE_INFO = {
 # ---------------------------------------------------------------------------
 
 
-def test_read_pipeline_info_returns_dict(tmp_path):
+def test_read_pipeline_info_returns_model(tmp_path):
     path = write_yaml(tmp_path, VALID_PIPELINE_INFO)
     result = read_pipeline_info(path)
-    assert isinstance(result, dict)
+    from app.ingestor.models import PipelineInfoOutput
+
+    assert isinstance(result, PipelineInfoOutput)
 
 
 def test_pipeline_configuration_extracted(tmp_path):
     path = write_yaml(tmp_path, VALID_PIPELINE_INFO)
     result = read_pipeline_info(path)
-    config = result["pipeline_configuration"]
-    assert config["pipeline_name"] == "nf-core/taxprofiler"
-    assert config["pipeline_version"] == "1.2.0"
-    assert config["nextflow"] == "24.04.0"
+    config = result.pipeline_configuration
+    assert config.pipeline_name == "nf-core/taxprofiler"
+    assert config.pipeline_version == "1.2.0"
+    assert config.nextflow == "24.04.0"
 
 
 def test_software_used_excludes_workflow(tmp_path):
     path = write_yaml(tmp_path, VALID_PIPELINE_INFO)
     result = read_pipeline_info(path)
-    assert "Workflow" not in result["software_used"]
-    assert "Kraken2" in result["software_used"]
-    assert "Fastp" in result["software_used"]
+    assert "Workflow" not in result.software_used
+    assert "Kraken2" in result.software_used
+    assert "Fastp" in result.software_used
 
 
 def test_nextflow_version_correct(tmp_path):
     path = write_yaml(tmp_path, VALID_PIPELINE_INFO)
     result = read_pipeline_info(path)
-    assert result["pipeline_configuration"]["nextflow"] == "24.04.0"
+    assert result.pipeline_configuration.nextflow == "24.04.0"
 
 
 # ---------------------------------------------------------------------------
