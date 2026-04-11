@@ -43,3 +43,6 @@ meta_vis_app.egg-info/
 docs/_build/
 docs/.doctrees/
 .readthedocs.yml.bak
+
+# Claude Code
+.claude
