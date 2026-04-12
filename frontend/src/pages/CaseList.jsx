@@ -24,33 +24,36 @@ export default function CaseList() {
   const [searchParams, setSearchParams] = useSearchParams();
   const filter = searchParams.get("filter") ?? "all";
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await getCases({ page, search, reviewed: filter });
-      setData(result);
-      getOutbreaks(14)
-        .then((d) => setOutbreakCaseIds(new Set(d.outbreaks.flatMap((o) => o.case_ids))))
-        .catch(() => {});
-      getPathogenCases()
-        .then((d) => setPathogenCaseIds(new Set(d.case_ids)))
-        .catch(() => {});
-      getNtcContaminantCaseIds()
-        .then((d) => setNtcContaminantCaseIds(new Set(d.case_ids)))
-        .catch(() => {});
-    } catch {
-      setError("Failed to load cases.");
-    } finally {
-      getPathogenCases()
-        .then((d) => setPathogenCaseIds(new Set(d.case_ids)))
-        .catch(() => {});
-      getNtcContaminantCaseIds()
-        .then((d) => setNtcContaminantCaseIds(new Set(d.case_ids)))
-        .catch(() => {});
-      setLoading(false);
-    }
-  }, [page, search, filter]);
+  const load = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+      setError(null);
+      try {
+        const result = await getCases({ page, search, reviewed: filter });
+        setData(result);
+        getOutbreaks(14)
+          .then((d) => setOutbreakCaseIds(new Set(d.outbreaks.flatMap((o) => o.case_ids))))
+          .catch(() => {});
+        getPathogenCases()
+          .then((d) => setPathogenCaseIds(new Set(d.case_ids)))
+          .catch(() => {});
+        getNtcContaminantCaseIds()
+          .then((d) => setNtcContaminantCaseIds(new Set(d.case_ids)))
+          .catch(() => {});
+      } catch {
+        setError("Failed to load cases.");
+      } finally {
+        getPathogenCases()
+          .then((d) => setPathogenCaseIds(new Set(d.case_ids)))
+          .catch(() => {});
+        getNtcContaminantCaseIds()
+          .then((d) => setNtcContaminantCaseIds(new Set(d.case_ids)))
+          .catch(() => {});
+        setLoading(false);
+      }
+    },
+    [page, search, filter]
+  );
 
   useEffect(() => {
     load();
@@ -61,6 +64,16 @@ export default function CaseList() {
       .then(setStats)
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      load(true);
+      getCaseStats()
+        .then(setStats)
+        .catch(() => {});
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [load]);
 
   function handleSearch(e) {
     e.preventDefault();
