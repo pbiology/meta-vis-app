@@ -56,26 +56,39 @@ async def list_samples(
     )
     skip = (page - 1) * PAGE_SIZE
 
-    projection = {
-        "_id": 1,
-        "sample_id": 1,
-        "sample_type": 1,
-        "case_id_str": 1,
-        "order_date": 1,
-        "ingested_at": 1,
-        "review.reviewed": 1,
-        "taxprofiler.classifiers.kraken2.pct_unclassified": 1,
-        "taxprofiler.classifiers.kraken2.num_species": 1,
-    }
+    pipeline: list[dict] = [
+        {"$match": query},
+        {"$sort": {"order_date": -1, "ingested_at": -1}},
+        {"$skip": skip},
+        {"$limit": PAGE_SIZE},
+        # Fetch the parent case so we can return its live review status instead
+        # of the stale review field on the sample document (samples are never
+        # updated when a case is marked reviewed / unreviewed).
+        {
+            "$lookup": {
+                "from": "cases",
+                "localField": "case_id",
+                "foreignField": "_id",
+                "as": "_case",
+            }
+        },
+        {"$set": {"review": {"$first": "$_case.review"}}},
+        {
+            "$project": {
+                "_id": 1,
+                "sample_id": 1,
+                "sample_type": 1,
+                "case_id_str": 1,
+                "order_date": 1,
+                "ingested_at": 1,
+                "review": 1,
+                "taxprofiler.classifiers.kraken2.pct_unclassified": 1,
+                "taxprofiler.classifiers.kraken2.num_species": 1,
+            }
+        },
+    ]
 
-    docs = (
-        await db["samples"]
-        .find(query, projection)
-        .sort([("order_date", -1), ("ingested_at", -1)])
-        .skip(skip)
-        .limit(PAGE_SIZE)
-        .to_list(length=PAGE_SIZE)
-    )
+    docs = await db["samples"].aggregate(pipeline).to_list(length=PAGE_SIZE)
 
     return {
         "total": total,
