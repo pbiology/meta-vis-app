@@ -233,11 +233,19 @@ async def list_cases(
 async def get_case(
     case_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
 ):
     doc = await db["cases"].find_one({"case_id": case_id})
     if not doc:
         raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
+    await log_audit_event(
+        db,
+        action="view_case",
+        actor=current_user["username"],
+        resource_type="case",
+        resource_id=case_id,
+        outcome="success",
+    )
     doc = _serialise_case(doc)
     return CaseResponse.model_validate(doc).model_dump(mode="json")
 
