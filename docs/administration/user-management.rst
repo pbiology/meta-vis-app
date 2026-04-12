@@ -163,10 +163,9 @@ Check:
 
 **Audit trail for user actions**
 
-Currently, meta-vis-app doesn't have detailed audit logging. To add:
-1. Request feature from development team
-2. Or implement custom logging middleware
-3. Or use external audit tools (CloudTrail, etc.)
+meta-vis-app records all user management actions (create, role change, password
+reset, delete) in the ``audit_log`` collection. See :doc:`audit-log` for how to
+query the audit trail.
 
 Best practice recommendations
 =============================
@@ -203,7 +202,7 @@ Best practice recommendations
    - Request from development team
    - Single sign-on (SSO)
    - Department-specific access controls
-   - Formal audit logging
+   - Exporting the audit_log collection to a SIEM or long-term archive
 
 Integration with institutional directory
 ========================================
@@ -230,4 +229,5 @@ Next steps
 
 - :doc:`../user-guide/user-roles` - Understand user roles
 - :doc:`ingestion` - Manage ingest user accounts
-- Contact development team for advanced features (SSO, audit logging)
+- :doc:`audit-log` - Query and retain the audit trail
+- Contact development team for advanced features (SSO)

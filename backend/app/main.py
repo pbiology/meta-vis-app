@@ -4,9 +4,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.database import connect_db, close_db
 from app.config import settings, validate_jwt_secret
-from app.routers import auth, ingest, cases, samples, users, metaval, alerts, taxa, ntc
+from app.logging_config import setup_logging
+
+# Configure logging before any router imports so all modules inherit the handlers.
+setup_logging(settings.log_level)
+
+from app.database import connect_db, close_db  # noqa: E402
+from app.middleware import RequestLoggingMiddleware  # noqa: E402
+from app.routers import auth, ingest, cases, samples, users, metaval, alerts, taxa, ntc  # noqa: E402
 
 
 @asynccontextmanager
@@ -35,6 +41,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RequestLoggingMiddleware)
 
 # API routers
 app.include_router(auth.router, prefix="/api/v1")

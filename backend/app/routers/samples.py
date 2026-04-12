@@ -6,6 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 from app.models.sample import SampleResponse
 
+from app.audit import log_audit_event
 from app.database import get_db
 from app.auth.utils import get_current_user
 
@@ -102,11 +103,19 @@ async def list_samples(
 async def get_sample(
     sample_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user),
 ):
     doc = await db["samples"].find_one({"_id": _oid(sample_id)})
     if not doc:
         raise HTTPException(status_code=404, detail=f"Sample '{sample_id}' not found")
+    await log_audit_event(
+        db,
+        action="view_sample",
+        actor=current_user["username"],
+        resource_type="sample",
+        resource_id=sample_id,
+        outcome="success",
+    )
     doc = _serialise(doc)
     return SampleResponse.model_validate(doc).model_dump(mode="json")
 

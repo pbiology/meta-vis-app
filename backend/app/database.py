@@ -92,6 +92,14 @@ async def _ensure_indexes():
     await db["taxa"].create_index("superkingdom")
     await db["taxa"].create_index("name")
 
+    # audit_log — append-only; no TTL (clinical audit logs must not auto-expire)
+    await db["audit_log"].create_index([("timestamp", -1)])
+    await db["audit_log"].create_index([("actor", 1), ("timestamp", -1)])
+    await db["audit_log"].create_index([("action", 1), ("timestamp", -1)])
+    await db["audit_log"].create_index(
+        [("resource_type", 1), ("resource_id", 1), ("timestamp", -1)]
+    )
+
 
 async def close_db():
     global client

@@ -6,6 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
 from typing import Optional
 
+from app.audit import log_audit_event
 from app.database import get_db
 from app.auth.utils import get_current_user, require_role
 from app.config import settings
@@ -90,6 +91,14 @@ async def add_to_ignorelist(
     result = await db["outbreak_ignorelist"].insert_one(doc)
     _cache.clear()
     doc["_id"] = str(result.inserted_id)
+    await log_audit_event(
+        db,
+        action="ignorelist_add",
+        actor=current_user["username"],
+        resource_type="ignorelist_entry",
+        resource_id=str(payload.taxon_id),
+        outcome="success",
+    )
     return doc
 
 
@@ -99,7 +108,7 @@ async def add_to_ignorelist(
 async def remove_from_ignorelist(
     taxon_id: int,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(require_role("admin")),
+    current_user: dict = Depends(require_role("admin")),
 ):
     """Remove a taxon from ignorelist (admin only)."""
     result = await db["outbreak_ignorelist"].delete_one({"taxon_id": taxon_id})
@@ -110,6 +119,14 @@ async def remove_from_ignorelist(
             status_code=404, detail=f"Taxon {taxon_id} not found in ignorelist"
         )
 
+    await log_audit_event(
+        db,
+        action="ignorelist_remove",
+        actor=current_user["username"],
+        resource_type="ignorelist_entry",
+        resource_id=str(taxon_id),
+        outcome="success",
+    )
     return {"deleted": True, "taxon_id": taxon_id}
 
 
@@ -120,7 +137,7 @@ async def update_ignorelist_note(
     taxon_id: int,
     payload: IgnoreNotePayload,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(require_role("writer", "admin")),
+    current_user: dict = Depends(require_role("writer", "admin")),
 ):
     """Update reason for ignored taxon (writer or admin)."""
     result = await db["outbreak_ignorelist"].update_one(
@@ -134,6 +151,14 @@ async def update_ignorelist_note(
             status_code=404, detail=f"Taxon {taxon_id} not found in ignorelist"
         )
 
+    await log_audit_event(
+        db,
+        action="ignorelist_update",
+        actor=current_user["username"],
+        resource_type="ignorelist_entry",
+        resource_id=str(taxon_id),
+        outcome="success",
+    )
     return {"updated": True, "taxon_id": taxon_id}
 
 
@@ -371,6 +396,14 @@ async def add_pathogen(
     }
     result = await db["known_pathogens"].insert_one(doc)
     doc["_id"] = str(result.inserted_id)
+    await log_audit_event(
+        db,
+        action="pathogen_add",
+        actor=current_user["username"],
+        resource_type="pathogen_entry",
+        resource_id=str(payload.taxon_id),
+        outcome="success",
+    )
     return doc
 
 
@@ -380,11 +413,19 @@ async def add_pathogen(
 async def remove_pathogen(
     taxon_id: int,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(require_role("writer", "admin")),
+    current_user: dict = Depends(require_role("writer", "admin")),
 ):
     result = await db["known_pathogens"].delete_one({"taxon_id": taxon_id})
     if result.deleted_count == 0:
         raise HTTPException(
             status_code=404, detail=f"Taxon {taxon_id} not found in pathogens list"
         )
+    await log_audit_event(
+        db,
+        action="pathogen_remove",
+        actor=current_user["username"],
+        resource_type="pathogen_entry",
+        resource_id=str(taxon_id),
+        outcome="success",
+    )
     return {"deleted": True, "taxon_id": taxon_id}
