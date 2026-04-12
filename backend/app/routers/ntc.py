@@ -267,7 +267,9 @@ async def get_contaminant_alerts(
         _contaminant_alert_cache[window_days] = result
         return result
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
+    from datetime import date
+
+    cutoff = (date.today() - timedelta(days=window_days)).isoformat()
 
     # For each contaminant find NTC samples where its abundance exceeds min_reads.
     # We iterate profiles in Python rather than using $unwind because the NTC
