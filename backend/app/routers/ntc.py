@@ -1,6 +1,6 @@
 # app/routers/ntc.py
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
@@ -17,12 +17,11 @@ router = APIRouter(prefix="/ntc", tags=["ntc"])
 # Invalidated on ingest and on any change to the contaminants list.
 # ---------------------------------------------------------------------------
 
-_contaminant_alert_cache: dict | None = None
+_contaminant_alert_cache: dict[int, dict] = {}  # window_days -> payload
 
 
 def invalidate_contaminant_cache() -> None:
-    global _contaminant_alert_cache
-    _contaminant_alert_cache = None
+    _contaminant_alert_cache.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +63,7 @@ async def get_ntc_ignorelist(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ) -> list:
-    docs = await db["ntc_ignorelist"].find().sort("added_at", -1).to_list(None)
+    docs = await db["ntc_ignorelist"].find().sort("added_at", -1).to_list(length=1000)
     for doc in docs:
         doc["_id"] = str(doc["_id"])
     return docs
@@ -151,7 +150,12 @@ async def get_ntc_contaminants(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ) -> list:
-    docs = await db["ntc_known_contaminants"].find().sort("added_at", -1).to_list(None)
+    docs = (
+        await db["ntc_known_contaminants"]
+        .find()
+        .sort("added_at", -1)
+        .to_list(length=1000)
+    )
     for doc in docs:
         doc["_id"] = str(doc["_id"])
     return docs
@@ -250,18 +254,20 @@ async def remove_ntc_contaminant(
     summary="Cases whose NTCs contain known contaminants above their min_reads threshold",
 )
 async def get_contaminant_alerts(
+    window_days: int = Query(default=90, ge=1, le=365),
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ) -> dict:
-    global _contaminant_alert_cache
-    if _contaminant_alert_cache is not None:
-        return _contaminant_alert_cache
+    if window_days in _contaminant_alert_cache:
+        return _contaminant_alert_cache[window_days]
 
-    contaminants = await db["ntc_known_contaminants"].find().to_list(None)
+    contaminants = await db["ntc_known_contaminants"].find().to_list(length=1000)
     if not contaminants:
         result: dict = {"alerts": [], "contaminant_case_ids": []}
-        _contaminant_alert_cache = result
+        _contaminant_alert_cache[window_days] = result
         return result
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
 
     # For each contaminant find NTC samples where its abundance exceeds min_reads.
     # We iterate profiles in Python rather than using $unwind because the NTC
@@ -269,7 +275,7 @@ async def get_contaminant_alerts(
     ntc_docs = (
         await db["samples"]
         .find(
-            {"sample_type": "negative_ctrl"},
+            {"sample_type": "negative_ctrl", "order_date": {"$gte": cutoff}},
             {
                 "sample_id": 1,
                 "case_id": 1,
@@ -335,7 +341,7 @@ async def get_contaminant_alerts(
     result = {"alerts": alerts, "contaminant_case_ids": list(all_case_ids)}
     # Note: contaminant_case_ids contains MongoDB ObjectId strings, consistent
     # with the pathogen_cases endpoint, so the case list can use .has(c._id).
-    _contaminant_alert_cache = result
+    _contaminant_alert_cache[window_days] = result
     return result
 
 
@@ -358,12 +364,14 @@ async def get_ntc_trends(
 
     Taxa on the NTC ignorelist are excluded from all three chart datasets.
     """
-    from datetime import date, timedelta
+    from datetime import date
 
     cutoff = (date.today() - timedelta(days=window_days)).isoformat()
 
     # Load ignorelist — excluded from all chart calculations
-    ignore_docs = await db["ntc_ignorelist"].find({}, {"taxon_id": 1}).to_list(None)
+    ignore_docs = (
+        await db["ntc_ignorelist"].find({}, {"taxon_id": 1}).to_list(length=1000)
+    )
     ignored_ids: frozenset[int] = frozenset(d["taxon_id"] for d in ignore_docs)
     excluded_ids = HOST_TAXON_IDS | ignored_ids
 
