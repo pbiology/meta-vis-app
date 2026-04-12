@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     mongodb_port: int = 27017
     mongodb_db_name: str = ""
     mongodb_username: Optional[str] = None
-    mongo_app_password: Optional[str] = None
+    mongodb_password: Optional[str] = None
     mongodb_auth_source: str = "admin"
     app_env: str = "development"
     log_level: str = "info"
