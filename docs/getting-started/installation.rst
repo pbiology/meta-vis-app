@@ -46,7 +46,7 @@ Set up the backend
       MONGODB_PORT=27017
       MONGODB_DB_NAME=meta-vis-dev
       MONGODB_USERNAME=meta_vis_app
-      MONGO_APP_PASSWORD=<choose-a-password>
+      MONGODB_PASSWORD=<choose-a-password>
       MONGO_ROOT_PASSWORD=<choose-a-root-password>
       MONGODB_AUTH_SOURCE=admin
 

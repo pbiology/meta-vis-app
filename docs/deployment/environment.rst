@@ -24,7 +24,7 @@ MongoDB configuration
    MONGODB_PORT=27017
    MONGODB_DB_NAME=meta-vis-dev
    MONGODB_USERNAME=meta_vis_app
-   MONGO_APP_PASSWORD=<strong-password>
+   MONGODB_PASSWORD=<strong-password>
    MONGO_ROOT_PASSWORD=<strong-root-password>
    MONGODB_AUTH_SOURCE=admin
 
@@ -32,7 +32,7 @@ MongoDB configuration
 - **MONGODB_PORT** - MongoDB server port
 - **MONGODB_DB_NAME** - Database name to use
 - **MONGODB_USERNAME** - App user (created by ``mongo-init.js``)
-- **MONGO_APP_PASSWORD** - Password for app user
+- **MONGODB_PASSWORD** - Password for app user
 - **MONGO_ROOT_PASSWORD** - Root password for admin access
 - **MONGODB_AUTH_SOURCE** - Authentication database (usually ``admin``)
 
@@ -99,7 +99,7 @@ Development setup:
    MONGODB_PORT=27017
    MONGODB_DB_NAME=meta-vis-dev
    MONGODB_USERNAME=meta_vis_app
-   MONGO_APP_PASSWORD=devpassword123
+   MONGODB_PASSWORD=devpassword123
    MONGO_ROOT_PASSWORD=rootpassword456
    MONGODB_AUTH_SOURCE=admin
 
@@ -116,7 +116,7 @@ Production setup (with S3):
    MONGODB_PORT=27017
    MONGODB_DB_NAME=meta-vis-prod
    MONGODB_USERNAME=meta_vis_app
-   MONGO_APP_PASSWORD=<strong-password>
+   MONGODB_PASSWORD=<strong-password>
    MONGO_ROOT_PASSWORD=<strong-password>
    MONGODB_AUTH_SOURCE=admin
 
