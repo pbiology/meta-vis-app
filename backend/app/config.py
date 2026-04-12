@@ -1,7 +1,11 @@
-from pathlib import Path
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional
 import json
+import logging
+from pathlib import Path
+from typing import Optional
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -42,7 +46,7 @@ class Settings(BaseSettings):
         config_path = Path(__file__).parent.parent / "outbreak_configs.json"
 
         if not config_path.exists():
-            print(f"Warning: outbreak_configs.json not found at {config_path}")
+            logger.warning("outbreak_configs.json not found at %s", config_path)
             self.outbreak_configs = []
             return
 
@@ -50,14 +54,16 @@ class Settings(BaseSettings):
             with open(config_path, "r") as f:
                 data = json.load(f)
                 self.outbreak_configs = data.get("configs", [])
-                print(
-                    f"Loaded {len(self.outbreak_configs)} outbreak configs from {config_path.name}"
+                logger.info(
+                    "Loaded %d outbreak configs from %s",
+                    len(self.outbreak_configs),
+                    config_path.name,
                 )
         except json.JSONDecodeError as e:
-            print(f"Error parsing outbreak_configs.json: {e}")
+            logger.error("Error parsing outbreak_configs.json: %s", e, exc_info=True)
             self.outbreak_configs = []
         except Exception as e:
-            print(f"Error loading outbreak_configs.json: {e}")
+            logger.error("Error loading outbreak_configs.json: %s", e, exc_info=True)
             self.outbreak_configs = []
 
 
