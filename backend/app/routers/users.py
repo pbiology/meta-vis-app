@@ -3,8 +3,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
-from bson import ObjectId
 
+from app.audit import log_audit_event
 from app.database import get_db
 from app.auth.utils import hash_password, require_role, get_current_user
 
@@ -100,7 +100,7 @@ async def get_my_stats(
 async def create_user(
     body: UserCreate,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(require_role("admin")),
+    current_user: dict = Depends(require_role("admin")),
 ):
     if body.role.lower() not in VALID_ROLES:
         raise HTTPException(
@@ -118,6 +118,15 @@ async def create_user(
             "role": body.role.lower(),
         }
     )
+    await log_audit_event(
+        db,
+        action="user_create",
+        actor=current_user["username"],
+        resource_type="user",
+        resource_id=body.username,
+        outcome="success",
+        detail={"role": body.role.lower()},
+    )
     return {"username": body.username, "role": body.role.lower()}
 
 
@@ -126,7 +135,7 @@ async def update_role(
     username: str,
     body: UserUpdateRole,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(require_role("admin")),
+    current_user: dict = Depends(require_role("admin")),
 ):
     if body.role.lower() not in VALID_ROLES:
         raise HTTPException(
@@ -138,6 +147,15 @@ async def update_role(
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail=f"User '{username}' not found")
+    await log_audit_event(
+        db,
+        action="user_role_change",
+        actor=current_user["username"],
+        resource_type="user",
+        resource_id=username,
+        outcome="success",
+        detail={"new_role": body.role.lower()},
+    )
     return {"username": username, "role": body.role.lower()}
 
 
@@ -146,7 +164,7 @@ async def update_password(
     username: str,
     body: UserUpdatePassword,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(require_role("admin")),
+    current_user: dict = Depends(require_role("admin")),
 ):
     result = await db["users"].update_one(
         {"username": username},
@@ -154,6 +172,14 @@ async def update_password(
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail=f"User '{username}' not found")
+    await log_audit_event(
+        db,
+        action="user_password_reset",
+        actor=current_user["username"],
+        resource_type="user",
+        resource_id=username,
+        outcome="success",
+    )
     return {"username": username, "updated": True}
 
 
@@ -168,4 +194,12 @@ async def delete_user(
     result = await db["users"].delete_one({"username": username})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail=f"User '{username}' not found")
+    await log_audit_event(
+        db,
+        action="user_delete",
+        actor=current_user["username"],
+        resource_type="user",
+        resource_id=username,
+        outcome="success",
+    )
     return {"username": username, "deleted": True}

@@ -6,6 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
 from typing import Literal, Optional
 
+from app.audit import log_audit_event
 from app.database import get_db
 from app.auth.utils import get_current_user, require_role
 from app.constants import HOST_TAXON_IDS
@@ -102,6 +103,14 @@ async def add_to_ntc_ignorelist(
     doc["_id"] = str(result.inserted_id)
     # Ignoring a taxon affects trend calculations — invalidate cache
     invalidate_contaminant_cache()
+    await log_audit_event(
+        db,
+        action="ntc_ignorelist_add",
+        actor=current_user["username"],
+        resource_type="ntc_ignorelist_entry",
+        resource_id=str(payload.taxon_id),
+        outcome="success",
+    )
     return doc
 
 
@@ -110,7 +119,7 @@ async def update_ntc_ignorelist_note(
     taxon_id: int,
     payload: IgnoreNotePayload,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(require_role("writer", "admin")),
+    current_user: dict = Depends(require_role("writer", "admin")),
 ) -> dict:
     result = await db["ntc_ignorelist"].update_one(
         {"taxon_id": taxon_id},
@@ -120,6 +129,14 @@ async def update_ntc_ignorelist_note(
         raise HTTPException(
             status_code=404, detail=f"Taxon {taxon_id} not found in NTC ignorelist"
         )
+    await log_audit_event(
+        db,
+        action="ntc_ignorelist_update",
+        actor=current_user["username"],
+        resource_type="ntc_ignorelist_entry",
+        resource_id=str(taxon_id),
+        outcome="success",
+    )
     return {"updated": True, "taxon_id": taxon_id}
 
 
@@ -129,7 +146,7 @@ async def update_ntc_ignorelist_note(
 async def remove_from_ntc_ignorelist(
     taxon_id: int,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(require_role("admin")),
+    current_user: dict = Depends(require_role("admin")),
 ) -> dict:
     result = await db["ntc_ignorelist"].delete_one({"taxon_id": taxon_id})
     if result.deleted_count == 0:
@@ -137,6 +154,14 @@ async def remove_from_ntc_ignorelist(
             status_code=404, detail=f"Taxon {taxon_id} not found in NTC ignorelist"
         )
     invalidate_contaminant_cache()
+    await log_audit_event(
+        db,
+        action="ntc_ignorelist_remove",
+        actor=current_user["username"],
+        resource_type="ntc_ignorelist_entry",
+        resource_id=str(taxon_id),
+        outcome="success",
+    )
     return {"deleted": True, "taxon_id": taxon_id}
 
 
@@ -194,6 +219,14 @@ async def add_ntc_contaminant(
     result = await db["ntc_known_contaminants"].insert_one(doc)
     doc["_id"] = str(result.inserted_id)
     invalidate_contaminant_cache()
+    await log_audit_event(
+        db,
+        action="ntc_contaminant_add",
+        actor=current_user["username"],
+        resource_type="ntc_contaminant",
+        resource_id=str(payload.taxon_id),
+        outcome="success",
+    )
     return doc
 
 
@@ -204,7 +237,7 @@ async def update_ntc_contaminant(
     taxon_id: int,
     payload: ContaminantUpdatePayload,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(require_role("writer", "admin")),
+    current_user: dict = Depends(require_role("writer", "admin")),
 ) -> dict:
     updates: dict = {}
     if payload.min_reads is not None:
@@ -222,6 +255,14 @@ async def update_ntc_contaminant(
             detail=f"Taxon {taxon_id} not found in known contaminants list",
         )
     invalidate_contaminant_cache()
+    await log_audit_event(
+        db,
+        action="ntc_contaminant_update",
+        actor=current_user["username"],
+        resource_type="ntc_contaminant",
+        resource_id=str(taxon_id),
+        outcome="success",
+    )
     return {"updated": True, "taxon_id": taxon_id}
 
 
@@ -232,7 +273,7 @@ async def update_ntc_contaminant(
 async def remove_ntc_contaminant(
     taxon_id: int,
     db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(require_role("admin")),
+    current_user: dict = Depends(require_role("admin")),
 ) -> dict:
     result = await db["ntc_known_contaminants"].delete_one({"taxon_id": taxon_id})
     if result.deleted_count == 0:
@@ -241,6 +282,14 @@ async def remove_ntc_contaminant(
             detail=f"Taxon {taxon_id} not found in known contaminants list",
         )
     invalidate_contaminant_cache()
+    await log_audit_event(
+        db,
+        action="ntc_contaminant_remove",
+        actor=current_user["username"],
+        resource_type="ntc_contaminant",
+        resource_id=str(taxon_id),
+        outcome="success",
+    )
     return {"deleted": True, "taxon_id": taxon_id}
 
 

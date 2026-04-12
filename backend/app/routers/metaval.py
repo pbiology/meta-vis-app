@@ -1,7 +1,7 @@
 # app/routers/metaval.py
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse
 import asyncio
 import requests as http_requests
 from motor.motor_asyncio import AsyncIOMotorDatabase

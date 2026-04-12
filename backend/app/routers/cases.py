@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
-from bson import ObjectId
 from pydantic import BaseModel
 from typing import Optional
 from app.models.sample import CaseResponse
@@ -12,6 +11,7 @@ from app.models.sample import CaseResponse
 import json
 from pathlib import Path
 
+from app.audit import log_audit_event
 from app.database import get_db
 from app.auth.utils import get_current_user, require_role
 from app.config import settings
@@ -306,6 +306,14 @@ async def delete_case(
     await db["metaval_results"].delete_many({"case_id": oid})
     await db["cases"].delete_one({"_id": oid})
 
+    await log_audit_event(
+        db,
+        action="delete_case",
+        actor=_user["username"],
+        resource_type="case",
+        resource_id=case_id,
+        outcome="success",
+    )
     return {"deleted": True, "case_id": case_id}
 
 
@@ -354,6 +362,15 @@ async def review_case(
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
+    await log_audit_event(
+        db,
+        action="review_case",
+        actor=current_user["username"],
+        resource_type="case",
+        resource_id=case_id,
+        outcome="success",
+        detail={"notes": payload.notes is not None},
+    )
     return {
         "case_id": case_id,
         "reviewed": True,
@@ -380,6 +397,14 @@ async def unreview_case(
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
+    await log_audit_event(
+        db,
+        action="unreview_case",
+        actor=current_user["username"],
+        resource_type="case",
+        resource_id=case_id,
+        outcome="success",
+    )
     return {"case_id": case_id, "reviewed": False}
 
 
@@ -407,6 +432,14 @@ async def add_note(
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
+    await log_audit_event(
+        db,
+        action="add_note",
+        actor=current_user["username"],
+        resource_type="case",
+        resource_id=case_id,
+        outcome="success",
+    )
     return note
 
 
@@ -435,5 +468,14 @@ async def delete_note(
     await db["cases"].update_one(
         {"case_id": case_id},
         {"$set": {"notes": notes}},
+    )
+    await log_audit_event(
+        db,
+        action="delete_note",
+        actor=current_user["username"],
+        resource_type="case",
+        resource_id=case_id,
+        outcome="success",
+        detail={"note_index": note_index},
     )
     return {"deleted": True}

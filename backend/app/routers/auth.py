@@ -1,9 +1,10 @@
 # app/routers/auth.py
 
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
+from app.audit import log_audit_event
 from app.database import get_db
 from app.auth.utils import verify_password, create_access_token, get_current_user
 from app.config import settings
@@ -19,6 +20,15 @@ async def login(
 ):
     user = await db["users"].find_one({"username": form_data.username})
     if not user or not verify_password(form_data.password, user["password_hash"]):
+        await log_audit_event(
+            db,
+            action="login_failed",
+            actor=form_data.username,
+            resource_type="session",
+            resource_id=form_data.username,
+            outcome="failure",
+            detail={"reason": "bad_credentials"},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",

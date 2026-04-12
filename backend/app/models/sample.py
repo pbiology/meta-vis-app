@@ -1,7 +1,7 @@
 # app/models/sample.py
 
 from datetime import datetime, date
-from typing import Optional, List, Literal, Dict, Any
+from typing import Optional, List, Literal, Dict
 from pydantic import BaseModel, ConfigDict
 
 from app.ingestor.models import (
