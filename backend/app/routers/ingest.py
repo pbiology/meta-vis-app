@@ -68,4 +68,6 @@ async def ingest(
             outcome="failure",
             detail={"error": "internal_error"},
         )
-        raise HTTPException(status_code=500, detail="An internal error occurred during ingest")
+        raise HTTPException(
+            status_code=500, detail="An internal error occurred during ingest"
+        )
