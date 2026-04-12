@@ -94,6 +94,7 @@ For administrators
 - :doc:`administration/ingestion`
 - :doc:`administration/taxonomy-reference`
 - :doc:`administration/user-management`
+- :doc:`administration/audit-log`
 - :doc:`administration/troubleshooting`
 
 For developers
@@ -129,6 +130,17 @@ Reference
    deployment/environment
    deployment/object-storage
    deployment/production
+
+.. toctree::
+   :hidden:
+   :maxdepth: 2
+   :caption: Administration
+
+   administration/ingestion
+   administration/taxonomy-reference
+   administration/user-management
+   administration/audit-log
+   administration/troubleshooting
 
 .. toctree::
    :hidden:
