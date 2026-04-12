@@ -46,3 +46,5 @@ docs/.doctrees/
 
 # Claude Code
 .claude
+CLAUDE.md
+CLAUDE_TODO.md
