@@ -56,7 +56,10 @@ async def get_ignorelist(
         query["superkingdom"] = superkingdom
 
     docs = (
-        await db["outbreak_ignorelist"].find(query).sort("added_at", -1).to_list(None)
+        await db["outbreak_ignorelist"]
+        .find(query)
+        .sort("added_at", -1)
+        .to_list(length=1000)
     )
     for doc in docs:
         doc["_id"] = str(doc["_id"])
@@ -205,7 +208,7 @@ async def _compute_outbreaks_for_config(
     not the full profiles array which would require expensive unwinding.
     """
     # Load ignorelist
-    ignored_docs = await db["outbreak_ignorelist"].find({}).to_list(None)
+    ignored_docs = await db["outbreak_ignorelist"].find({}).to_list(length=1000)
     ignored_ids = {doc["taxon_id"] for doc in ignored_docs}
 
     # Only fetch cases within 2× the window
@@ -340,7 +343,7 @@ async def get_pathogens(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    docs = await db["known_pathogens"].find().sort("added_at", -1).to_list(None)
+    docs = await db["known_pathogens"].find().sort("added_at", -1).to_list(length=1000)
     for doc in docs:
         doc["_id"] = str(doc["_id"])
     return docs
