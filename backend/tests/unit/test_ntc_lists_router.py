@@ -154,7 +154,7 @@ class TestNtcIgnorelistPost:
     async def test_add_invalidates_contaminant_cache(self, fake_db):
         import app.routers.ntc as ntc_module
 
-        ntc_module._contaminant_alert_cache = {"alerts": [], "contaminant_case_ids": []}
+        ntc_module._contaminant_alert_cache = {90: {"alerts": [], "contaminant_case_ids": []}}
         app_ = make_app(fake_db)
         TestClient(app_).post(
             "/api/v1/ntc/ignorelist",
@@ -163,7 +163,7 @@ class TestNtcIgnorelistPost:
                 "taxon_name": "Cutibacterium acnes",
             },
         )
-        assert ntc_module._contaminant_alert_cache is None
+        assert ntc_module._contaminant_alert_cache == {}
 
     async def test_cannot_add_to_ignorelist_if_on_contaminants(self, fake_db):
         await fake_db["ntc_known_contaminants"].insert_one(
@@ -236,10 +236,10 @@ class TestNtcIgnorelistDelete:
         await fake_db["ntc_ignorelist"].insert_one(
             {"taxon_id": 1743, "taxon_name": "x"}
         )
-        ntc_module._contaminant_alert_cache = {"alerts": [], "contaminant_case_ids": []}
+        ntc_module._contaminant_alert_cache = {90: {"alerts": [], "contaminant_case_ids": []}}
         app_ = make_app(fake_db)
         TestClient(app_).delete("/api/v1/ntc/ignorelist/1743")
-        assert ntc_module._contaminant_alert_cache is None
+        assert ntc_module._contaminant_alert_cache == {}
 
 
 # ---------------------------------------------------------------------------
@@ -329,7 +329,7 @@ class TestNtcContaminantsPost:
     async def test_add_invalidates_contaminant_cache(self, fake_db):
         import app.routers.ntc as ntc_module
 
-        ntc_module._contaminant_alert_cache = {"alerts": [], "contaminant_case_ids": []}
+        ntc_module._contaminant_alert_cache = {90: {"alerts": [], "contaminant_case_ids": []}}
         app_ = make_app(fake_db)
         TestClient(app_).post(
             "/api/v1/ntc/contaminants",
@@ -338,7 +338,7 @@ class TestNtcContaminantsPost:
                 "taxon_name": "Ralstonia pickettii",
             },
         )
-        assert ntc_module._contaminant_alert_cache is None
+        assert ntc_module._contaminant_alert_cache == {}
 
     async def test_cannot_add_to_contaminants_if_on_ignorelist(self, fake_db):
         await fake_db["ntc_ignorelist"].insert_one(
@@ -419,10 +419,10 @@ class TestNtcContaminantsPatch:
                 "notes": None,
             }
         )
-        ntc_module._contaminant_alert_cache = {"alerts": [], "contaminant_case_ids": []}
+        ntc_module._contaminant_alert_cache = {90: {"alerts": [], "contaminant_case_ids": []}}
         app_ = make_app(fake_db)
         TestClient(app_).patch("/api/v1/ntc/contaminants/329", json={"min_reads": 10})
-        assert ntc_module._contaminant_alert_cache is None
+        assert ntc_module._contaminant_alert_cache == {}
 
 
 # ---------------------------------------------------------------------------
@@ -459,10 +459,10 @@ class TestNtcContaminantsDelete:
                 "min_reads": 3,
             }
         )
-        ntc_module._contaminant_alert_cache = {"alerts": [], "contaminant_case_ids": []}
+        ntc_module._contaminant_alert_cache = {90: {"alerts": [], "contaminant_case_ids": []}}
         app_ = make_app(fake_db)
         TestClient(app_).delete("/api/v1/ntc/contaminants/329")
-        assert ntc_module._contaminant_alert_cache is None
+        assert ntc_module._contaminant_alert_cache == {}
 
 
 # ---------------------------------------------------------------------------
@@ -691,7 +691,7 @@ class TestContaminantAlerts:
         app_ = make_app(fake_db)
         client = TestClient(app_)
         client.get("/api/v1/ntc/contaminant-alerts")
-        assert ntc_module._contaminant_alert_cache is not None
+        assert ntc_module._contaminant_alert_cache != {}
 
     async def test_cache_is_returned_on_second_call(self, fake_db):
         import app.routers.ntc as ntc_module
@@ -700,7 +700,7 @@ class TestContaminantAlerts:
             "alerts": [{"taxon_id": 99999}],
             "contaminant_case_ids": ["sentinel"],
         }
-        ntc_module._contaminant_alert_cache = sentinel
+        ntc_module._contaminant_alert_cache = {90: sentinel}
         app_ = make_app(fake_db)
         resp = TestClient(app_).get("/api/v1/ntc/contaminant-alerts")
         assert resp.json()["contaminant_case_ids"] == ["sentinel"]
