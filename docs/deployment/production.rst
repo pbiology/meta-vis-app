@@ -8,8 +8,12 @@ Pre-deployment checklist
 ========================
 
 - [ ] SSL/TLS certificates configured
-- [ ] MongoDB backed up and recovery tested
+- [ ] MongoDB running on dedicated server(s), not the Docker Compose container
+- [ ] MongoDB connection URI set in ``.env`` (``MONGODB_HOST`` or full URI)
+- [ ] MongoDB automated backups configured and a restore tested end-to-end
+- [ ] ``audit_log`` collection verified to survive a full app redeployment
 - [ ] Object storage configured (S3 or MinIO)
+- [ ] Application logs (stdout) routed to a persistent destination
 - [ ] Email alerting configured (if desired)
 - [ ] Monitoring and logging set up
 - [ ] Database and application secrets secured
@@ -132,47 +136,122 @@ This creates an optimized ``dist/`` directory.
 MongoDB deployment
 ==================
 
-**Managed services (recommended):**
-- MongoDB Atlas (cloud-hosted)
-- AWS DocumentDB
-- Azure Cosmos DB
-- Google Cloud Firestore
+.. warning::
 
-**Self-hosted (advanced):**
-- Use official MongoDB Docker image
-- Configure replication for high availability
-- Set up automated backups
-- Monitor disk usage and performance
+   The ``docker-compose.yml`` MongoDB container is intended for **development
+   only**. Never use it as your production database — a single container has no
+   replication, no automated backups, and its data is destroyed by
+   ``docker compose down -v``. The ``audit_log`` collection in particular is a
+   compliance record that must not be at risk from a routine deployment step.
 
-**Minimum specs:**
+**Recommended: dedicated server(s)**
+
+The intended production topology is a standalone MongoDB 7.0 server or a
+three-node replica set running on dedicated VMs. The application connects to it
+via a standard MongoDB URI in ``.env`` — no code changes are required to switch
+from the Docker container to an external server.
+
+Switching from the Docker container to a dedicated MongoDB server:
+
+1. Set up MongoDB on the target server(s) and create the application database
+   and user (see :ref:`mongo-user-setup` below).
+2. Update ``MONGODB_HOST`` (and optionally ``MONGODB_PORT``) in
+   ``backend/.env`` to point at the new server. For a replica set, supply the
+   full connection URI directly — Motor (the MongoDB driver) accepts any valid
+   MongoDB URI string.
+3. Restart the application. ``_ensure_indexes()`` runs at startup and is
+   idempotent — it will create any missing indexes on the new server without
+   touching existing data.
+4. Decommission the Docker container only after verifying the application is
+   healthy against the new server.
+
+.. _mongo-user-setup:
+
+**Creating the application user on a dedicated MongoDB server**
+
+Run the following in the MongoDB shell as an admin user:
+
+.. code-block:: javascript
+
+   use admin
+   db.createUser({
+     user: "<MONGODB_USERNAME>",
+     pwd:  "<MONGODB_PASSWORD>",
+     roles: [{ role: "readWrite", db: "<MONGODB_DB_NAME>" }]
+   })
+
+For tighter security, grant ``read`` + ``insert`` on ``audit_log`` only (no
+``update`` or ``delete``), and ``readWrite`` on the remaining collections.
+This prevents any code path — including a compromised application account —
+from modifying or deleting audit records.
+
+**Replica set (three-node)**
+
+A three-node replica set is the recommended production topology. It provides:
+
+- Automatic failover if the primary node goes down
+- A readable secondary for backup operations without impacting the primary
+- Point-in-time recovery via the oplog
+
+When using a replica set, supply the full connection URI in ``.env``:
+
+.. code-block:: ini
+
+   MONGODB_HOST=vm1.internal:27017,vm2.internal:27017,vm3.internal:27017
+
+Motor discovers all nodes from the URI and handles failover automatically.
+
+**Minimum specs (single node):**
+
 - 4 GB RAM
-- 20 GB SSD storage (adjust for case volume)
+- 20 GB SSD storage (adjust for case volume — see :doc:`../administration/audit-log` for sizing guidance)
 - Daily automated backups
 
 Monitoring and logging
 ======================
 
-**Application logs:**
+**Application logs**
+
+The backend emits structured JSON lines on stdout (one JSON object per line).
+In production, stdout must be routed to a persistent destination — logs written
+only to a container's stdout are lost when the container restarts.
 
 .. code-block:: bash
 
-   # View backend logs
+   # View live logs (Docker)
    docker logs -f meta-vis-app
 
-   # Or with systemd
+   # View live logs (systemd)
    journalctl -u meta-vis-app -f
 
+Configure your deployment to forward stdout to a log aggregation system
+(ELK/OpenSearch, Loki, CloudWatch, Splunk, etc.). This gives you a second,
+independent copy of all audit events in addition to the ``audit_log`` MongoDB
+collection — useful if database access is unavailable during an incident
+investigation.
+
+To alert on audit write failures, watch for log lines containing:
+
+.. code-block:: text
+
+   "message": "Failed to write audit event to database"
+
+This indicates the MongoDB ``audit_log`` collection is not receiving events and
+requires immediate attention.
+
 **Metrics to monitor:**
+
 - API response times
 - Database query performance
 - Storage usage (MongoDB + S3)
 - Blob upload/download times
 - Error rates
-- User authentication failures
+- Failed login attempts (``action: "login_failed"`` in ``audit_log``)
 
 **Tools:**
+
 - Prometheus + Grafana (metrics and dashboards)
-- ELK Stack (logs)
+- ELK Stack / OpenSearch (logs)
 - Sentry (error tracking)
 - New Relic, Datadog, etc. (managed solutions)
 
@@ -213,29 +292,76 @@ Scaling considerations
 Disaster recovery
 ==================
 
-**Regular backups:**
+**Backups**
+
+Back up the entire MongoDB database with ``mongodump``. Run this from a machine
+with network access to the MongoDB server:
 
 .. code-block:: bash
 
-   # MongoDB
-   mongodump --uri="mongodb://user:pass@host:27017/meta-vis" --out=/backups/mongo-$(date +%Y%m%d)
+   # Full database backup
+   mongodump \
+     --uri="mongodb://user:pass@host:27017/meta-vis?authSource=admin" \
+     --out=/backups/mongo-$(date +%Y%m%d)
 
-   # S3
-   aws s3 sync s3://meta-vis-prod /backups/s3-$(date +%Y%m%d)
+   # audit_log only (for a quick compliance snapshot)
+   mongodump \
+     --uri="mongodb://user:pass@host:27017/meta-vis?authSource=admin" \
+     --collection=audit_log \
+     --out=/backups/audit-$(date +%Y%m%d)
+
+Store backups off-site (a separate server, S3 bucket, or tape). A backup held
+on the same VM as the database is not a backup — it is lost in the same failure.
+
+If running a replica set, run ``mongodump`` against a secondary node to avoid
+any impact on the primary:
+
+.. code-block:: bash
+
+   mongodump \
+     --uri="mongodb://user:pass@vm2.internal:27017/meta-vis?authSource=admin&readPreference=secondary" \
+     --out=/backups/mongo-$(date +%Y%m%d)
 
 **Backup frequency:**
-- Daily incremental
-- Weekly full
-- Monthly long-term archive
 
-**Recovery testing:**
-- Test backup restoration monthly
-- Document recovery procedures
-- Maintain runbooks for common incidents
+- Daily full backup (the database is small — see :doc:`../administration/audit-log` for sizing)
+- Retain daily backups for 30 days, monthly backups for the duration of your retention policy
+
+**Verifying backups**
+
+A backup that has never been tested is not a backup. Monthly, restore to a
+scratch database and verify the collections are intact:
+
+.. code-block:: bash
+
+   # Restore to a test database
+   mongorestore \
+     --uri="mongodb://user:pass@testhost:27017/?authSource=admin" \
+     --nsFrom="meta-vis.*" \
+     --nsTo="meta-vis-restore.*" \
+     /backups/mongo-YYYYMMDD
+
+   # Spot-check audit_log
+   mongosh "mongodb://user:pass@testhost:27017/meta-vis-restore" \
+     --eval "db.audit_log.countDocuments()"
+
+**Protecting the audit_log collection specifically**
+
+Before decommissioning or redeploying any component, verify the ``audit_log``
+collection is intact on the production database:
+
+.. code-block:: bash
+
+   mongosh "mongodb://user:pass@host:27017/meta-vis" \
+     --eval "db.audit_log.countDocuments()"
+
+Compare this count against the previous backup. If the count drops unexpectedly,
+stop and investigate before proceeding.
 
 **RTO/RPO targets:**
+
 - Recovery Time Objective (RTO): < 4 hours
-- Recovery Point Objective (RPO): < 1 day
+- Recovery Point Objective (RPO): < 1 day (< 1 hour if using a replica set oplog)
 
 Next steps
 ==========

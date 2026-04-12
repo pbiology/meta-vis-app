@@ -4,6 +4,15 @@ Docker Compose
 
 meta-vis-app includes a ``docker-compose.yml`` that orchestrates MongoDB and optional MinIO services.
 
+.. warning::
+
+   The Docker Compose setup is for **development and testing only**. It runs
+   MongoDB as a single container with no replication. All data — including the
+   ``audit_log`` collection — is stored in the ``mongodb_data`` Docker volume and
+   will be permanently destroyed if you run ``docker compose down -v``.
+
+   For production, use a dedicated MongoDB server. See :doc:`production`.
+
 Starting services
 =================
 
@@ -51,7 +60,7 @@ View a specific service:
 Resetting the database
 ======================
 
-To clear all data and start fresh:
+To clear all data and start fresh during development:
 
 .. code-block:: bash
 
@@ -59,7 +68,14 @@ To clear all data and start fresh:
    docker compose down -v
    docker compose up -d
 
-The MongoDB initialization script (``mongo-init.js``) runs automatically on first start, creating the application database user.
+The MongoDB initialization script (``mongo-init.js``) runs automatically on
+first start, creating the application database user.
+
+.. danger::
+
+   ``docker compose down -v`` **permanently deletes all data**, including any
+   cases, samples, and the ``audit_log`` collection. Never run this against a
+   database that holds data you need to keep.
 
 Next steps
 ==========

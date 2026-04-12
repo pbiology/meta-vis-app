@@ -211,13 +211,52 @@ Valid values (case-insensitive): ``debug``, ``info``, ``warning``, ``error``, ``
    audit log lines from stdout. The ``audit_log`` MongoDB collection is unaffected
    by the log level — events are always written there regardless.
 
+Protecting the collection in production
+========================================
+
+The ``audit_log`` collection is **append-only** by design — the application
+only ever calls ``insert_one`` on it. Records are never modified or deleted by
+the application. However, this guarantee only holds if the database itself is
+protected.
+
+**Use a dedicated MongoDB server, not the Docker Compose container**
+
+The ``docker-compose.yml`` MongoDB container stores data in a Docker volume
+that is destroyed by ``docker compose down -v``. In production, MongoDB must
+run on a dedicated server or replica set outside the application container
+lifecycle. See :doc:`../deployment/production` for setup instructions.
+
+**Verify the collection survives redeployment**
+
+Before any deployment that involves the database, record the current document
+count:
+
+.. code-block:: bash
+
+   mongosh "mongodb://user:pass@host:27017/meta-vis" \
+     --eval "db.audit_log.countDocuments()"
+
+Check the same count after deployment to confirm no data was lost.
+
+**Back up regularly and test restores**
+
+A clinical audit trail that cannot be restored from backup provides no
+compliance guarantee. See :doc:`../deployment/production` for backup procedures
+and monthly restore testing.
+
+**Second copy via application logs**
+
+Every audit event is also written as a JSON line to stdout. If stdout is
+collected by a log aggregation system (ELK, Loki, CloudWatch, etc.), you have
+an independent copy of every event that is unaffected by database failures or
+accidental data loss. Set this up before going live.
+
 Retention and compliance
 ========================
 
-The ``audit_log`` collection is **append-only** — records are never modified
-after insertion. There is no automatic expiry (TTL). For regulated environments:
+There is no automatic expiry (TTL) on ``audit_log``. For regulated environments:
 
-- Define a retention policy appropriate to your regulatory framework (e.g. 7 years for many clinical/hospital contexts).
-- Implement archival by exporting older documents to cold storage rather than deleting in-place, so that the chain of records remains intact.
-- Restrict direct database access to administrators only.
-- Consider enabling `MongoDB auditing <https://www.mongodb.com/docs/manual/core/auditing/>`_ at the database level for a second independent audit layer covering DBA-level access.
+- Define a retention period appropriate to your regulatory framework (e.g. 7 years is common in Swedish clinical/hospital contexts).
+- Implement archival by exporting older documents to cold storage (``mongodump --collection=audit_log``) rather than deleting in-place, preserving the chain of records.
+- Restrict direct database write access to administrators only — the application account needs ``insert`` on ``audit_log`` but not ``update`` or ``delete``.
+- Consider enabling `MongoDB auditing <https://www.mongodb.com/docs/manual/core/auditing/>`_ at the database level for a second independent layer that captures DBA-level access the application cannot see.
