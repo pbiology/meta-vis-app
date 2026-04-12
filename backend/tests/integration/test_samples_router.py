@@ -31,8 +31,21 @@ async def insert_sample(
     material="DNA",
     has_krona=False,
     profiles=None,
+    case_reviewed=False,
 ):
     case_oid = ObjectId()
+    await db["cases"].insert_one(
+        {
+            "_id": case_oid,
+            "case_id": "testcase",
+            "review": {
+                "reviewed": case_reviewed,
+                "reviewed_by": None,
+                "reviewed_at": None,
+                "notes": None,
+            },
+        }
+    )
     result = await db["samples"].insert_one(
         {
             "case_id": case_oid,
@@ -96,6 +109,41 @@ class TestListSamples:
         assert "total" in data
         assert "page" in data
         assert "pages" in data
+
+    async def test_review_status_reflects_case_not_sample(self, client, fake_db):
+        """review.reviewed in the list must come from the parent case, not the stale sample field."""
+        case_oid = ObjectId()
+        await fake_db["cases"].insert_one(
+            {
+                "_id": case_oid,
+                "case_id": "reviewed-case",
+                "review": {
+                    "reviewed": True,
+                    "reviewed_by": "alice",
+                    "reviewed_at": None,
+                    "notes": None,
+                },
+            }
+        )
+        await fake_db["samples"].insert_one(
+            {
+                "case_id": case_oid,
+                "case_id_str": "reviewed-case",
+                "sample_id": "SRR999",
+                "sample_type": "sample",
+                "order_date": "2026-01-01",
+                "ingested_at": datetime.now(timezone.utc),
+                "review": {
+                    "reviewed": False
+                },  # stale — case is reviewed but sample field isn't
+                "taxprofiler": {"classifiers": {}},
+                "profiles": [],
+            }
+        )
+        resp = client.get("/api/v1/samples")
+        assert resp.status_code == 200
+        item = resp.json()["items"][0]
+        assert item["review"]["reviewed"] is True
 
 
 # ---------------------------------------------------------------------------
