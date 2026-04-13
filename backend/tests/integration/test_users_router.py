@@ -198,3 +198,106 @@ class TestDeleteUser:
         await insert_user(fake_db, "testuser")
         resp = client.delete("/api/v1/users/testuser")
         assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# GET /users/me/preferences
+# ---------------------------------------------------------------------------
+
+
+class TestGetMyPreferences:
+    async def test_returns_default_when_no_preferences_saved(self, client, fake_db):
+        # Insert the authenticated user with no preferences field
+        await insert_user(fake_db, "testuser")
+        resp = client.get("/api/v1/users/me/preferences")
+        assert resp.status_code == 200
+        assert resp.json()["preferred_kingdoms"] == ["Viruses"]
+
+    async def test_returns_saved_preferences(self, client, fake_db):
+        await fake_db["users"].insert_one(
+            {
+                "username": "testuser",
+                "password_hash": "x",
+                "role": "reader",
+                "preferences": {"preferred_kingdoms": ["Bacteria", "Eukaryota"]},
+            }
+        )
+        resp = client.get("/api/v1/users/me/preferences")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert set(data["preferred_kingdoms"]) == {"Bacteria", "Eukaryota"}
+
+    async def test_returns_empty_list_when_saved_as_empty(self, client, fake_db):
+        await fake_db["users"].insert_one(
+            {
+                "username": "testuser",
+                "password_hash": "x",
+                "role": "reader",
+                "preferences": {"preferred_kingdoms": []},
+            }
+        )
+        resp = client.get("/api/v1/users/me/preferences")
+        assert resp.status_code == 200
+        assert resp.json()["preferred_kingdoms"] == []
+
+
+# ---------------------------------------------------------------------------
+# PATCH /users/me/preferences
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateMyPreferences:
+    async def test_saves_preferences(self, client, fake_db):
+        await insert_user(fake_db, "testuser")
+        resp = client.patch(
+            "/api/v1/users/me/preferences",
+            json={"preferred_kingdoms": ["Bacteria", "Viruses"]},
+        )
+        assert resp.status_code == 200
+        assert set(resp.json()["preferred_kingdoms"]) == {"Bacteria", "Viruses"}
+
+    async def test_persists_to_database(self, client, fake_db):
+        await insert_user(fake_db, "testuser")
+        client.patch(
+            "/api/v1/users/me/preferences",
+            json={"preferred_kingdoms": ["Archaea"]},
+        )
+        doc = await fake_db["users"].find_one({"username": "testuser"})
+        assert doc["preferences"]["preferred_kingdoms"] == ["Archaea"]
+
+    async def test_allows_empty_list(self, client, fake_db):
+        await insert_user(fake_db, "testuser")
+        resp = client.patch(
+            "/api/v1/users/me/preferences",
+            json={"preferred_kingdoms": []},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["preferred_kingdoms"] == []
+
+    async def test_rejects_invalid_kingdom(self, client, fake_db):
+        await insert_user(fake_db, "testuser")
+        resp = client.patch(
+            "/api/v1/users/me/preferences",
+            json={"preferred_kingdoms": ["Bacteria", "NotAKingdom"]},
+        )
+        assert resp.status_code == 422
+
+    async def test_overwrites_existing_preferences(self, client, fake_db):
+        await fake_db["users"].insert_one(
+            {
+                "username": "testuser",
+                "password_hash": "x",
+                "role": "reader",
+                "preferences": {"preferred_kingdoms": ["Viruses"]},
+            }
+        )
+        resp = client.patch(
+            "/api/v1/users/me/preferences",
+            json={"preferred_kingdoms": ["Bacteria", "Eukaryota", "Archaea"]},
+        )
+        assert resp.status_code == 200
+        assert set(resp.json()["preferred_kingdoms"]) == {
+            "Bacteria",
+            "Eukaryota",
+            "Archaea",
+        }
