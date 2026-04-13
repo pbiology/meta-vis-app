@@ -35,7 +35,9 @@ def reviewer_title(count: int) -> str:
     return title
 
 
-VALID_KINGDOMS: frozenset[str] = frozenset({"Bacteria", "Viruses", "Eukaryota", "Archaea"})
+VALID_KINGDOMS: frozenset[str] = frozenset(
+    {"Bacteria", "Viruses", "Eukaryota", "Archaea"}
+)
 
 
 class UserPreferences(BaseModel):
