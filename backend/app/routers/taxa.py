@@ -319,7 +319,9 @@ async def get_bvbrc_specialty_genes(
     )
     is_viral: bool = (taxon_doc or {}).get("superkingdom") == "Viruses"
 
-    bvbrc_url = f"https://www.bv-brc.org/view/Taxonomy/{taxon_id}#view_tab=specialtyGenes"
+    bvbrc_url = (
+        f"https://www.bv-brc.org/view/Taxonomy/{taxon_id}#view_tab=specialtyGenes"
+    )
     empty: dict = {
         "taxon_id": taxon_id,
         "is_viral": is_viral,
@@ -340,7 +342,7 @@ async def get_bvbrc_specialty_genes(
     sg_url = (
         f"{BVBRC_BASE}/sp_gene/"
         f"?eq(taxon_id,{taxon_id})"
-        f"&select(gene,property,source,mechanism,product)"
+        f"&select(gene,property,source,product,antibiotics,antibiotics_class,pmid)"
         f"&limit(500)"
         f"&http_accept=application/json"
     )
@@ -383,8 +385,10 @@ async def get_bvbrc_specialty_genes(
         entry: dict = {
             "gene": gene,
             "source": g.get("source"),
-            "mechanism": g.get("mechanism"),
             "product": g.get("product"),
+            "antibiotics": g.get("antibiotics") or [],
+            "antibiotics_class": g.get("antibiotics_class"),
+            "pmid": g.get("pmid") or [],
         }
         if prop == "Antibiotic Resistance":
             amr_genes.append(entry)
