@@ -1,12 +1,12 @@
 ![meta-vis logo](assets/logo.svg)
 
-# meta-vis-app
+# meta-vis
 
 A web application for visualising and reviewing the output of [nf-core/taxprofiler](https://github.com/nf-core/taxprofiler) metagenomics runs, with optional integration of [metaval](https://github.com/genomic-medicine-sweden/metaval) post-processing results.
 
 ## What the app does
 
-meta-vis-app is a **clinical interpretation tool for metagenomic quality control and pathogen detection**. It transforms complex taxonomic profiling data into actionable intelligence for clinicians and lab teams.
+meta-vis is a **clinical interpretation tool for metagenomic quality control and pathogen detection**. It transforms complex taxonomic profiling data into actionable intelligence for clinicians and lab teams.
 
 ### Core Features
 
