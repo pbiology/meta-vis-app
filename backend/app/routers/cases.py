@@ -8,29 +8,11 @@ from pydantic import BaseModel
 from typing import Optional
 from app.models.sample import CaseResponse
 
-import json
-from pathlib import Path
-
 from app.audit import log_audit_event
 from app.database import get_db
 from app.auth.utils import get_current_user, require_role
 from app.config import settings
 from app.constants import HOST_TAXON_IDS
-
-
-_controls_taxa_cache: dict | None = None
-
-
-def _load_controls_taxa() -> dict:
-    global _controls_taxa_cache
-    if _controls_taxa_cache is None:
-        path = Path(settings.controls_taxa_path)
-        if path.exists():
-            with open(path) as f:
-                _controls_taxa_cache = json.load(f)
-        else:
-            _controls_taxa_cache = {}
-    return _controls_taxa_cache
 
 
 router = APIRouter(prefix="/cases", tags=["cases"])
@@ -269,7 +251,7 @@ async def list_samples_for_case(
 
     docs = await db["samples"].find(query).to_list(length=200)
 
-    controls_taxa = _load_controls_taxa()
+    controls_taxa = settings.controls_taxa
     spike_in_ids = set(controls_taxa.get("spike_in", []))
 
     result = []
