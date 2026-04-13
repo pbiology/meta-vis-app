@@ -472,17 +472,11 @@ function PubmedLinks({ pmids }) {
   );
 }
 
-function SpecialtyGenesSubsection({ specialty, loadingSpecialty, superkingdom }) {
+function SpecialtyGenesSubsection({ specialty, loadingSpecialty }) {
   const [sgCollapsed, setSgCollapsed] = useState(true);
-
-  // Use the superkingdom from the already-loaded taxon as the authoritative source.
-  // The backend's is_viral flag can be wrong when the taxa collection has a skeleton
-  // entry without a superkingdom field populated.
-  const isViral = superkingdom === "Viruses" || specialty?.is_viral === true;
 
   const hasSpecialtyData =
     specialty &&
-    !isViral &&
     (specialty.amr_genes.length > 0 ||
       specialty.virulence_factors.length > 0 ||
       specialty.amr_phenotypes.length > 0);
@@ -493,8 +487,6 @@ function SpecialtyGenesSubsection({ specialty, loadingSpecialty, superkingdom })
   // Summary badges shown in the header regardless of collapsed state
   function HeaderSummary() {
     if (loadingSpecialty) return null;
-    if (specialty?.is_viral)
-      return <span className="text-xs text-gray-300 italic">Not applicable for viruses</span>;
     if (!hasSpecialtyData)
       return <span className="text-xs text-gray-300 italic">No data in BV-BRC</span>;
     return (
@@ -725,7 +717,7 @@ function ExternalLinkButton({ href, children }) {
   );
 }
 
-function BvbrcSection({ taxonId, superkingdom }) {
+function BvbrcSection({ taxonId }) {
   const [genomes, setGenomes] = useState(null);
   const [specialty, setSpecialty] = useState(null);
   const [loadingGenomes, setLoadingGenomes] = useState(true);
@@ -844,11 +836,7 @@ function BvbrcSection({ taxonId, superkingdom }) {
           </div>
 
           {/* Specialty genes — bacteria only */}
-          <SpecialtyGenesSubsection
-            specialty={specialty}
-            loadingSpecialty={loadingSpecialty}
-            superkingdom={superkingdom}
-          />
+          <SpecialtyGenesSubsection specialty={specialty} loadingSpecialty={loadingSpecialty} />
         </div>
       )}
     </section>
@@ -965,7 +953,7 @@ export default function TaxonDetail() {
 
         <ExternalLinksSection taxonId={taxon.taxon_id} />
 
-        <BvbrcSection taxonId={taxon.taxon_id} superkingdom={taxon.superkingdom} />
+        <BvbrcSection taxonId={taxon.taxon_id} />
 
         <LiteratureSection taxonId={taxon.taxon_id} />
 
