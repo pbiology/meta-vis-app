@@ -483,6 +483,56 @@ function SpecialtyGenesSubsection({ specialty, loadingSpecialty }) {
       specialty.amr_phenotypes.length > 0);
 
   const amrCount = specialty?.amr_genes?.length ?? 0;
+  const vfCount = specialty?.virulence_factors?.length ?? 0;
+
+  // Summary badges shown in the header regardless of collapsed state
+  function HeaderSummary() {
+    if (loadingSpecialty) return null;
+    if (specialty?.is_viral)
+      return <span className="text-xs text-gray-300 italic">Not applicable for viruses</span>;
+    if (!hasSpecialtyData)
+      return <span className="text-xs text-gray-300 italic">No data in BV-BRC</span>;
+    return (
+      <div className="flex items-center gap-2">
+        {amrCount > 0 && (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-red-600">
+            {/* shield icon */}
+            <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M8 1.5L2 4v4c0 3.3 2.5 5.8 6 7 3.5-1.2 6-3.7 6-7V4L8 1.5z"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M5.5 8l1.8 1.8L10.5 6"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            {amrCount} AMR {amrCount === 1 ? "gene" : "genes"}
+          </span>
+        )}
+        {vfCount > 0 && (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600">
+            {/* biohazard-like warning icon */}
+            <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="1.5" stroke="currentColor" strokeWidth="1.4" />
+              <path
+                d="M8 6.5C8 4.6 6.4 3 4.5 3S1 4.6 1 6.5c0 1.4.8 2.6 2 3.2M8 6.5C8 4.6 9.6 3 11.5 3S15 4.6 15 6.5c0 1.4-.8 2.6-2 3.2M5 12.5c.9.5 1.9.8 3 .8s2.1-.3 3-.8"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+              />
+            </svg>
+            {vfCount} virulence {vfCount === 1 ? "factor" : "factors"}
+          </span>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="border-t border-gray-50">
@@ -490,14 +540,12 @@ function SpecialtyGenesSubsection({ specialty, loadingSpecialty }) {
         onClick={() => setSgCollapsed((c) => !c)}
         className="w-full flex items-center gap-2 px-4 py-3 hover:bg-gray-50 transition-colors"
       >
-        <p className="text-xs font-medium text-gray-500 flex-1 text-left">
-          Specialty genes
-          {!loadingSpecialty && amrCount > 0 && (
-            <span className="ml-1.5 text-red-500">· {amrCount} AMR</span>
-          )}
-        </p>
+        <p className="text-xs font-medium text-gray-500 flex-shrink-0">Specialty genes</p>
+        <div className="flex-1 flex justify-start">
+          <HeaderSummary />
+        </div>
         <svg
-          className={`w-3 h-3 text-gray-300 transition-transform ${sgCollapsed ? "-rotate-90" : ""}`}
+          className={`w-3 h-3 text-gray-300 flex-shrink-0 transition-transform ${sgCollapsed ? "-rotate-90" : ""}`}
           viewBox="0 0 16 16"
           fill="none"
         >
@@ -511,16 +559,10 @@ function SpecialtyGenesSubsection({ specialty, loadingSpecialty }) {
         </svg>
       </button>
 
-      {!sgCollapsed && (
+      {!sgCollapsed && hasSpecialtyData && (
         <div className="px-4 pb-3">
           {loadingSpecialty ? (
             <p className="text-xs text-gray-400">Loading…</p>
-          ) : specialty?.is_viral ? (
-            <p className="text-xs text-gray-300 italic">
-              Specialty gene data is not available for viral taxa.
-            </p>
-          ) : !hasSpecialtyData ? (
-            <p className="text-xs text-gray-300 italic">No specialty gene data found in BV-BRC.</p>
           ) : (
             <div className="flex flex-col gap-4">
               {specialty.amr_genes.length > 0 && (
