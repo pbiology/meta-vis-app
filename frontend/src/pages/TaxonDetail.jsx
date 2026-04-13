@@ -453,6 +453,209 @@ function LiteratureSection({ taxonId }) {
   );
 }
 
+function PubmedLinks({ pmids }) {
+  if (!pmids || pmids.length === 0) return <span className="text-gray-300">—</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {pmids.map((id) => (
+        <a
+          key={id}
+          href={`https://pubmed.ncbi.nlm.nih.gov/${id}/`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-blue-500 hover:underline tabular-nums"
+        >
+          {id}
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function SpecialtyGenesSubsection({ specialty, loadingSpecialty }) {
+  const [sgCollapsed, setSgCollapsed] = useState(true);
+
+  const hasSpecialtyData =
+    specialty &&
+    !specialty.is_viral &&
+    (specialty.amr_genes.length > 0 ||
+      specialty.virulence_factors.length > 0 ||
+      specialty.amr_phenotypes.length > 0);
+
+  const amrCount = specialty?.amr_genes?.length ?? 0;
+
+  return (
+    <div className="border-t border-gray-50">
+      <button
+        onClick={() => setSgCollapsed((c) => !c)}
+        className="w-full flex items-center gap-2 px-4 py-3 hover:bg-gray-50 transition-colors"
+      >
+        <p className="text-xs font-medium text-gray-500 flex-1 text-left">
+          Specialty genes
+          {!loadingSpecialty && amrCount > 0 && (
+            <span className="ml-1.5 text-red-500">· {amrCount} AMR</span>
+          )}
+        </p>
+        <svg
+          className={`w-3 h-3 text-gray-300 transition-transform ${sgCollapsed ? "-rotate-90" : ""}`}
+          viewBox="0 0 16 16"
+          fill="none"
+        >
+          <path
+            d="M4 6l4 4 4-4"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+
+      {!sgCollapsed && (
+        <div className="px-4 pb-3">
+          {loadingSpecialty ? (
+            <p className="text-xs text-gray-400">Loading…</p>
+          ) : specialty?.is_viral ? (
+            <p className="text-xs text-gray-300 italic">
+              Specialty gene data is not available for viral taxa.
+            </p>
+          ) : !hasSpecialtyData ? (
+            <p className="text-xs text-gray-300 italic">No specialty gene data found in BV-BRC.</p>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {specialty.amr_genes.length > 0 && (
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">
+                    AMR genes ({specialty.amr_genes.length})
+                  </p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr>
+                          {["Gene", "Antibiotics", "Class", "Source", "PubMed"].map((h) => (
+                            <th
+                              key={h}
+                              className="px-3 py-1.5 text-xs font-medium text-gray-400 border-b border-gray-100"
+                            >
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {specialty.amr_genes.map((g, i) => (
+                          <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
+                            <td className="px-3 py-1.5 text-xs font-mono text-gray-700">
+                              {g.gene || "—"}
+                            </td>
+                            <td className="px-3 py-1.5 text-xs text-gray-500">
+                              {g.antibiotics?.length > 0 ? g.antibiotics.join(", ") : "—"}
+                            </td>
+                            <td className="px-3 py-1.5 text-xs text-gray-500">
+                              {g.antibiotics_class || "—"}
+                            </td>
+                            <td className="px-3 py-1.5 text-xs text-gray-400">{g.source || "—"}</td>
+                            <td className="px-3 py-1.5">
+                              <PubmedLinks pmids={g.pmid} />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {specialty.virulence_factors.length > 0 && (
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">
+                    Virulence factors ({specialty.virulence_factors.length})
+                  </p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr>
+                          {["Gene", "Product", "Source", "PubMed"].map((h) => (
+                            <th
+                              key={h}
+                              className="px-3 py-1.5 text-xs font-medium text-gray-400 border-b border-gray-100"
+                            >
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {specialty.virulence_factors.map((g, i) => (
+                          <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
+                            <td className="px-3 py-1.5 text-xs font-mono text-gray-700">
+                              {g.gene || "—"}
+                            </td>
+                            <td className="px-3 py-1.5 text-xs text-gray-500">
+                              {g.product || "—"}
+                            </td>
+                            <td className="px-3 py-1.5 text-xs text-gray-400">{g.source || "—"}</td>
+                            <td className="px-3 py-1.5">
+                              <PubmedLinks pmids={g.pmid} />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {specialty.amr_phenotypes.length > 0 && (
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">
+                    AMR phenotypes ({specialty.amr_phenotypes.length} antibiotics)
+                  </p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr>
+                          {["Antibiotic", "Resistant", "Susceptible"].map((h) => (
+                            <th
+                              key={h}
+                              className="px-3 py-1.5 text-xs font-medium text-gray-400 border-b border-gray-100"
+                            >
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {specialty.amr_phenotypes.map((p, i) => (
+                          <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
+                            <td className="px-3 py-1.5 text-xs text-gray-700">{p.antibiotic}</td>
+                            <td className="px-3 py-1.5 text-xs tabular-nums text-red-600">
+                              {p.resistant}
+                            </td>
+                            <td className="px-3 py-1.5 text-xs tabular-nums text-green-600">
+                              {p.susceptible}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {specialty.bvbrc_url && (
+                <div>
+                  <ExternalLinkButton href={specialty.bvbrc_url}>View in BV-BRC</ExternalLinkButton>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ExternalLinkButton({ href, children }) {
   return (
     <a
@@ -495,12 +698,6 @@ function BvbrcSection({ taxonId }) {
   }, [taxonId]);
 
   const hasGenomeData = genomes && genomes.total_genomes > 0;
-  const hasSpecialtyData =
-    specialty &&
-    !specialty.is_viral &&
-    (specialty.amr_genes.length > 0 ||
-      specialty.virulence_factors.length > 0 ||
-      specialty.amr_phenotypes.length > 0);
 
   return (
     <section className="bg-white border border-gray-100 rounded-xl">
@@ -600,147 +797,7 @@ function BvbrcSection({ taxonId }) {
           </div>
 
           {/* Specialty genes — bacteria only */}
-          <div className="px-4 py-3">
-            <p className="text-xs font-medium text-gray-500 mb-2">
-              AMR genes &amp; virulence factors
-            </p>
-            {loadingSpecialty ? (
-              <p className="text-xs text-gray-400">Loading…</p>
-            ) : specialty?.is_viral ? (
-              <p className="text-xs text-gray-300 italic">
-                AMR and virulence gene data is not available for viral taxa.
-              </p>
-            ) : !hasSpecialtyData ? (
-              <p className="text-xs text-gray-300 italic">
-                No specialty gene data found in BV-BRC.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-4">
-                {specialty.amr_genes.length > 0 && (
-                  <div>
-                    <p className="text-xs text-gray-400 mb-1">
-                      AMR genes ({specialty.amr_genes.length})
-                    </p>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left">
-                        <thead>
-                          <tr>
-                            {["Gene", "Mechanism", "Source"].map((h) => (
-                              <th
-                                key={h}
-                                className="px-3 py-1.5 text-xs font-medium text-gray-400 border-b border-gray-100"
-                              >
-                                {h}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {specialty.amr_genes.map((g, i) => (
-                            <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
-                              <td className="px-3 py-1.5 text-xs font-mono text-gray-700">
-                                {g.gene || "—"}
-                              </td>
-                              <td className="px-3 py-1.5 text-xs text-gray-500">
-                                {g.mechanism || "—"}
-                              </td>
-                              <td className="px-3 py-1.5 text-xs text-gray-400">
-                                {g.source || "—"}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {specialty.virulence_factors.length > 0 && (
-                  <div>
-                    <p className="text-xs text-gray-400 mb-1">
-                      Virulence factors ({specialty.virulence_factors.length})
-                    </p>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left">
-                        <thead>
-                          <tr>
-                            {["Gene", "Product", "Source"].map((h) => (
-                              <th
-                                key={h}
-                                className="px-3 py-1.5 text-xs font-medium text-gray-400 border-b border-gray-100"
-                              >
-                                {h}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {specialty.virulence_factors.map((g, i) => (
-                            <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
-                              <td className="px-3 py-1.5 text-xs font-mono text-gray-700">
-                                {g.gene || "—"}
-                              </td>
-                              <td className="px-3 py-1.5 text-xs text-gray-500">
-                                {g.product || "—"}
-                              </td>
-                              <td className="px-3 py-1.5 text-xs text-gray-400">
-                                {g.source || "—"}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {specialty.amr_phenotypes.length > 0 && (
-                  <div>
-                    <p className="text-xs text-gray-400 mb-1">
-                      AMR phenotypes ({specialty.amr_phenotypes.length} antibiotics)
-                    </p>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left">
-                        <thead>
-                          <tr>
-                            {["Antibiotic", "Resistant", "Susceptible"].map((h) => (
-                              <th
-                                key={h}
-                                className="px-3 py-1.5 text-xs font-medium text-gray-400 border-b border-gray-100"
-                              >
-                                {h}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {specialty.amr_phenotypes.map((p, i) => (
-                            <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
-                              <td className="px-3 py-1.5 text-xs text-gray-700">{p.antibiotic}</td>
-                              <td className="px-3 py-1.5 text-xs tabular-nums text-red-600">
-                                {p.resistant}
-                              </td>
-                              <td className="px-3 py-1.5 text-xs tabular-nums text-green-600">
-                                {p.susceptible}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
-
-                {specialty.bvbrc_url && (
-                  <div>
-                    <ExternalLinkButton href={specialty.bvbrc_url}>
-                      View in BV-BRC
-                    </ExternalLinkButton>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <SpecialtyGenesSubsection specialty={specialty} loadingSpecialty={loadingSpecialty} />
         </div>
       )}
     </section>
