@@ -582,15 +582,19 @@ class TestGetBvbrcSpecialtyGenes:
                 "gene": "katG",
                 "property": "Antibiotic Resistance",
                 "source": "CARD",
-                "mechanism": "target alteration",
                 "product": "catalase-peroxidase",
+                "antibiotics": ["Isoniazid"],
+                "antibiotics_class": "Antituberculous agents",
+                "pmid": ["12345678"],
             },
             {
                 "gene": "mmpL3",
                 "property": "Virulence Factor",
                 "source": "VFDB",
-                "mechanism": None,
                 "product": "mycolic acid transporter",
+                "antibiotics": [],
+                "antibiotics_class": None,
+                "pmid": [],
             },
         ]
         amr_records = [
@@ -628,6 +632,9 @@ class TestGetBvbrcSpecialtyGenes:
         assert len(data["amr_genes"]) == 1
         assert data["amr_genes"][0]["gene"] == "katG"
         assert data["amr_genes"][0]["source"] == "CARD"
+        assert data["amr_genes"][0]["antibiotics"] == ["Isoniazid"]
+        assert data["amr_genes"][0]["antibiotics_class"] == "Antituberculous agents"
+        assert data["amr_genes"][0]["pmid"] == ["12345678"]
 
         assert len(data["virulence_factors"]) == 1
         assert data["virulence_factors"][0]["gene"] == "mmpL3"
@@ -671,16 +678,20 @@ class TestGetBvbrcSpecialtyGenes:
                 "gene": "katG",
                 "property": "Antibiotic Resistance",
                 "source": "CARD",
-                "mechanism": "target alteration",
                 "product": "catalase-peroxidase",
+                "antibiotics": ["Isoniazid"],
+                "antibiotics_class": "Antituberculous agents",
+                "pmid": [],
             },
             # Duplicate — same gene + property combination
             {
                 "gene": "katG",
                 "property": "Antibiotic Resistance",
                 "source": "NDARO",
-                "mechanism": "target alteration",
                 "product": "catalase-peroxidase",
+                "antibiotics": ["Isoniazid"],
+                "antibiotics_class": "Antituberculous agents",
+                "pmid": [],
             },
         ]
         mock_sg = self._make_sg_response(sg_genes)
