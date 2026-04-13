@@ -6,6 +6,8 @@ import {
   updateClinicalNotes,
   getTaxonExternalLinks,
   getTaxonLiterature,
+  getBvbrcGenomes,
+  getBvbrcSpecialtyGenes,
 } from "../api/taxa";
 import { useAuth } from "../context/AuthContext";
 
@@ -451,6 +453,300 @@ function LiteratureSection({ taxonId }) {
   );
 }
 
+function ExternalLinkButton({ href, children }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-colors"
+    >
+      {children}
+      <svg className="w-2.5 h-2.5 opacity-50" viewBox="0 0 16 16" fill="none">
+        <path
+          d="M6 3H3v10h10v-3M13 3H9m4 0v4m0-4L7 9"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </a>
+  );
+}
+
+function BvbrcSection({ taxonId }) {
+  const [genomes, setGenomes] = useState(null);
+  const [specialty, setSpecialty] = useState(null);
+  const [loadingGenomes, setLoadingGenomes] = useState(true);
+  const [loadingSpecialty, setLoadingSpecialty] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    getBvbrcGenomes(taxonId)
+      .then(setGenomes)
+      .catch(() => setGenomes(null))
+      .finally(() => setLoadingGenomes(false));
+
+    getBvbrcSpecialtyGenes(taxonId)
+      .then(setSpecialty)
+      .catch(() => setSpecialty(null))
+      .finally(() => setLoadingSpecialty(false));
+  }, [taxonId]);
+
+  const hasGenomeData = genomes && genomes.total_genomes > 0;
+  const hasSpecialtyData =
+    specialty &&
+    !specialty.is_viral &&
+    (specialty.amr_genes.length > 0 ||
+      specialty.virulence_factors.length > 0 ||
+      specialty.amr_phenotypes.length > 0);
+
+  return (
+    <section className="bg-white border border-gray-100 rounded-xl">
+      <button
+        onClick={() => setCollapsed((c) => !c)}
+        className="w-full flex items-center gap-2 px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors"
+      >
+        <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1 text-left">
+          BV-BRC resources
+        </p>
+        <svg
+          className={`w-3.5 h-3.5 text-gray-300 transition-transform ${collapsed ? "-rotate-90" : ""}`}
+          viewBox="0 0 16 16"
+          fill="none"
+        >
+          <path
+            d="M4 6l4 4 4-4"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+
+      {!collapsed && (
+        <div className="divide-y divide-gray-50">
+          {/* Genome summary */}
+          <div className="px-4 py-3">
+            <p className="text-xs font-medium text-gray-500 mb-2">Sequenced genomes</p>
+            {loadingGenomes ? (
+              <p className="text-xs text-gray-400">Loading…</p>
+            ) : !hasGenomeData ? (
+              <p className="text-xs text-gray-300 italic">No genome data found in BV-BRC.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-semibold text-gray-800 tabular-nums">
+                    {genomes.total_genomes.toLocaleString()}
+                  </span>
+                  <span className="text-xs text-gray-400">genomes in BV-BRC</span>
+                  <ExternalLinkButton href={genomes.bvbrc_url}>View all</ExternalLinkButton>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {genomes.isolation_sources.length > 0 && (
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">Top isolation sources</p>
+                      <ul className="space-y-0.5">
+                        {genomes.isolation_sources.map((s, i) => (
+                          <li key={i} className="flex items-baseline justify-between gap-2">
+                            <span className="text-xs text-gray-600 truncate">{s.source}</span>
+                            <span className="text-xs text-gray-400 tabular-nums flex-shrink-0">
+                              {s.count}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {genomes.countries.length > 0 && (
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">Top countries</p>
+                      <ul className="space-y-0.5">
+                        {genomes.countries.map((c, i) => (
+                          <li key={i} className="flex items-baseline justify-between gap-2">
+                            <span className="text-xs text-gray-600 truncate">{c.country}</span>
+                            <span className="text-xs text-gray-400 tabular-nums flex-shrink-0">
+                              {c.count}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+                {genomes.amr_phenotypes.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-400 mb-1">Resistant to (genomes count)</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {genomes.amr_phenotypes.map((a, i) => (
+                        <span
+                          key={i}
+                          className="text-xs px-2 py-0.5 bg-red-50 text-red-600 rounded-full"
+                          title={`${a.count} genome(s) resistant`}
+                        >
+                          {a.antibiotic} ({a.count})
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Specialty genes — bacteria only */}
+          <div className="px-4 py-3">
+            <p className="text-xs font-medium text-gray-500 mb-2">
+              AMR genes &amp; virulence factors
+            </p>
+            {loadingSpecialty ? (
+              <p className="text-xs text-gray-400">Loading…</p>
+            ) : specialty?.is_viral ? (
+              <p className="text-xs text-gray-300 italic">
+                AMR and virulence gene data is not available for viral taxa.
+              </p>
+            ) : !hasSpecialtyData ? (
+              <p className="text-xs text-gray-300 italic">
+                No specialty gene data found in BV-BRC.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {specialty.amr_genes.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-400 mb-1">
+                      AMR genes ({specialty.amr_genes.length})
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr>
+                            {["Gene", "Mechanism", "Source"].map((h) => (
+                              <th
+                                key={h}
+                                className="px-3 py-1.5 text-xs font-medium text-gray-400 border-b border-gray-100"
+                              >
+                                {h}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {specialty.amr_genes.map((g, i) => (
+                            <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
+                              <td className="px-3 py-1.5 text-xs font-mono text-gray-700">
+                                {g.gene || "—"}
+                              </td>
+                              <td className="px-3 py-1.5 text-xs text-gray-500">
+                                {g.mechanism || "—"}
+                              </td>
+                              <td className="px-3 py-1.5 text-xs text-gray-400">
+                                {g.source || "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {specialty.virulence_factors.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-400 mb-1">
+                      Virulence factors ({specialty.virulence_factors.length})
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr>
+                            {["Gene", "Product", "Source"].map((h) => (
+                              <th
+                                key={h}
+                                className="px-3 py-1.5 text-xs font-medium text-gray-400 border-b border-gray-100"
+                              >
+                                {h}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {specialty.virulence_factors.map((g, i) => (
+                            <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
+                              <td className="px-3 py-1.5 text-xs font-mono text-gray-700">
+                                {g.gene || "—"}
+                              </td>
+                              <td className="px-3 py-1.5 text-xs text-gray-500">
+                                {g.product || "—"}
+                              </td>
+                              <td className="px-3 py-1.5 text-xs text-gray-400">
+                                {g.source || "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {specialty.amr_phenotypes.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-400 mb-1">
+                      AMR phenotypes ({specialty.amr_phenotypes.length} antibiotics)
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr>
+                            {["Antibiotic", "Resistant", "Susceptible"].map((h) => (
+                              <th
+                                key={h}
+                                className="px-3 py-1.5 text-xs font-medium text-gray-400 border-b border-gray-100"
+                              >
+                                {h}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {specialty.amr_phenotypes.map((p, i) => (
+                            <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
+                              <td className="px-3 py-1.5 text-xs text-gray-700">{p.antibiotic}</td>
+                              <td className="px-3 py-1.5 text-xs tabular-nums text-red-600">
+                                {p.resistant}
+                              </td>
+                              <td className="px-3 py-1.5 text-xs tabular-nums text-green-600">
+                                {p.susceptible}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {specialty.bvbrc_url && (
+                  <div>
+                    <ExternalLinkButton href={specialty.bvbrc_url}>
+                      View in BV-BRC
+                    </ExternalLinkButton>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function TaxonDetail() {
   const { taxonId } = useParams();
   const navigate = useNavigate();
@@ -560,6 +856,8 @@ export default function TaxonDetail() {
         />
 
         <ExternalLinksSection taxonId={taxon.taxon_id} />
+
+        <BvbrcSection taxonId={taxon.taxon_id} />
 
         <LiteratureSection taxonId={taxon.taxon_id} />
 
