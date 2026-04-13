@@ -217,7 +217,7 @@ async def get_bvbrc_genomes(
         if now - ts < BVBRC_CACHE_TTL:
             return data
 
-    bvbrc_url = f"https://www.bv-brc.org/taxonomy/{taxon_id}#view_tab=genomes"
+    bvbrc_url = f"https://www.bv-brc.org/view/Taxonomy/{taxon_id}#view_tab=genomes"
     empty: dict = {
         "taxon_id": taxon_id,
         "total_genomes": 0,
@@ -319,7 +319,7 @@ async def get_bvbrc_specialty_genes(
     )
     is_viral: bool = (taxon_doc or {}).get("superkingdom") == "Viruses"
 
-    bvbrc_url = f"https://www.bv-brc.org/taxonomy/{taxon_id}#view_tab=specialtyGenes"
+    bvbrc_url = f"https://www.bv-brc.org/view/Taxonomy/{taxon_id}#view_tab=specialtyGenes"
     empty: dict = {
         "taxon_id": taxon_id,
         "is_viral": is_viral,
