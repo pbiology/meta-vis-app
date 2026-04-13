@@ -56,7 +56,7 @@ function TaxonomyTable({
   const { preferences } = useAuth();
   const [taxSearch, setTaxSearch] = useState("");
   const [taxKingdoms, setTaxKingdoms] = useState(
-    () => preferences?.preferred_kingdoms ?? ["Viruses"],
+    () => preferences?.preferred_kingdoms ?? ["Viruses"]
   );
   const [taxSort, setTaxSort] = useState({ col: "abundance", dir: -1 });
   const [taxPage, setTaxPage] = useState(0);

@@ -27,7 +27,7 @@ export default function UserPreferences() {
 
   function toggle(kingdom) {
     setSelected((prev) =>
-      prev.includes(kingdom) ? prev.filter((k) => k !== kingdom) : [...prev, kingdom],
+      prev.includes(kingdom) ? prev.filter((k) => k !== kingdom) : [...prev, kingdom]
     );
     setSaved(false);
   }
