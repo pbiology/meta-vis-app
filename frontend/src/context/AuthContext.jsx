@@ -11,9 +11,7 @@ export function AuthProvider({ children }) {
   const [preferences, setPreferencesState] = useState(DEFAULT_PREFERENCES);
   // In-memory session state: survives navigation but resets on logout / fresh login.
   // Initialized from saved preferences; updated by the taxonomy dropdown without API calls.
-  const [sessionKingdoms, setSessionKingdoms] = useState(
-    DEFAULT_PREFERENCES.preferred_kingdoms,
-  );
+  const [sessionKingdoms, setSessionKingdoms] = useState(DEFAULT_PREFERENCES.preferred_kingdoms);
 
   // Load preferences when the app starts with an already-logged-in user
   useEffect(() => {
@@ -60,7 +58,16 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, role, preferences, sessionKingdoms, setSessionKingdoms, login, logout, setPreferences }}
+      value={{
+        user,
+        role,
+        preferences,
+        sessionKingdoms,
+        setSessionKingdoms,
+        login,
+        logout,
+        setPreferences,
+      }}
     >
       {children}
     </AuthContext.Provider>

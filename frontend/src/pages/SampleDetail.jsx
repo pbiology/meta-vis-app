@@ -244,9 +244,7 @@ function TaxonomyTable({
                     checked={taxKingdoms.includes(k)}
                     onChange={(e) => {
                       setTaxKingdoms((prev) => {
-                        const next = e.target.checked
-                          ? [...prev, k]
-                          : prev.filter((x) => x !== k);
+                        const next = e.target.checked ? [...prev, k] : prev.filter((x) => x !== k);
                         setSessionKingdoms(next);
                         return next;
                       });
