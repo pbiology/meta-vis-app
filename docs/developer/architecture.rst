@@ -33,6 +33,11 @@ System components
       (localhost)  (optional)  (taxonomy)
       (Docker)     (Docker)
 
+   External APIs (on-demand, cached 24 h):
+      NCBI Datasets API   — external links per taxon
+      NCBI E-Utilities    — PubMed literature per taxon
+      BV-BRC API          — genome summary, AMR genes, virulence factors per taxon
+
 Frontend architecture
 =====================
 
@@ -329,6 +334,52 @@ Testing
 - ``mongomock`` for MongoDB
 - Fixtures for common test data
 - See ``conftest.py`` for setup
+
+External API integrations
+=========================
+
+Several ``/taxa/{id}/`` sub-routes proxy requests to external databases, aggregate the
+results, and return them to the frontend. All use the same pattern:
+
+- **httpx.AsyncClient** for async HTTP calls with a 15-second timeout
+- **In-memory cache** keyed by ``taxon_id`` (and any query params), TTL 24 hours
+- **Graceful degradation** — any network error returns an empty result rather than a 500
+
+.. code-block:: text
+
+   Endpoint                               External service         Cache TTL
+   ─────────────────────────────────────────────────────────────────────────
+   GET /taxa/{id}/external_links          NCBI Datasets API        24 h
+   GET /taxa/{id}/literature              NCBI E-Utilities PubMed  24 h
+   GET /taxa/{id}/bvbrc/genomes           BV-BRC genome API        24 h
+   GET /taxa/{id}/bvbrc/specialty_genes   BV-BRC sp_gene           24 h
+                                          + genome_amr APIs
+
+**BV-BRC (Bacterial and Viral Bioinformatics Resource Center)**
+  Public REST API at ``https://www.bv-brc.org/api/``. No API key required.
+  Uses NCBI taxon IDs natively, so the local ``taxon_id`` maps directly.
+
+  Two routes:
+
+  ``GET /taxa/{id}/bvbrc/genomes``
+    Queries ``/api/genome/`` with ``eq(taxon_lineage_ids, {id})`` to capture all
+    strain-level genomes under a species. Aggregates isolation sources, countries,
+    and AMR genome counts (top 10 each, bounded at 1 000 genomes fetched).
+
+  ``GET /taxa/{id}/bvbrc/specialty_genes``
+    Fires two concurrent requests via ``asyncio.gather`` using ``eq(taxon_id, {id})``
+    (exact taxon match — unlike the genomes endpoint, lineage IDs are not supported here):
+
+    - ``/api/sp_gene/`` with ``limit(500)`` — returns specialty gene records.
+      The ``property`` field is filtered client-side to *Antibiotic Resistance* and
+      *Virulence Factor* because BV-BRC's SOLR ``in()`` operator does not handle
+      multi-word text values correctly; all records are fetched and filtered in Python.
+      Results are deduplicated by ``(gene, property)``.
+    - ``/api/genome_amr/`` with ``limit(1000)`` — aggregated into per-antibiotic
+      resistant/susceptible counts.
+
+  Cache keys: ``_bvbrc_genomes_cache`` and ``_bvbrc_specialty_cache`` in
+  ``app/routers/taxa.py``.
 
 Scaling considerations
 ======================

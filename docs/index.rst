@@ -83,6 +83,7 @@ For clinicians
 - :doc:`user-guide/cases-and-samples`
 - :doc:`user-guide/taxonomy-browser`
 - :doc:`user-guide/metaval-integration`
+- :doc:`user-guide/bvbrc-integration`
 - :doc:`user-guide/outbreak-detection`
 - :doc:`user-guide/ntc-monitoring`
 
@@ -145,3 +146,31 @@ Reference
 .. toctree::
    :hidden:
    :maxdepth: 2
+   :caption: User Guide
+
+   user-guide/cases-and-samples
+   user-guide/taxonomy-browser
+   user-guide/metaval-integration
+   user-guide/bvbrc-integration
+   user-guide/outbreak-detection
+   user-guide/ntc-monitoring
+   user-guide/user-roles
+
+.. toctree::
+   :hidden:
+   :maxdepth: 2
+   :caption: Reference
+
+   reference/ingest-format
+   reference/faq
+   reference/changelog
+
+.. toctree::
+   :hidden:
+   :maxdepth: 2
+   :caption: Developer
+
+   developer/architecture
+   developer/data-model
+   developer/contributing
+   developer/performance

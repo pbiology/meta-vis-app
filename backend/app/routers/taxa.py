@@ -1,5 +1,6 @@
 # app/routers/taxa.py
 
+import asyncio
 from datetime import date, timedelta, datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -22,8 +23,11 @@ class ClinicalNotesPayload(BaseModel):
 # Simple in-memory cache: taxon_id -> (timestamp, data)
 _links_cache: dict[int, tuple[float, list]] = {}
 _literature_cache: dict[int, tuple[float, list]] = {}
+_bvbrc_genomes_cache: dict[int, tuple[float, dict]] = {}
+_bvbrc_specialty_cache: dict[int, tuple[float, dict]] = {}
 LINKS_CACHE_TTL = 86400  # 24 hours — external links change rarely
 LITERATURE_CACHE_TTL = 86400  # 24 hours — PubMed results change rarely
+BVBRC_CACHE_TTL = 86400  # 24 hours — BV-BRC data changes rarely
 
 
 @router.get(
@@ -186,6 +190,249 @@ async def get_taxon_literature(
         "articles": articles,
         "pubmed_query": search_query,
     }
+
+
+BVBRC_BASE = "https://www.bv-brc.org/api"
+
+
+@router.get(
+    "/{taxon_id}/bvbrc/genomes",
+    summary="Get BV-BRC genome summary for a taxon",
+)
+async def get_bvbrc_genomes(
+    taxon_id: int,
+    _user: dict = Depends(get_current_user),
+) -> dict:
+    """
+    Fetches genome metadata from BV-BRC and returns an aggregated summary:
+    total genome count, top isolation sources, top countries, and AMR phenotypes.
+
+    Uses taxon_lineage_ids so that strain-level genomes are included for
+    species-level queries. Results cached 24 hours. Degrades gracefully on
+    any network error.
+    """
+    now = time.time()
+    if taxon_id in _bvbrc_genomes_cache:
+        ts, data = _bvbrc_genomes_cache[taxon_id]
+        if now - ts < BVBRC_CACHE_TTL:
+            return data
+
+    bvbrc_url = f"https://www.bv-brc.org/view/Taxonomy/{taxon_id}#view_tab=genomes"
+    empty: dict = {
+        "taxon_id": taxon_id,
+        "total_genomes": 0,
+        "isolation_sources": [],
+        "countries": [],
+        "amr_phenotypes": [],
+        "bvbrc_url": bvbrc_url,
+    }
+
+    url = (
+        f"{BVBRC_BASE}/genome/"
+        f"?eq(taxon_lineage_ids,{taxon_id})"
+        f"&select(genome_id,isolation_source,isolation_country,antimicrobial_resistance)"
+        f"&limit(1000)"
+        f"&http_accept=application/json"
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as http:
+            resp = await http.get(url, headers={"Accept": "application/json"})
+            resp.raise_for_status()
+            genomes: list[dict] = resp.json()
+    except Exception:
+        return empty
+
+    if not genomes:
+        _bvbrc_genomes_cache[taxon_id] = (now, empty)
+        return empty
+
+    source_counts: dict[str, int] = {}
+    country_counts: dict[str, int] = {}
+    amr_counts: dict[str, int] = {}
+
+    for g in genomes:
+        src = g.get("isolation_source")
+        if src:
+            source_counts[src] = source_counts.get(src, 0) + 1
+
+        country = g.get("isolation_country")
+        if country:
+            country_counts[country] = country_counts.get(country, 0) + 1
+
+        # antimicrobial_resistance is a list of drug names for resistant genomes
+        for drug in g.get("antimicrobial_resistance") or []:
+            amr_counts[drug] = amr_counts.get(drug, 0) + 1
+
+    result: dict = {
+        "taxon_id": taxon_id,
+        "total_genomes": len(genomes),
+        "isolation_sources": [
+            {"source": k, "count": v}
+            for k, v in sorted(
+                source_counts.items(), key=lambda kv: kv[1], reverse=True
+            )
+        ][:10],
+        "countries": [
+            {"country": k, "count": v}
+            for k, v in sorted(
+                country_counts.items(), key=lambda kv: kv[1], reverse=True
+            )
+        ][:10],
+        "amr_phenotypes": [
+            {"antibiotic": k, "count": v}
+            for k, v in sorted(amr_counts.items(), key=lambda kv: kv[1], reverse=True)
+        ],
+        "bvbrc_url": bvbrc_url,
+    }
+
+    _bvbrc_genomes_cache[taxon_id] = (now, result)
+    return result
+
+
+@router.get(
+    "/{taxon_id}/bvbrc/specialty_genes",
+    summary="Get BV-BRC specialty genes (AMR + virulence) for a taxon",
+)
+async def get_bvbrc_specialty_genes(
+    taxon_id: int,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+) -> dict:
+    """
+    Fetches specialty gene (AMR genes, virulence factors) and AMR phenotype data
+    from BV-BRC for bacterial taxa. For viral taxa (superkingdom = "Viruses"),
+    returns an empty result immediately without querying BV-BRC, as those
+    endpoints cover bacteria only.
+
+    Uses asyncio.gather to run specialty_gene and genome_amr calls concurrently.
+    Results cached 24 hours. Degrades gracefully on any network error.
+    """
+    now = time.time()
+    if taxon_id in _bvbrc_specialty_cache:
+        ts, data = _bvbrc_specialty_cache[taxon_id]
+        if now - ts < BVBRC_CACHE_TTL:
+            return data
+
+    taxon_doc = await db["taxa"].find_one(
+        {"taxon_id": taxon_id}, {"superkingdom": 1, "_id": 0}
+    )
+    is_viral: bool = (taxon_doc or {}).get("superkingdom") == "Viruses"
+
+    bvbrc_url = (
+        f"https://www.bv-brc.org/view/Taxonomy/{taxon_id}#view_tab=specialtyGenes"
+    )
+    empty: dict = {
+        "taxon_id": taxon_id,
+        "is_viral": is_viral,
+        "amr_genes": [],
+        "virulence_factors": [],
+        "amr_phenotypes": [],
+        "bvbrc_url": bvbrc_url,
+    }
+
+    if is_viral:
+        _bvbrc_specialty_cache[taxon_id] = (now, empty)
+        return empty
+
+    # BV-BRC sp_gene endpoint (renamed from specialty_gene in their API).
+    # Property filter via in() does not work for multi-word text values in
+    # BV-BRC's SOLR index, so we fetch all records and filter in Python.
+    # genome_amr uses taxon_id (taxon_lineage_ids is not an indexed field there).
+    sg_url = (
+        f"{BVBRC_BASE}/sp_gene/"
+        f"?eq(taxon_id,{taxon_id})"
+        f"&select(gene,property,source,product,antibiotics,antibiotics_class,pmid)"
+        f"&limit(500)"
+        f"&http_accept=application/json"
+    )
+    amr_url = (
+        f"{BVBRC_BASE}/genome_amr/"
+        f"?eq(taxon_id,{taxon_id})"
+        f"&select(antibiotic,resistant_phenotype,evidence)"
+        f"&limit(1000)"
+        f"&http_accept=application/json"
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as http:
+            sg_resp, amr_resp = await asyncio.gather(
+                http.get(sg_url, headers={"Accept": "application/json"}),
+                http.get(amr_url, headers={"Accept": "application/json"}),
+            )
+            sg_resp.raise_for_status()
+            amr_resp.raise_for_status()
+            specialty_genes: list[dict] = sg_resp.json()
+            amr_records: list[dict] = amr_resp.json()
+    except Exception:
+        return empty
+
+    # Deduplicate by (gene, property) and split into AMR vs virulence.
+    # Other property values (Transporter, Drug Target, Human Homolog) are skipped.
+    seen: set[tuple[str, str]] = set()
+    amr_genes: list[dict] = []
+    virulence_factors: list[dict] = []
+
+    for g in specialty_genes:
+        gene = g.get("gene") or ""
+        prop = g.get("property") or ""
+        if prop not in {"Antibiotic Resistance", "Virulence Factor"}:
+            continue
+        key = (gene, prop)
+        if key in seen:
+            continue
+        seen.add(key)
+        entry: dict = {
+            "gene": gene,
+            "source": g.get("source"),
+            "product": g.get("product"),
+            "antibiotics": g.get("antibiotics") or [],
+            "antibiotics_class": g.get("antibiotics_class"),
+            "pmid": g.get("pmid") or [],
+        }
+        if prop == "Antibiotic Resistance":
+            amr_genes.append(entry)
+        else:
+            virulence_factors.append(entry)
+
+    # Aggregate AMR phenotypes: count resistant vs susceptible per antibiotic
+    phenotype_counts: dict[str, dict[str, int]] = {}
+    for rec in amr_records:
+        antibiotic = rec.get("antibiotic")
+        phenotype = (rec.get("resistant_phenotype") or "").lower()
+        if not antibiotic:
+            continue
+        if antibiotic not in phenotype_counts:
+            phenotype_counts[antibiotic] = {"resistant": 0, "susceptible": 0}
+        if "resistant" in phenotype and "not" not in phenotype:
+            phenotype_counts[antibiotic]["resistant"] += 1
+        elif "susceptible" in phenotype:
+            phenotype_counts[antibiotic]["susceptible"] += 1
+
+    amr_phenotypes: list[dict] = [
+        {
+            "antibiotic": drug,
+            "resistant": counts["resistant"],
+            "susceptible": counts["susceptible"],
+        }
+        for drug, counts in sorted(
+            phenotype_counts.items(),
+            key=lambda kv: kv[1]["resistant"],
+            reverse=True,
+        )
+    ]
+
+    result: dict = {
+        "taxon_id": taxon_id,
+        "is_viral": False,
+        "amr_genes": amr_genes,
+        "virulence_factors": virulence_factors,
+        "amr_phenotypes": amr_phenotypes,
+        "bvbrc_url": bvbrc_url,
+    }
+
+    _bvbrc_specialty_cache[taxon_id] = (now, result)
+    return result
 
 
 @router.get("/{taxon_id}", summary="Get taxon reference data")

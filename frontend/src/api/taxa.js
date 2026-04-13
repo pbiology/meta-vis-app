@@ -30,3 +30,13 @@ export async function getTaxonLiterature(taxonId, maxResults = 5) {
   });
   return res.data;
 }
+
+export async function getBvbrcGenomes(taxonId) {
+  const res = await client.get(`/taxa/${taxonId}/bvbrc/genomes`);
+  return res.data;
+}
+
+export async function getBvbrcSpecialtyGenes(taxonId) {
+  const res = await client.get(`/taxa/${taxonId}/bvbrc/specialty_genes`);
+  return res.data;
+}
