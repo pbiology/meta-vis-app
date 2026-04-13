@@ -35,7 +35,8 @@ AMR genes and virulence factors (bacteria only)
 -----------------------------------------------
 
 For bacterial taxa, BV-BRC provides gene-level data from curated reference databases.
-This section is not displayed for viral taxa, where these databases do not apply.
+For viral taxa, where these databases do not apply, the specialty genes section is still
+shown but displays "No data in BV-BRC" — no gene tables are rendered.
 
 **AMR genes**
   Genes documented to confer antibiotic resistance, sourced from:
@@ -90,14 +91,17 @@ Limitations
   *M. tuberculosis*, *E. coli*, influenza). Rare or recently described organisms may return
   few or no genomes.
 
-- **Caching** — Data is cached for 24 hours per taxon. If BV-BRC is unavailable, the section
-  shows an empty state rather than an error; no action is required.
+- **Caching** — Data is cached for 24 hours per taxon. If you open the same taxon page
+  within 24 hours, the previously fetched BV-BRC data is served from cache without a new
+  API call. If BV-BRC is unavailable, the section shows an empty state rather than an
+  error; no action is required.
 
 - **Not sample-specific** — All BV-BRC data is species-level context. It describes what is
   known about the species globally, not what is present in the patient sample.
 
-- **Viral taxa** — Genome summary data is available for viruses. AMR gene and virulence
-  factor data is not shown for viral taxa, as those databases cover bacteria only.
+- **Viral taxa** — Genome summary data is available for viruses. The specialty genes
+  section is shown for all taxa, but displays "No data in BV-BRC" for viral organisms
+  because AMR gene and virulence factor databases cover bacteria only.
 
 - **Genome limit** — The backend fetches up to 1 000 genomes per query for aggregation.
   For very large species (e.g., *E. coli*), isolation source and country distributions

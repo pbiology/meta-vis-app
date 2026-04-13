@@ -352,7 +352,7 @@ results, and return them to the frontend. All use the same pattern:
    GET /taxa/{id}/external_links          NCBI Datasets API        24 h
    GET /taxa/{id}/literature              NCBI E-Utilities PubMed  24 h
    GET /taxa/{id}/bvbrc/genomes           BV-BRC genome API        24 h
-   GET /taxa/{id}/bvbrc/specialty_genes   BV-BRC specialty_gene    24 h
+   GET /taxa/{id}/bvbrc/specialty_genes   BV-BRC sp_gene           24 h
                                           + genome_amr APIs
 
 **BV-BRC (Bacterial and Viral Bioinformatics Resource Center)**
@@ -367,13 +367,16 @@ results, and return them to the frontend. All use the same pattern:
     and AMR genome counts (top 10 each, bounded at 1 000 genomes fetched).
 
   ``GET /taxa/{id}/bvbrc/specialty_genes``
-    For bacterial taxa only — checks ``superkingdom`` from the local ``taxa`` collection
-    first and returns an empty result for viral taxa without making any BV-BRC calls.
-    For bacteria, fires two concurrent requests via ``asyncio.gather``:
+    Fires two concurrent requests via ``asyncio.gather`` using ``eq(taxon_id, {id})``
+    (exact taxon match — unlike the genomes endpoint, lineage IDs are not supported here):
 
-    - ``/api/specialty_gene/`` filtered to Antibiotic Resistance and Virulence Factor
-      properties — deduplicated by ``(gene, property)``
-    - ``/api/genome_amr/`` — aggregated into per-antibiotic resistant/susceptible counts
+    - ``/api/sp_gene/`` with ``limit(500)`` — returns specialty gene records.
+      The ``property`` field is filtered client-side to *Antibiotic Resistance* and
+      *Virulence Factor* because BV-BRC's SOLR ``in()`` operator does not handle
+      multi-word text values correctly; all records are fetched and filtered in Python.
+      Results are deduplicated by ``(gene, property)``.
+    - ``/api/genome_amr/`` with ``limit(1000)`` — aggregated into per-antibiotic
+      resistant/susceptible counts.
 
   Cache keys: ``_bvbrc_genomes_cache`` and ``_bvbrc_specialty_cache`` in
   ``app/routers/taxa.py``.
