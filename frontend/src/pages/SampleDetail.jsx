@@ -5,6 +5,7 @@ import Badge from "../components/Badge";
 import MetricCard from "../components/MetricCard";
 import { getMetavalForSample } from "../api/metaval";
 import { getOutbreaks, getPathogens } from "../api/alerts";
+import { useAuth } from "../context/AuthContext";
 
 function fmt(n, decimals = 0) {
   if (n === undefined || n === null) return "—";
@@ -52,8 +53,9 @@ function TaxonomyTable({
   ntcProfiles,
   pathogenIds,
 }) {
+  const { sessionKingdoms, setSessionKingdoms } = useAuth();
   const [taxSearch, setTaxSearch] = useState("");
-  const [taxKingdoms, setTaxKingdoms] = useState(["Viruses"]);
+  const [taxKingdoms, setTaxKingdoms] = useState(() => sessionKingdoms);
   const [taxSort, setTaxSort] = useState({ col: "abundance", dir: -1 });
   const [taxPage, setTaxPage] = useState(0);
   const [metavalOnly, setMetavalOnly] = useState(false);
@@ -241,9 +243,11 @@ function TaxonomyTable({
                     type="checkbox"
                     checked={taxKingdoms.includes(k)}
                     onChange={(e) => {
-                      setTaxKingdoms((prev) =>
-                        e.target.checked ? [...prev, k] : prev.filter((x) => x !== k)
-                      );
+                      setTaxKingdoms((prev) => {
+                        const next = e.target.checked ? [...prev, k] : prev.filter((x) => x !== k);
+                        setSessionKingdoms(next);
+                        return next;
+                      });
                       setTaxPage(0);
                     }}
                     className="rounded"
@@ -255,6 +259,7 @@ function TaxonomyTable({
                 <button
                   onClick={() => {
                     setTaxKingdoms([]);
+                    setSessionKingdoms([]);
                     setTaxPage(0);
                   }}
                   className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 border-t border-gray-50 mt-1"

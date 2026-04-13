@@ -192,6 +192,28 @@ Best practices
 - Reference metaval evidence when available
 - Follow your institution's reporting standards
 
+User preferences
+================
+
+Each user can personalise certain UI settings. Preferences are stored per account and
+persist across sessions and devices.
+
+**Accessing preferences:**
+
+Click your username in the bottom-left corner of the sidebar to open the **Preferences**
+page.
+
+**Available settings:**
+
+Default taxonomy kingdoms
+    Controls which kingdom(s) are pre-selected in the taxonomy table when you open a
+    sample. Choose any combination of *Bacteria*, *Viruses*, *Eukaryota*, and *Archaea*.
+    The default is *Viruses*.
+
+    You can still change the kingdom filter temporarily while viewing a sample — the
+    table filter is session-only and does not overwrite your saved preference unless
+    you explicitly save a new value on the Preferences page.
+
 User access and data
 ====================
 

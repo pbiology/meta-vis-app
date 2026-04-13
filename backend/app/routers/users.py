@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.audit import log_audit_event
 from app.database import get_db
@@ -33,6 +33,23 @@ def reviewer_title(count: int) -> str:
         if count >= threshold:
             title = t
     return title
+
+
+VALID_KINGDOMS: frozenset[str] = frozenset(
+    {"Bacteria", "Viruses", "Eukaryota", "Archaea"}
+)
+
+
+class UserPreferences(BaseModel):
+    preferred_kingdoms: list[str] = ["Viruses"]
+
+    @field_validator("preferred_kingdoms")
+    @classmethod
+    def kingdoms_must_be_valid(cls, v: list[str]) -> list[str]:
+        invalid = set(v) - VALID_KINGDOMS
+        if invalid:
+            raise ValueError(f"Invalid kingdoms: {invalid}")
+        return v
 
 
 class UserCreate(BaseModel):
@@ -94,6 +111,31 @@ async def get_my_stats(
         "reviews": count,
         "reviewer_title": reviewer_title(count),
     }
+
+
+@router.get("/me/preferences", summary="Get current user's preferences")
+async def get_my_preferences(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+) -> UserPreferences:
+    doc = await db["users"].find_one(
+        {"username": current_user["username"]}, {"preferences": 1}
+    )
+    prefs: dict = (doc or {}).get("preferences") or {}
+    return UserPreferences(**prefs)
+
+
+@router.patch("/me/preferences", summary="Update current user's preferences")
+async def update_my_preferences(
+    body: UserPreferences,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+) -> UserPreferences:
+    await db["users"].update_one(
+        {"username": current_user["username"]},
+        {"$set": {"preferences": body.model_dump()}},
+    )
+    return body
 
 
 @router.post("", summary="Create a new user")

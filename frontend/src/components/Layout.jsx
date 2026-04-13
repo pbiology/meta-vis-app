@@ -259,7 +259,12 @@ export default function Layout() {
           )}
           <div className="px-4 py-4 flex flex-col gap-1">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-500 font-medium">{user}</span>
+              <NavLink
+                to="/preferences"
+                className="text-xs text-gray-500 font-medium hover:text-gray-700 transition-colors"
+              >
+                {user}
+              </NavLink>
               <button
                 onClick={handleLogout}
                 className="text-xs text-gray-400 hover:text-gray-600 transition-colors"

@@ -29,3 +29,13 @@ export async function getMyStats() {
   const res = await client.get("/users/me/stats");
   return res.data;
 }
+
+export async function getMyPreferences() {
+  const res = await client.get("/users/me/preferences");
+  return res.data;
+}
+
+export async function updateMyPreferences(prefs) {
+  const res = await client.patch("/users/me/preferences", prefs);
+  return res.data;
+}
