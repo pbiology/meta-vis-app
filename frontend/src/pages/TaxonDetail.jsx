@@ -472,12 +472,17 @@ function PubmedLinks({ pmids }) {
   );
 }
 
-function SpecialtyGenesSubsection({ specialty, loadingSpecialty }) {
+function SpecialtyGenesSubsection({ specialty, loadingSpecialty, superkingdom }) {
   const [sgCollapsed, setSgCollapsed] = useState(true);
+
+  // Use the superkingdom from the already-loaded taxon as the authoritative source.
+  // The backend's is_viral flag can be wrong when the taxa collection has a skeleton
+  // entry without a superkingdom field populated.
+  const isViral = superkingdom === "Viruses" || specialty?.is_viral === true;
 
   const hasSpecialtyData =
     specialty &&
-    !specialty.is_viral &&
+    !isViral &&
     (specialty.amr_genes.length > 0 ||
       specialty.virulence_factors.length > 0 ||
       specialty.amr_phenotypes.length > 0);
@@ -720,7 +725,7 @@ function ExternalLinkButton({ href, children }) {
   );
 }
 
-function BvbrcSection({ taxonId }) {
+function BvbrcSection({ taxonId, superkingdom }) {
   const [genomes, setGenomes] = useState(null);
   const [specialty, setSpecialty] = useState(null);
   const [loadingGenomes, setLoadingGenomes] = useState(true);
@@ -839,7 +844,11 @@ function BvbrcSection({ taxonId }) {
           </div>
 
           {/* Specialty genes — bacteria only */}
-          <SpecialtyGenesSubsection specialty={specialty} loadingSpecialty={loadingSpecialty} />
+          <SpecialtyGenesSubsection
+            specialty={specialty}
+            loadingSpecialty={loadingSpecialty}
+            superkingdom={superkingdom}
+          />
         </div>
       )}
     </section>
@@ -956,7 +965,7 @@ export default function TaxonDetail() {
 
         <ExternalLinksSection taxonId={taxon.taxon_id} />
 
-        <BvbrcSection taxonId={taxon.taxon_id} />
+        <BvbrcSection taxonId={taxon.taxon_id} superkingdom={taxon.superkingdom} />
 
         <LiteratureSection taxonId={taxon.taxon_id} />
 
