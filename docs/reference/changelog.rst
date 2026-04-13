@@ -11,11 +11,16 @@ The format is based on `Keep a Changelog <https://keepachangelog.com/>`_, and th
 
 Added
 -----
-- New features under development
+- User preferences page (``/preferences``) accessible by clicking the username in the
+  sidebar. Currently exposes default taxonomy kingdom filter selection.
+- ``GET /api/v1/users/me/preferences`` and ``PATCH /api/v1/users/me/preferences``
+  endpoints to read and persist per-user UI preferences in MongoDB.
+- Taxonomy table in sample detail now initialises the kingdom filter from the user's
+  saved preference instead of always defaulting to *Viruses*.
 
 Changed
 -------
-- Changes to existing features
+- Username in the sidebar bottom-left is now a link to the Preferences page.
 
 Fixed
 -----

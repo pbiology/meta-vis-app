@@ -170,20 +170,24 @@ Users collection
    {
      "_id": ObjectId("..."),
      "username": "analyst1",
-     "hashed_password": "$2b$12$...",
+     "password_hash": "$2b$12$...",
      "role": "writer",
-     "created_at": ISODate("2026-02-01T00:00:00Z"),
-     "last_login": ISODate("2026-02-20T09:30:00Z")
+     "preferences": {
+       "preferred_kingdoms": ["Bacteria", "Viruses"]
+     }
    }
 
 **Field reference:**
 
 - **_id** - MongoDB unique ID
 - **username** - Unique username
-- **hashed_password** - bcrypt-hashed password (never plaintext)
+- **password_hash** - bcrypt-hashed password (never plaintext)
 - **role** - "reader", "writer", or "admin"
-- **created_at** - Account creation timestamp
-- **last_login** - Timestamp of most recent login
+- **preferences** - Per-user UI settings (optional, written on first save)
+
+  - **preferred_kingdoms** - Default kingdom filter for taxonomy tables.
+    Any subset of ``["Bacteria", "Viruses", "Eukaryota", "Archaea"]``.
+    Defaults to ``["Viruses"]`` when the field is absent.
 
 **Security notes:**
 - Passwords are hashed with bcrypt
