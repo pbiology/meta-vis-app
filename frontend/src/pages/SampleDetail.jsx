@@ -5,6 +5,7 @@ import Badge from "../components/Badge";
 import MetricCard from "../components/MetricCard";
 import { getMetavalForSample } from "../api/metaval";
 import { getOutbreaks, getPathogens } from "../api/alerts";
+import { useAuth } from "../context/AuthContext";
 
 function fmt(n, decimals = 0) {
   if (n === undefined || n === null) return "—";
@@ -52,8 +53,11 @@ function TaxonomyTable({
   ntcProfiles,
   pathogenIds,
 }) {
+  const { preferences } = useAuth();
   const [taxSearch, setTaxSearch] = useState("");
-  const [taxKingdoms, setTaxKingdoms] = useState(["Viruses"]);
+  const [taxKingdoms, setTaxKingdoms] = useState(
+    () => preferences?.preferred_kingdoms ?? ["Viruses"],
+  );
   const [taxSort, setTaxSort] = useState({ col: "abundance", dir: -1 });
   const [taxPage, setTaxPage] = useState(0);
   const [metavalOnly, setMetavalOnly] = useState(false);
