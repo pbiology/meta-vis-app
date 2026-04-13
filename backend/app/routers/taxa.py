@@ -333,17 +333,20 @@ async def get_bvbrc_specialty_genes(
         _bvbrc_specialty_cache[taxon_id] = (now, empty)
         return empty
 
+    # BV-BRC sp_gene endpoint (renamed from specialty_gene in their API).
+    # Property filter via in() does not work for multi-word text values in
+    # BV-BRC's SOLR index, so we fetch all records and filter in Python.
+    # genome_amr uses taxon_id (taxon_lineage_ids is not an indexed field there).
     sg_url = (
-        f"{BVBRC_BASE}/specialty_gene/"
-        f"?eq(taxon_lineage_ids,{taxon_id})"
-        f"&in(property,(Antibiotic%20Resistance,Virulence%20Factor))"
+        f"{BVBRC_BASE}/sp_gene/"
+        f"?eq(taxon_id,{taxon_id})"
         f"&select(gene,property,source,mechanism,product)"
         f"&limit(500)"
         f"&http_accept=application/json"
     )
     amr_url = (
         f"{BVBRC_BASE}/genome_amr/"
-        f"?eq(taxon_lineage_ids,{taxon_id})"
+        f"?eq(taxon_id,{taxon_id})"
         f"&select(antibiotic,resistant_phenotype,evidence)"
         f"&limit(1000)"
         f"&http_accept=application/json"
@@ -362,7 +365,8 @@ async def get_bvbrc_specialty_genes(
     except Exception:
         return empty
 
-    # Deduplicate by (gene, property) and split into AMR vs virulence
+    # Deduplicate by (gene, property) and split into AMR vs virulence.
+    # Other property values (Transporter, Drug Target, Human Homolog) are skipped.
     seen: set[tuple[str, str]] = set()
     amr_genes: list[dict] = []
     virulence_factors: list[dict] = []
@@ -370,6 +374,8 @@ async def get_bvbrc_specialty_genes(
     for g in specialty_genes:
         gene = g.get("gene") or ""
         prop = g.get("property") or ""
+        if prop not in {"Antibiotic Resistance", "Virulence Factor"}:
+            continue
         key = (gene, prop)
         if key in seen:
             continue
