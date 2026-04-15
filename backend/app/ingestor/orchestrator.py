@@ -49,7 +49,7 @@ async def _store_krona(
     await get_blob_store().put(key, html)
 
 
-async def _compute_outbreak_taxa(
+def _compute_outbreak_taxa(
     profiles: list,
 ) -> list:
     """
@@ -252,7 +252,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
         base_qc = _extract_base_qc(qc_data, s.sample_id)
 
         # Compute outbreak_taxa from profiles using active configs
-        outbreak_taxa = await _compute_outbreak_taxa(profiles)
+        outbreak_taxa = _compute_outbreak_taxa(profiles)
 
         # Flat set of all taxon IDs across all classifiers — used for fast
         # pathogen matching at query time without unwinding nested arrays.
