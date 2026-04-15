@@ -517,7 +517,7 @@ async def get_taxon_occurrences(
         {
             "$group": {
                 "_id": {
-                    "sample_id": "$sample.sample_id",
+                    "sample_id": "$sample_id",
                     "case_id_str": "$case_id_str",
                     "order_date": "$order_date",
                     "classifier": "$profiles.classifier",
