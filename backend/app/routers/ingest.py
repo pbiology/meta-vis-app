@@ -24,6 +24,7 @@ async def ingest(
         result = await ingest_case(request, db)
         alerts._cache.clear()
         ntc.invalidate_contaminant_cache()
+        ntc.invalidate_ntc_trends_cache()
         await log_audit_event(
             db,
             action="ingest",
