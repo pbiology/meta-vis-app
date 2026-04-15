@@ -1,5 +1,7 @@
 # app/routers/ntc.py
 
+import asyncio
+import time
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -23,6 +25,19 @@ _contaminant_alert_cache: dict[int, dict] = {}  # window_days -> payload
 
 def invalidate_contaminant_cache() -> None:
     _contaminant_alert_cache.clear()
+
+
+# ---------------------------------------------------------------------------
+# Simple in-memory cache for NTC trends results.
+# Invalidated on ingest and on any change to the ignorelist.
+# ---------------------------------------------------------------------------
+
+_TRENDS_TTL = 900  # 15 minutes
+_trends_cache: dict[tuple, tuple[float, dict]] = {}  # key -> (timestamp, payload)
+
+
+def invalidate_ntc_trends_cache() -> None:
+    _trends_cache.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -101,8 +116,9 @@ async def add_to_ntc_ignorelist(
     }
     result = await db["ntc_ignorelist"].insert_one(doc)
     doc["_id"] = str(result.inserted_id)
-    # Ignoring a taxon affects trend calculations — invalidate cache
+    # Ignoring a taxon affects trend calculations — invalidate caches
     invalidate_contaminant_cache()
+    invalidate_ntc_trends_cache()
     await log_audit_event(
         db,
         action="ntc_ignorelist_add",
@@ -154,6 +170,7 @@ async def remove_from_ntc_ignorelist(
             status_code=404, detail=f"Taxon {taxon_id} not found in NTC ignorelist"
         )
     invalidate_contaminant_cache()
+    invalidate_ntc_trends_cache()
     await log_audit_event(
         db,
         action="ntc_ignorelist_remove",
@@ -414,8 +431,16 @@ async def get_ntc_trends(
     Return NTC trend data for the given material type within a rolling window.
 
     Taxa on the NTC ignorelist are excluded from all three chart datasets.
+    Uses MongoDB aggregation pipelines to avoid loading full profile arrays
+    into Python memory.
     """
     from datetime import date
+
+    cache_key = (material, window_days, min_reads, min_case_pct)
+    now = time.monotonic()
+    cached = _trends_cache.get(cache_key)
+    if cached is not None and now - cached[0] < _TRENDS_TTL:
+        return cached[1]
 
     cutoff = (date.today() - timedelta(days=window_days)).isoformat()
 
@@ -424,30 +449,18 @@ async def get_ntc_trends(
         await db["ntc_ignorelist"].find({}, {"taxon_id": 1}).to_list(length=1000)
     )
     ignored_ids: frozenset[int] = frozenset(d["taxon_id"] for d in ignore_docs)
-    excluded_ids = HOST_TAXON_IDS | ignored_ids
+    excluded_ids: list[int] = list(HOST_TAXON_IDS | ignored_ids)
 
-    ntc_docs = (
-        await db["samples"]
-        .find(
-            {
-                "sample_type": "negative_ctrl",
-                "material": material,
-                "order_date": {"$gte": cutoff},
-            },
-            {
-                "sample_id": 1,
-                "case_id_str": 1,
-                "order_date": 1,
-                "taxprofiler.classifiers.kraken2": 1,
-                "profiles": 1,
-            },
-        )
-        .sort("order_date", 1)
-        .to_list(None)
-    )
+    base_query: dict = {
+        "sample_type": "negative_ctrl",
+        "material": material,
+        "order_date": {"$gte": cutoff},
+    }
 
-    if not ntc_docs:
-        return {
+    total_ntcs: int = await db["samples"].count_documents(base_query)
+
+    if not total_ntcs:
+        result: dict = {
             "material": material,
             "window_days": window_days,
             "total_ntcs": 0,
@@ -455,29 +468,144 @@ async def get_ntc_trends(
             "kingdom_breakdown": [],
             "recurring_taxa": [],
         }
+        _trends_cache[cache_key] = (now, result)
+        return result
 
-    total_ntcs = len(ntc_docs)
     min_case_count = max(1, round(total_ntcs * min_case_pct))
 
-    # --- Build read_counts ---
-    read_counts: list[dict] = []
-    for doc in ntc_docs:
-        kraken2_qc = (
-            doc.get("taxprofiler", {}).get("classifiers", {}).get("kraken2", {})
+    # --- Aggregation pipelines ---
+    # Shared opening stages: match NTC samples, unwind to individual kraken2
+    # profile entries, and exclude ignored taxa — all inside MongoDB so that
+    # full profile arrays are never transferred to Python.
+    _unwind_kraken2: list[dict] = [
+        {"$match": base_query},
+        {"$unwind": "$profiles"},
+        {"$match": {"profiles.classifier": "kraken2"}},
+        {"$unwind": "$profiles.profile"},
+        {"$match": {"profiles.profile.taxon_id": {"$nin": excluded_ids}}},
+    ]
+
+    # kingdom_breakdown: sum abundances per (sample, superkingdom).
+    # The superkingdom "Other" bucketing is done in Python after the aggregation
+    # to avoid $cond/$in operators that some drivers/mocks don't support.
+    kb_pipeline: list[dict] = _unwind_kraken2 + [
+        {
+            "$group": {
+                "_id": {
+                    "sample_id": "$sample_id",
+                    "case_id": "$case_id_str",
+                    "order_date": "$order_date",
+                    "sk": "$profiles.profile.superkingdom",
+                },
+                "reads": {"$sum": "$profiles.profile.abundance"},
+            }
+        },
+        {
+            "$group": {
+                "_id": {
+                    "sample_id": "$_id.sample_id",
+                    "case_id": "$_id.case_id",
+                    "order_date": "$_id.order_date",
+                },
+                "kingdoms": {"$push": {"k": "$_id.sk", "v": "$reads"}},
+            }
+        },
+    ]
+
+    # recurring_taxa: find taxa that appear in >= min_case_count distinct cases.
+    # Deduplicate per (taxon_id, sample_id, case_id) first to avoid double-counting
+    # taxa that appear at multiple ranks within the same sample.
+    rt_pipeline: list[dict] = _unwind_kraken2 + [
+        {"$match": {"profiles.profile.abundance": {"$gt": min_reads}}},
+        # Deduplicate per (taxon, sample, case) — take max abundance.
+        {
+            "$group": {
+                "_id": {
+                    "taxon_id": "$profiles.profile.taxon_id",
+                    "sample_id": "$sample_id",
+                    "case_id": "$case_id_str",
+                },
+                "taxon_name": {"$first": "$profiles.profile.name"},
+                "superkingdom": {"$first": "$profiles.profile.superkingdom"},
+                "order_date": {"$first": "$order_date"},
+                "abundance": {"$max": "$profiles.profile.abundance"},
+            }
+        },
+        # Roll up per taxon: collect occurrences and count distinct cases.
+        {
+            "$group": {
+                "_id": "$_id.taxon_id",
+                "taxon_name": {"$first": "$taxon_name"},
+                "superkingdom": {"$first": "$superkingdom"},
+                "distinct_cases": {"$addToSet": "$_id.case_id"},
+                "occurrences": {
+                    "$push": {
+                        "case_id": "$_id.case_id",
+                        "sample_id": "$_id.sample_id",
+                        "order_date": "$order_date",
+                        "abundance": "$abundance",
+                    }
+                },
+            }
+        },
+        {"$addFields": {"case_count": {"$size": "$distinct_cases"}}},
+        {"$match": {"case_count": {"$gte": min_case_count}}},
+        {"$sort": {"case_count": -1}},
+    ]
+
+    # Run read_counts query and both aggregations in parallel.
+    # The root-node aggregation (taxon_id == 1) is used as a fallback for
+    # samples whose taxprofiler QC data doesn't carry classified_reads directly.
+    rc_cursor = (
+        db["samples"]
+        .find(
+            base_query,
+            {
+                "sample_id": 1,
+                "case_id_str": 1,
+                "order_date": 1,
+                "taxprofiler.classifiers.kraken2.classified_reads": 1,
+            },
         )
-        classified = kraken2_qc.get("classified_reads")
+        .sort("order_date", 1)
+    )
+
+    root_agg_pipeline: list[dict] = [
+        {"$match": base_query},
+        {"$unwind": "$profiles"},
+        {"$match": {"profiles.classifier": "kraken2"}},
+        {"$unwind": "$profiles.profile"},
+        {"$match": {"profiles.profile.taxon_id": 1}},
+        {
+            "$group": {
+                "_id": "$sample_id",
+                "root_abundance": {"$first": "$profiles.profile.abundance"},
+            }
+        },
+    ]
+
+    rc_docs, kb_docs, rt_docs, root_docs = await asyncio.gather(
+        rc_cursor.to_list(None),
+        db["samples"].aggregate(kb_pipeline).to_list(None),
+        db["samples"].aggregate(rt_pipeline).to_list(None),
+        db["samples"].aggregate(root_agg_pipeline).to_list(None),
+    )
+
+    root_by_sample: dict[str, int] = {
+        doc["_id"]: doc["root_abundance"] for doc in root_docs
+    }
+
+    # --- Assemble read_counts ---
+    read_counts: list[dict] = []
+    for doc in rc_docs:
+        classified = (
+            doc.get("taxprofiler", {})
+            .get("classifiers", {})
+            .get("kraken2", {})
+            .get("classified_reads")
+        )
         if classified is None:
-            for p in doc.get("profiles", []):
-                if p.get("classifier") == "kraken2":
-                    classified = next(
-                        (
-                            int(e["abundance"])
-                            for e in p.get("profile", [])
-                            if e.get("taxon_id") == 1
-                        ),
-                        None,
-                    )
-                    break
+            classified = root_by_sample.get(doc["sample_id"])
         read_counts.append(
             {
                 "sample_id": doc["sample_id"],
@@ -487,82 +615,56 @@ async def get_ntc_trends(
             }
         )
 
-    # --- Build kingdom_breakdown (ignorelist applied) ---
+    # --- Assemble kingdom_breakdown ---
+    _known_kingdoms = frozenset(("Bacteria", "Viruses", "Eukaryota", "Archaea"))
+    _kingdom_keys = ("Bacteria", "Viruses", "Eukaryota", "Archaea", "Other")
     kingdom_breakdown: list[dict] = []
-    for doc in ntc_docs:
-        tally: dict[str, int] = {
-            "Bacteria": 0,
-            "Viruses": 0,
-            "Eukaryota": 0,
-            "Archaea": 0,
-            "Other": 0,
-        }
-        for p in doc.get("profiles", []):
-            if p.get("classifier") != "kraken2":
-                continue
-            for entry in p.get("profile", []):
-                if entry.get("taxon_id") in excluded_ids:
-                    continue
-                sk = entry.get("superkingdom") or "Other"
-                if sk not in tally:
-                    sk = "Other"
-                tally[sk] += int(entry.get("abundance", 0))
+    for doc in kb_docs:
+        tally: dict[str, int] = dict.fromkeys(_kingdom_keys, 0)
+        for kv in doc["kingdoms"]:
+            sk = kv["k"] if kv["k"] in _known_kingdoms else "Other"
+            tally[sk] += kv["v"]
         kingdom_breakdown.append(
             {
-                "sample_id": doc["sample_id"],
-                "case_id": doc["case_id_str"],
-                "order_date": doc.get("order_date"),
+                "sample_id": doc["_id"]["sample_id"],
+                "case_id": doc["_id"]["case_id"],
+                "order_date": doc["_id"]["order_date"],
                 **tally,
             }
         )
-
-    # --- Build recurring_taxa (ignorelist applied) ---
-    taxon_cases: dict[int, dict] = {}
-    for doc in ntc_docs:
-        case_id = doc["case_id_str"]
-        kraken2_profile: list[dict] = []
-        for p in doc.get("profiles", []):
-            if p.get("classifier") == "kraken2":
-                kraken2_profile = p.get("profile", [])
-                break
-
-        seen_in_this_doc: set[int] = set()
-        for entry in kraken2_profile:
-            taxon_id = entry.get("taxon_id")
-            if taxon_id is None or taxon_id in seen_in_this_doc:
-                continue
-            if taxon_id in excluded_ids:
-                continue
-            abundance = entry.get("abundance", 0)
-            if abundance <= min_reads:
-                continue
-            seen_in_this_doc.add(taxon_id)
-            if taxon_id not in taxon_cases:
-                taxon_cases[taxon_id] = {
-                    "taxon_id": taxon_id,
-                    "taxon_name": entry.get("name", str(taxon_id)),
-                    "superkingdom": entry.get("superkingdom"),
-                    "occurrences": [],
-                }
-            taxon_cases[taxon_id]["occurrences"].append(
+    # Add all-zeros entries for NTC samples that had no aggregatable profile entries
+    # (no kraken2 profile, empty profile, or every entry was excluded).
+    kb_sample_ids: frozenset[str] = frozenset(
+        entry["sample_id"] for entry in kingdom_breakdown
+    )
+    for doc in rc_docs:
+        if doc["sample_id"] not in kb_sample_ids:
+            kingdom_breakdown.append(
                 {
-                    "case_id": case_id,
                     "sample_id": doc["sample_id"],
+                    "case_id": doc["case_id_str"],
                     "order_date": doc.get("order_date"),
-                    "abundance": abundance,
+                    **dict.fromkeys(_kingdom_keys, 0),
                 }
             )
 
-    recurring_taxa: list[dict] = []
-    for taxon in taxon_cases.values():
-        distinct_cases = len({o["case_id"] for o in taxon["occurrences"]})
-        if distinct_cases >= min_case_count:
-            taxon["occurrences"].sort(key=lambda o: o["order_date"] or "")
-            taxon["case_count"] = distinct_cases
-            recurring_taxa.append(taxon)
-    recurring_taxa.sort(key=lambda t: t["case_count"], reverse=True)
+    kingdom_breakdown.sort(key=lambda d: d["order_date"] or "")
 
-    return {
+    # --- Assemble recurring_taxa ---
+    recurring_taxa: list[dict] = [
+        {
+            "taxon_id": doc["_id"],
+            "taxon_name": doc["taxon_name"],
+            "superkingdom": doc["superkingdom"],
+            "case_count": doc["case_count"],
+            "occurrences": sorted(
+                doc["occurrences"], key=lambda o: o["order_date"] or ""
+            ),
+        }
+        for doc in rt_docs
+    ]
+
+    result = {
         "material": material,
         "window_days": window_days,
         "total_ntcs": total_ntcs,
@@ -571,3 +673,5 @@ async def get_ntc_trends(
         "kingdom_breakdown": kingdom_breakdown,
         "recurring_taxa": recurring_taxa,
     }
+    _trends_cache[cache_key] = (now, result)
+    return result

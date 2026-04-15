@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from fastapi import FastAPI
 from mongomock_motor import AsyncMongoMockClient
 
-from app.routers.ntc import router as ntc_router, invalidate_contaminant_cache
+from app.routers.ntc import router as ntc_router, invalidate_contaminant_cache, invalidate_ntc_trends_cache
 from app.database import get_db
 from app.auth.utils import get_current_user, require_role
 
@@ -16,6 +16,11 @@ from app.auth.utils import get_current_user, require_role
 # ---------------------------------------------------------------------------
 # Fixtures and helpers
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def clear_trends_cache():
+    invalidate_ntc_trends_cache()
 
 
 @pytest.fixture

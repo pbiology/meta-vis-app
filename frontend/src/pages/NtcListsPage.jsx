@@ -23,6 +23,24 @@ function superkingdomFromLineage(lineage = "") {
   return null;
 }
 
+// Cellular organisms (Bacteria, Archaea, Eukaryota) have a populated lineage
+// string in NCBI esummary, which includes the kingdom name directly.
+// Viruses have an empty lineage because they sit outside the cellular organism
+// hierarchy — instead, NCBI always populates genbankdivision for them.
+const GENBANK_DIVISION_TO_KINGDOM = {
+  Viruses: "Viruses",
+  Phages: "Viruses",
+  Bacteria: "Bacteria",
+  Archaea: "Archaea",
+  Mammals: "Eukaryota",
+  Primates: "Eukaryota",
+  Rodents: "Eukaryota",
+  Vertebrates: "Eukaryota",
+  Invertebrates: "Eukaryota",
+  Plants: "Eukaryota",
+  Fungi: "Eukaryota",
+};
+
 async function lookupTaxon(taxonId) {
   const url = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=taxonomy&id=${taxonId}&retmode=json`;
   const res = await fetch(url);
@@ -30,9 +48,15 @@ async function lookupTaxon(taxonId) {
   const data = await res.json();
   const result = data?.result?.[String(taxonId)];
   if (!result || result.status === "error") throw new Error("Taxon not found");
+  // For cellular organisms the lineage string contains the kingdom name.
+  // For viruses the lineage is empty — use genbankdivision as fallback.
+  const superkingdom =
+    superkingdomFromLineage(result.lineage ?? "") ??
+    GENBANK_DIVISION_TO_KINGDOM[result.genbankdivision] ??
+    null;
   return {
     name: result.scientificname,
-    superkingdom: superkingdomFromLineage(result.lineage ?? ""),
+    superkingdom,
   };
 }
 
@@ -60,7 +84,7 @@ function AddTaxonModal({ title, showMinReads, onAdd, onClose }) {
     setForm((f) => ({ ...f, taxon_name: "", superkingdom: null }));
     try {
       const { name, superkingdom } = await lookupTaxon(id);
-      setForm((f) => ({ ...f, taxon_name: name, superkingdom: superkingdom ?? "Bacteria" }));
+      setForm((f) => ({ ...f, taxon_name: name, superkingdom }));
     } catch {
       setLookupError("Could not find taxon in NCBI. Check the ID and try again.");
     } finally {
