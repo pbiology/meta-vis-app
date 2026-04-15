@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ingest_bulk_test.sh
 # Ingests test cases with random 12-character names and
-# order dates spread across 2026-02-01 to 2026-04-03 (61 days).
+# order dates spread across 2026-02-01 to 2026-04-06.
 #
 # Usage:
 #   bash ingest_bulk_test.sh          # ingests 10 cases (default)
@@ -10,7 +10,13 @@
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
-TEST_DATA="$REPO_ROOT/backend/test-data/speedysnake"
+
+# Host path: used to run ingest.py from your machine
+INGEST_SCRIPT="$REPO_ROOT/ingest.py"
+
+# Container-visible path: used by the backend container when it reads files
+TEST_DATA="/app/test-data/speedysnake"
+
 PASSWORD="yourpassword"
 URL="http://localhost:8000"
 COUNT="${1:-10}"
@@ -28,7 +34,7 @@ echo ""
 success=0
 fail=0
 
-for i in $(seq 1 $COUNT); do
+for i in $(seq 1 "$COUNT"); do
   case_id=$(LC_ALL=C tr -dc 'a-z' < /dev/urandom | head -c 12)
 
   offset_days=$(( RANDOM % (range_days + 1) ))
@@ -36,7 +42,7 @@ for i in $(seq 1 $COUNT); do
   order_epoch=$(( start_epoch + offset_secs ))
   order_date=$(date -j -r "$order_epoch" "+%Y-%m-%d")
 
-  if python "$REPO_ROOT/ingest.py" \
+  if python "$INGEST_SCRIPT" \
     --case-id "$case_id" \
     --order-date "$order_date" \
     --multiqc "$TEST_DATA/taxprofiler/multiqc_data.json" \
