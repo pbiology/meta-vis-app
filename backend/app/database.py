@@ -84,6 +84,12 @@ async def _ensure_indexes():
     # ntc_ignorelist — fast lookup by taxon_id
     await db["ntc_ignorelist"].create_index("taxon_id", unique=True)
 
+    # samples — compound index for NTC trends query (sample_type + material + order_date)
+    await db["samples"].create_index(
+        [("sample_type", 1), ("material", 1), ("order_date", -1)],
+        name="ntc_trends_lookup",
+    )
+
     # ntc_known_contaminants — fast lookup by taxon_id
     await db["ntc_known_contaminants"].create_index("taxon_id", unique=True)
 
