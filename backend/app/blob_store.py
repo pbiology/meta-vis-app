@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from abc import ABC, abstractmethod
 from typing import Optional
 
@@ -58,7 +59,9 @@ class MongoBlobStore(BlobStore):
         return doc["content"] if doc else None
 
     async def delete_prefix(self, prefix: str) -> None:
-        await self._db["blobs"].delete_many({"key": {"$regex": f"^{prefix}"}})
+        await self._db["blobs"].delete_many(
+            {"key": {"$regex": f"^{re.escape(prefix)}"}}
+        )
 
 
 # ---------------------------------------------------------------------------
