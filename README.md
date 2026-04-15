@@ -53,9 +53,28 @@ meta-vis is a **clinical interpretation tool for metagenomic quality control and
 - ✓ **Early warning** — Outbreak detection catches patterns before they spread
 - ✓ **Compliance-ready** — Full audit trail and user-level access control
 
-## Quick Start
+## Full-stack Docker development
 
-### 1. Installation
+The repository now supports a full local development environment with Docker Compose.
+
+This starts:
+
+- frontend (Vite)
+- backend (FastAPI)
+- MongoDB
+- MinIO
+
+This is the recommended way to get the full development environment running locally with minimal setup.
+
+### Prerequisites
+
+Make sure you have:
+
+- Docker
+- Docker Compose
+- a valid `backend/.env` file with the required local secrets
+
+### 1. Quick-start
 
 See the [Installation Guide](https://meta-vis-app.readthedocs.io/en/latest/getting-started/installation.html).
 
@@ -63,37 +82,37 @@ See the [Installation Guide](https://meta-vis-app.readthedocs.io/en/latest/getti
 git clone <repo-url>
 cd meta-vis-app
 
-# Backend setup
-cd backend
-conda env create -f environment.yml
-conda activate meta-vis-app
-pip install -e .
-cp .env.example .env
-docker compose up -d
+# Create secrets file at backend/.env and edit
+cp backend/.env.example backend/.env
 
-# Create first user
-python create_user.py --username admin --password yourpassword --role admin
+# Start the docker services
+make up-build
 
-# Start backend
-uvicorn app.main:app --reload
-
-# Frontend setup (in new terminal)
-cd frontend
-npm install
-npm run dev
+# Create initial admin user and load taxonomic data into the database
+make create-admin
+make load-taxonomy
 ```
 
-The app will be available at `http://localhost:5173`.
+The services will be available at:
+- Frontend: http://localhost:5173
+- Backend: http://localhost:8000
+- MinIO console: http://localhost:9001
+
+#### Notes
+
+- This Docker setup is intended for development and supports hot reload for both frontend and backend code.
+- For a full list of available dev commands, run `make`
 
 ### 2. Load Test Data
+Any test data should be placed under `backend/test-data` to ensure it is available to the containers
 
 ```bash
 python ingest.py \
   --case-id test-case-001 \
   --order-date 2026-02-20 \
-  --multiqc test-data/multiqc_data.json \
-  --pipeline-info test-data/pipeline_info/nf_core_pipeline_software_mqc_versions.yml \
-  --classifier "kraken2 db=k2_pluspf taxpasta=test-data/kraken2_k2_pluspf.tsv krona=test-data/kraken2_k2_pluspf.html" \
+  --multiqc backend/test-data/multiqc_data.json \
+  --pipeline-info backend/test-data/pipeline_info/nf_core_pipeline_software_mqc_versions.yml \
+  --classifier "kraken2 db=k2_pluspf taxpasta=backend/test-data/kraken2_k2_pluspf.tsv krona=backend/test-data/kraken2_k2_pluspf.html" \
   --sample "sample_id=SRR13439790 type=sample material=DNA column_kraken2=SRR13439790_k2_pluspf.kraken2.kraken2.report" \
   --password yourpassword
 ```
