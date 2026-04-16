@@ -9,12 +9,13 @@ from typing import Any
 from pymongo import UpdateOne
 
 from app.models.sample import IngestRequest
-from app.ingestor.taxpasta_reader import read_taxpasta
+from app.ingestor.taxpasta_reader import load_taxpasta, extract_sample_profile
 from app.ingestor.multiqc_reader import read_multiqc
 from app.ingestor.pipeline_info_reader import read_pipeline_info
 from app.ingestor.metaval_reader import read_metaval
 from app.ingestor.models import (
     MetavalOutput,
+    MetavalResult,
     MultiQCRaw,
     PipelineInfoOutput,
     TaxonEntry,
@@ -163,6 +164,90 @@ async def _upsert_taxa_from_profiles(profiles: list, db: AsyncIOMotorDatabase) -
     await db["taxa"].bulk_write(ops, ordered=False)
 
 
+async def _process_one_metaval_result(
+    r: MetavalResult,
+    case_object_id: ObjectId,
+    db: AsyncIOMotorDatabase,
+    now: datetime,
+) -> None:
+    """Upload blobs and insert a single metaval result document."""
+    from app.database import get_blob_store
+
+    blob_store = get_blob_store()
+
+    existing_sample: dict | None = await db["samples"].find_one(
+        {
+            "case_id": case_object_id,
+            "sample_id": r.sample_name,
+        }
+    )
+    sample_object_id = existing_sample["_id"] if existing_sample else None
+
+    async def _upload_igv(org: Any) -> dict:
+        igv_key = None
+        if not org.igv_too_large and org.igv_file_path:
+            igv_key = (
+                f"igv/{case_object_id}/{r.sample_name}/"
+                f"{r.classifier}/{org.organism_name}.html"
+            )
+            html = Path(org.igv_file_path).read_text(encoding="utf-8")
+            await blob_store.put(igv_key, html)
+        return {
+            "organism_name": org.organism_name,
+            "igv_key": igv_key,
+            "igv_file_size_bytes": org.igv_file_size_bytes,
+            "igv_too_large": org.igv_too_large,
+        }
+
+    organisms = list(await asyncio.gather(*[_upload_igv(org) for org in r.organisms]))
+
+    vd = r.verification_data
+    vd_store: dict[str, object] = {
+        "type": vd.type,
+        "count": vd.count,
+        "avg_length": vd.avg_length,
+        "file_count": vd.file_count,
+    }
+
+    if vd.type in ("scaffolds", "contigs"):
+        if vd.path and Path(vd.path).exists():
+            blob_key = (
+                f"verification_data/{case_object_id}/{r.sample_name}/"
+                f"{r.classifier}/{r.taxon_name}_{vd.type}.fa"
+            )
+            content = Path(vd.path).read_text(encoding="utf-8")
+            await blob_store.put(blob_key, content)
+            vd_store["blob_key"] = blob_key
+    elif vd.type == "raw_reads":
+        for read_num, path_val in [
+            ("1", vd.read_1_path),
+            ("2", vd.read_2_path),
+        ]:
+            if path_val and Path(path_val).exists():
+                blob_key = (
+                    f"verification_data/{case_object_id}/{r.sample_name}/"
+                    f"{r.classifier}/{r.taxon_name}_read_{read_num}.fa"
+                )
+                content = Path(path_val).read_text(encoding="utf-8")
+                await blob_store.put(blob_key, content)
+                vd_store[f"read_{read_num}_key"] = blob_key
+
+    await db["metaval_results"].insert_one(
+        {
+            "case_id": case_object_id,
+            "sample_id": sample_object_id,
+            "sample_name": r.sample_name,
+            "classifier": r.classifier,
+            "taxon_id": r.taxon_id,
+            "taxon_name": r.taxon_name,
+            "organisms": organisms,
+            "blast": r.blast.model_dump(),
+            "verification_data": vd_store,
+            "ingested_at": now,
+        }
+    )
+
+
 async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     now = datetime.now(timezone.utc)
 
@@ -202,7 +287,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     case_result = await db["cases"].insert_one(case_doc)
     case_object_id = case_result.inserted_id
 
-    async def _upload_krona(clf):
+    async def _upload_krona(clf: Any) -> dict:
         if clf.krona:
             await _store_krona(case_object_id, clf.name, clf.krona)
             return {"name": clf.name, "db": clf.db, "krona_id": clf.name}
@@ -217,7 +302,14 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
         {"$set": {"classifiers": updated_classifiers}},
     )
 
-    sample_ids = []
+    # Fix 1: load each taxpasta file once, keyed by path
+    import pandas as pd
+
+    taxpasta_cache: dict[str, pd.DataFrame] = {}
+    for clf in request.classifiers:
+        if clf.taxpasta not in taxpasta_cache:
+            taxpasta_cache[clf.taxpasta] = load_taxpasta(clf.taxpasta)
+
     sample_names = [s.sample_id for s in request.samples if s.sample_type == "sample"]
     sample_count = len([s for s in request.samples if s.sample_type == "sample"])
     control_count = len(
@@ -227,6 +319,10 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             if s.sample_type in ("positive_ctrl", "negative_ctrl")
         ]
     )
+
+    # Fix 2 + 3: build all sample docs first; accumulate profiles for one bulk taxa upsert
+    sample_docs: list[dict] = []
+    all_profiles: list[dict] = []
 
     for s in request.samples:
         subject_object_id = None
@@ -240,7 +336,9 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             col = s.columns.get(clf.name)
             if not col:
                 continue
-            taxon_entries: list[TaxonEntry] = read_taxpasta(clf.taxpasta, col)
+            taxon_entries: list[TaxonEntry] = extract_sample_profile(
+                taxpasta_cache[clf.taxpasta], col
+            )
             profiles.append(
                 {
                     "classifier": clf.name,
@@ -252,14 +350,11 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             if clf_qc:
                 classifier_qc[clf.name] = clf_qc
 
-        await _upsert_taxa_from_profiles(profiles, db)
+        all_profiles.extend(profiles)
         base_qc = _extract_base_qc(qc_data, s.sample_id)
 
-        # Compute outbreak_taxa from profiles using active configs
         outbreak_taxa = _compute_outbreak_taxa(profiles)
 
-        # Flat set of all taxon IDs across all classifiers — used for fast
-        # pathogen matching at query time without unwinding nested arrays.
         all_taxon_ids: list[int] = list(
             {
                 entry["taxon_id"]
@@ -269,37 +364,43 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             }
         )
 
-        sample_doc = {
-            "case_id": case_object_id,
-            "case_id_str": request.case_id,
-            "sample_id": s.sample_id,
-            "sample_source": s.sample_source,
-            "order_date": request.order_date.isoformat()
-            if request.order_date
-            else None,
-            "subject_id": subject_object_id,
-            "sample_type": s.sample_type,
-            "material": s.material,
-            "taxprofiler": {
-                **base_qc,
-                "classifiers": classifier_qc,
-                "pipeline_info": pipeline_info.model_dump(),
-            },
-            "profiles": profiles,
-            "outbreak_taxa": outbreak_taxa,
-            "all_taxon_ids": all_taxon_ids,
-            "has_krona": any(clf.krona for clf in request.classifiers),
-            "review": {
-                "reviewed": False,
-                "reviewed_by": None,
-                "reviewed_at": None,
-                "notes": None,
-            },
-            "ingested_at": now,
-        }
+        sample_docs.append(
+            {
+                "case_id": case_object_id,
+                "case_id_str": request.case_id,
+                "sample_id": s.sample_id,
+                "sample_source": s.sample_source,
+                "order_date": request.order_date.isoformat()
+                if request.order_date
+                else None,
+                "subject_id": subject_object_id,
+                "sample_type": s.sample_type,
+                "material": s.material,
+                "taxprofiler": {
+                    **base_qc,
+                    "classifiers": classifier_qc,
+                    "pipeline_info": pipeline_info.model_dump(),
+                },
+                "profiles": profiles,
+                "outbreak_taxa": outbreak_taxa,
+                "all_taxon_ids": all_taxon_ids,
+                "has_krona": any(clf.krona for clf in request.classifiers),
+                "review": {
+                    "reviewed": False,
+                    "reviewed_by": None,
+                    "reviewed_at": None,
+                    "notes": None,
+                },
+                "ingested_at": now,
+            }
+        )
 
-        sample_result = await db["samples"].insert_one(sample_doc)
-        sample_ids.append(sample_result.inserted_id)
+    # Single taxa upsert across all samples
+    await _upsert_taxa_from_profiles(all_profiles, db)
+
+    # Batch insert all samples in one round-trip
+    insert_result = await db["samples"].insert_many(sample_docs)
+    sample_ids = list(insert_result.inserted_ids)
 
     await db["cases"].update_one(
         {"_id": case_object_id},
@@ -327,84 +428,13 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
                 },
             )
 
-        from app.database import get_blob_store
-
-        for r in metaval_results:
-            existing_sample: dict | None = await db["samples"].find_one(
-                {
-                    "case_id": case_object_id,
-                    "sample_id": r.sample_name,
-                }
-            )
-            sample_object_id = existing_sample["_id"] if existing_sample else None
-
-            # Upload IGV HTML files
-            async def _upload_igv(org):
-                igv_key = None
-                if not org.igv_too_large and org.igv_file_path:
-                    igv_key = (
-                        f"igv/{case_object_id}/{r.sample_name}/"
-                        f"{r.classifier}/{org.organism_name}.html"
-                    )
-                    html = Path(org.igv_file_path).read_text(encoding="utf-8")
-                    await get_blob_store().put(igv_key, html)
-                return {
-                    "organism_name": org.organism_name,
-                    "igv_key": igv_key,
-                    "igv_file_size_bytes": org.igv_file_size_bytes,
-                    "igv_too_large": org.igv_too_large,
-                }
-
-            organisms = list(
-                await asyncio.gather(*[_upload_igv(org) for org in r.organisms])
-            )
-
-            # Upload verification data (scaffolds, contigs, or raw reads)
-            vd = r.verification_data
-            vd_store: dict[str, object] = {
-                "type": vd.type,
-                "count": vd.count,
-                "avg_length": vd.avg_length,
-                "file_count": vd.file_count,
-            }
-
-            if vd.type in ("scaffolds", "contigs"):
-                if vd.path and Path(vd.path).exists():
-                    blob_key = (
-                        f"verification_data/{case_object_id}/{r.sample_name}/"
-                        f"{r.classifier}/{r.taxon_name}_{vd.type}.fa"
-                    )
-                    content = Path(vd.path).read_text(encoding="utf-8")
-                    await get_blob_store().put(blob_key, content)
-                    vd_store["blob_key"] = blob_key
-            elif vd.type == "raw_reads":
-                for read_num, path_val in [
-                    ("1", vd.read_1_path),
-                    ("2", vd.read_2_path),
-                ]:
-                    if path_val and Path(path_val).exists():
-                        blob_key = (
-                            f"verification_data/{case_object_id}/{r.sample_name}/"
-                            f"{r.classifier}/{r.taxon_name}_read_{read_num}.fa"
-                        )
-                        content = Path(path_val).read_text(encoding="utf-8")
-                        await get_blob_store().put(blob_key, content)
-                        vd_store[f"read_{read_num}_key"] = blob_key
-
-            await db["metaval_results"].insert_one(
-                {
-                    "case_id": case_object_id,
-                    "sample_id": sample_object_id,
-                    "sample_name": r.sample_name,
-                    "classifier": r.classifier,
-                    "taxon_id": r.taxon_id,
-                    "taxon_name": r.taxon_name,
-                    "organisms": organisms,
-                    "blast": r.blast.model_dump(),
-                    "verification_data": vd_store,
-                    "ingested_at": now,
-                }
-            )
+        # Fix 4: fan out all metaval results concurrently
+        await asyncio.gather(
+            *[
+                _process_one_metaval_result(r, case_object_id, db, now)
+                for r in metaval_results
+            ]
+        )
 
     return {
         "case_id": request.case_id,
@@ -570,7 +600,7 @@ def _extract_base_qc(qc_data: MultiQCRaw, sample_id: str) -> dict:
 
     if fastqc_fwd_lanes or fastqc_rev_lanes:
 
-        def _avg(lanes, field):
+        def _avg(lanes: dict, field: str) -> float | None:
             vals = [v.get(field) for v in lanes.values() if v.get(field) is not None]
             return round(sum(vals) / len(vals), 2) if vals else None
 
