@@ -6,6 +6,15 @@ import { getOutbreaks } from "../api/alerts";
 import { getNtcContaminantCaseIds } from "../api/ntc";
 import { useAuth } from "../context/AuthContext";
 
+function pipelineShortName(c) {
+  const raw = c.pipeline_info?.pipeline_configuration?.pipeline_name ?? "";
+  if (raw.includes("taxprofiler")) {
+    return c.metaval_pipeline_info ? "Taxprofiler+Metaval" : "Taxprofiler";
+  }
+  if (raw.toLowerCase().includes("trana")) return "TRANA";
+  return raw || null;
+}
+
 export default function CaseList() {
   const [data, setData] = useState({ items: [], total: 0, pages: 1 });
   const [loading, setLoading] = useState(true);
@@ -23,13 +32,19 @@ export default function CaseList() {
   const { role } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const filter = searchParams.get("filter") ?? "all";
+  const analysisFilter = searchParams.get("analysis") ?? "all";
 
   const load = useCallback(
     async (silent = false) => {
       if (!silent) setLoading(true);
       setError(null);
       try {
-        const result = await getCases({ page, search, reviewed: filter });
+        const result = await getCases({
+          page,
+          search,
+          reviewed: filter,
+          analysisType: analysisFilter,
+        });
         setData(result);
         getOutbreaks(14)
           .then((d) => setOutbreakCaseIds(new Set(d.outbreaks.flatMap((o) => o.case_ids))))
@@ -52,7 +67,7 @@ export default function CaseList() {
         setLoading(false);
       }
     },
-    [page, search, filter]
+    [page, search, filter, analysisFilter]
   );
 
   useEffect(() => {
@@ -125,7 +140,10 @@ export default function CaseList() {
               key={f}
               onClick={() => {
                 setPage(1);
-                setSearchParams(f === "all" ? {} : { filter: f });
+                const next = new URLSearchParams(searchParams);
+                if (f === "all") next.delete("filter");
+                else next.set("filter", f);
+                setSearchParams(next);
               }}
               className={`text-xs font-medium px-2.5 py-1.5 rounded-md transition-colors ${
                 filter === f ? "bg-blue-100 text-blue-700" : "text-gray-600 hover:bg-gray-100"
@@ -134,6 +152,29 @@ export default function CaseList() {
               {f === "all" && <>All Cases</>}
               {f === "pending" && <>Pending</>}
               {f === "reviewed" && <>Reviewed</>}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 border-l border-gray-200 pl-3">
+          {["all", "shotgun", "amplicon"].map((a) => (
+            <button
+              key={a}
+              onClick={() => {
+                setPage(1);
+                const next = new URLSearchParams(searchParams);
+                if (a === "all") next.delete("analysis");
+                else next.set("analysis", a);
+                setSearchParams(next);
+              }}
+              className={`text-xs font-medium px-2.5 py-1.5 rounded-md transition-colors ${
+                analysisFilter === a
+                  ? "bg-blue-100 text-blue-700"
+                  : "text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              {a === "all" && <>All Types</>}
+              {a === "shotgun" && <>Shotgun</>}
+              {a === "amplicon" && <>Amplicon</>}
             </button>
           ))}
         </div>
@@ -164,8 +205,10 @@ export default function CaseList() {
                 {[
                   "Case name",
                   "Date",
+                  "Pipeline",
+                  "Analysis",
+                  "Platform",
                   "Samples",
-                  "Sample names",
                   "Notes",
                   "Status",
                   "Reviewed by",
@@ -249,15 +292,29 @@ export default function CaseList() {
                     {c.order_date ?? "—"}
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
+                    {pipelineShortName(c) ?? "—"}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
+                    {c.analysis_type === "shotgun"
+                      ? "Shotgun"
+                      : c.analysis_type === "amplicon"
+                        ? "Amplicon"
+                        : "—"}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
+                    {c.sequencing_platform
+                      ? c.sequencing_platform.charAt(0).toUpperCase() +
+                        c.sequencing_platform.slice(1)
+                      : "—"}
+                  </td>
+                  <td
+                    className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap"
+                    title={(c.sample_names ?? []).join(", ") || undefined}
+                  >
                     {c.sample_count ?? 0} sample{(c.sample_count ?? 0) !== 1 ? "s" : ""}
                     {(c.control_count ?? 0) > 0 && (
                       <span className="text-gray-300 ml-1">+{c.control_count} ctrl</span>
                     )}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-600" style={{ maxWidth: "220px" }}>
-                    <span className="block truncate" title={(c.sample_names ?? []).join(", ")}>
-                      {(c.sample_names ?? []).join(", ") || "—"}
-                    </span>
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-400">
                     {(c.notes?.length ?? 0) > 0 ? (
@@ -287,7 +344,7 @@ export default function CaseList() {
               {cases.length === 0 && (
                 <tr>
                   <td
-                    colSpan={role === "admin" ? 8 : 7}
+                    colSpan={role === "admin" ? 10 : 9}
                     className="px-4 py-10 text-center text-sm text-gray-400"
                   >
                     No cases found.

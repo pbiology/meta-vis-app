@@ -118,6 +118,8 @@ def ingest(args):
         "classifiers": classifiers,
         "samples": samples,
         "metaval": {"metaval_dir": args.metaval} if args.metaval else None,
+        "analysis_type": args.analysis_type,
+        "sequencing_platform": args.sequencing_platform,
     }
 
     print(f"Ingesting {len(samples)} sample(s) for case '{args.case_id}' ...")
@@ -172,6 +174,18 @@ def main():
         required=True,
         metavar="KEY=VALUE ...",
         help="Sample descriptor. Repeat for each sample.",
+    )
+    parser.add_argument(
+        "--analysis-type",
+        choices=["shotgun", "amplicon"],
+        default=None,
+        help="Analysis type: shotgun (metagenomics) or amplicon (16S)",
+    )
+    parser.add_argument(
+        "--sequencing-platform",
+        choices=["illumina", "nanopore"],
+        default=None,
+        help="Sequencing platform: illumina or nanopore",
     )
     parser.add_argument("--url", default="http://localhost:8000")
     parser.add_argument("--username", default="admin")
