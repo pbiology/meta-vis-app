@@ -2,18 +2,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { getSamples } from "../api/samples";
 import Badge from "../components/Badge";
+import { fmt, fmtPct } from "../utils/format";
 
 const FILTERS = ["All", "Samples", "Controls"];
-
-function fmt(n) {
-  if (n === undefined || n === null) return "—";
-  return n.toLocaleString();
-}
-
-function fmtPct(n) {
-  if (n === undefined || n === null) return "—";
-  return `${n.toFixed(1)}%`;
-}
 
 export default function SampleList() {
   const [data, setData] = useState({ items: [], total: 0, pages: 1 });
