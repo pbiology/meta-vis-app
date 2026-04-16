@@ -259,7 +259,7 @@ export default function SampleDetail() {
                             to={`/samples/${sampleId}/metaval/${r._id}`}
                             className="text-xs italic text-gray-700 hover:text-blue-600 underline transition-colors"
                           >
-                            {r.taxon_name.replace(/-/g, " ")}
+                            {r.taxon_name.replace(/^taxid_\d+_/, "").replace(/-/g, " ")}
                           </Link>
                         </td>
                       </tr>

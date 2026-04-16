@@ -415,33 +415,39 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
 
 
 def _extract_classifier_qc(qc_data: MultiQCRaw, classifier_name: str, col: str) -> dict:
-    """Extract classifier-specific QC stats from multiqc data."""
+    """Extract classifier-specific QC stats from multiqc data.
+
+    Expects the MultiQC v2 dict-of-dicts format:
+      {"U": {"unclassified": N}, "R": {"root": N}, "S": {taxon: N, ...}, ...}
+    """
 
     if classifier_name == "kraken2":
         key = col.split(".kraken2")[0]
         records = qc_data.kraken2.get(key)
     elif classifier_name == "centrifuge":
         records = qc_data.centrifuge.get(col)
+    elif classifier_name == "diamond":
+        key = col.split(".diamond")[0]
+        stats = qc_data.diamond.get(key)
+        if not stats:
+            return {}
+        return {"queries_aligned": stats.get("queries_aligned") or None}
     else:
         return {}
 
-    if not records or not isinstance(records, list):
+    if not records or not isinstance(records, dict):
         return {}
 
-    unclassified_reads = sum(
-        r["counts_rooted"] for r in records if r.get("rank_code") == "U"
-    )
-    root_records = [r for r in records if r.get("rank_code") == "R"]
-    num_species = len([r for r in records if r.get("rank_code") == "S"])
-    num_genera = len([r for r in records if r.get("rank_code") == "G"])
+    unclassified_reads = sum(records.get("U", {}).values())
 
-    if root_records:
-        classified_reads = root_records[0]["counts_rooted"]
+    root_counts = records.get("R", {})
+    if root_counts:
+        classified_reads = sum(root_counts.values())
     else:
-        classified_reads = sum(
-            r["counts_rooted"] for r in records if r.get("rank_code") == "S"
-        )
+        classified_reads = sum(records.get("S", {}).values())
 
+    num_species = len(records.get("S", {}))
+    num_genera = len(records.get("G", {}))
     total_reads = unclassified_reads + classified_reads
 
     return {

@@ -43,7 +43,13 @@ const TAXON_COLOURS = [
   "#84cc16", // lime-500
 ];
 
-const MARGIN = { top: 16, right: 24, bottom: 48, left: 60 };
+const MARGIN = { top: 16, right: 24, bottom: 48, left: 72 };
+
+function formatCount(n) {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toPrecision(3)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toPrecision(3)}k`;
+  return String(n);
+}
 
 /** Returns the ISO week number (1–53) for a given date. */
 function isoWeek(date) {
@@ -185,6 +191,7 @@ function KingdomBreakdownChart({ data, width = 600, height = 220 }) {
           <AxisLeft
             scale={yScale}
             numTicks={4}
+            tickFormat={formatCount}
             tickStroke="#d1d1d6"
             stroke="#d1d1d6"
             tickLabelProps={{
@@ -345,6 +352,7 @@ function ReadCountChart({ data, width = 600, height = 200 }) {
           <AxisLeft
             scale={yScale}
             numTicks={4}
+            tickFormat={formatCount}
             tickStroke="#d1d1d6"
             stroke="#d1d1d6"
             tickLabelProps={{
@@ -485,6 +493,7 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240 }) {
           <AxisLeft
             scale={yScale}
             numTicks={4}
+            tickFormat={formatCount}
             tickStroke="#d1d1d6"
             stroke="#d1d1d6"
             tickLabelProps={{

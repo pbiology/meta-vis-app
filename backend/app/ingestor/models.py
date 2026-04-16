@@ -53,12 +53,21 @@ class PipelineInfoOutput(_StrictBase):
 class MultiQCRaw(_StrictBase):
     """Validated output of multiqc_reader.read_multiqc().
 
-    Each value is a dict[sample_name, tool_stats] — the inner structure
-    is left as Any because it varies per tool and pipeline version.
+    kraken2 / centrifuge use the MultiQC v2 dict-of-dicts format:
+      sample_name -> rank_code -> {taxon_name: count}
+    e.g. {"SAMPLE1_k2_pluspf": {"U": {"unclassified": 200}, "S": {"Homo sapiens": 1000}}}
+
+    diamond uses a flat format:
+      sample_name -> {stat_name: int}
+    e.g. {"SAMPLE1_diamond": {"queries_aligned": 723522}}
+
+    Pydantic will reject unexpected formats at parse time.
+    fastqc / fastp / bowtie2 inner structures vary enough to stay as Any.
     """
 
-    kraken2: dict[str, Any]
-    centrifuge: dict[str, Any]
+    kraken2: dict[str, dict[str, dict[str, int]]]
+    centrifuge: dict[str, dict[str, dict[str, int]]]
+    diamond: dict[str, dict[str, int]]
     fastqc: dict[str, Any]
     fastp: dict[str, Any]
     bowtie2: dict[str, Any]

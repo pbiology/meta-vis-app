@@ -27,6 +27,7 @@ def read_multiqc(file_path: str) -> MultiQCRaw:
     return MultiQCRaw(
         kraken2=raw.get("multiqc_kraken", {}),
         centrifuge=raw.get("multiqc_centrifuge_centrifuge", {}),
+        diamond=raw.get("diamond", {}),
         fastqc=raw.get("multiqc_fastqc", {}),
         fastp=raw.get("multiqc_fastp", {}),
         bowtie2=raw.get("multiqc_bowtie2", {}),
