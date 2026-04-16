@@ -426,6 +426,12 @@ def _extract_classifier_qc(qc_data: MultiQCRaw, classifier_name: str, col: str) 
         records = qc_data.kraken2.get(key)
     elif classifier_name == "centrifuge":
         records = qc_data.centrifuge.get(col)
+    elif classifier_name == "diamond":
+        key = col.split(".diamond")[0]
+        stats = qc_data.diamond.get(key)
+        if not stats:
+            return {}
+        return {"queries_aligned": stats.get("queries_aligned") or None}
     else:
         return {}
 
