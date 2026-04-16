@@ -47,8 +47,10 @@ for i in $(seq 1 "$COUNT"); do
   if python "$INGEST_SCRIPT" \
     --case-id "$case_id" \
     --order-date "$order_date" \
-    --multiqc "$TD/taxprofiler/multiqc/multiqc_data.json" \
+    --multiqc "$TD/taxprofiler/multiqc/multiqc_data/multiqc_data.json" \
     --pipeline-info "$TD/taxprofiler/pipeline_info/nf_core_taxprofiler_software_mqc_versions.yml" \
+    --analysis-type "shotgun" \
+    --sequencing-platform "illumina" \
     --classifier "kraken2 db=k2_pluspf taxpasta=$TD/taxprofiler/taxpasta/kraken2_k2_pluspf.tsv krona=$TD/taxprofiler/krona/kraken2_k2_pluspf.html" \
     --classifier "centrifuge db=p_compressed+h+v taxpasta=$TD/taxprofiler/taxpasta/centrifuge_p_compressed+h+v.tsv krona=$TD/taxprofiler/krona/centrifuge_p_compressed+h+v.html" \
     --classifier "diamond db=diamond taxpasta=$TD/taxprofiler/taxpasta/diamond_diamond.tsv" \
