@@ -200,7 +200,8 @@ async def get_krona(
     _user: dict = Depends(get_current_user),
 ):
     sample = await db["samples"].find_one(
-        {"_id": _oid(sample_id)}, {"case_id": 1, "has_krona": 1, "sample_id": 1, "trana": 1}
+        {"_id": _oid(sample_id)},
+        {"case_id": 1, "has_krona": 1, "sample_id": 1, "trana": 1},
     )
     if not sample:
         raise HTTPException(status_code=404, detail=f"Sample '{sample_id}' not found")
