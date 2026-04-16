@@ -11,16 +11,7 @@ import {
 } from "../api/cases";
 import Badge from "../components/Badge";
 import { useAuth } from "../context/AuthContext";
-
-function fmt(n) {
-  if (n === undefined || n === null) return "—";
-  return typeof n === "number" ? n.toLocaleString() : n;
-}
-
-function fmtPct(n) {
-  if (n === undefined || n === null) return "—";
-  return `${n.toFixed(1)}%`;
-}
+import { fmt, fmtPct } from "../utils/format";
 
 const FILTERS = ["All", "Sample", "Controls"];
 

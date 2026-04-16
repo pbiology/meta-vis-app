@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import {
   getTaxon,
   getTaxonOccurrences,
@@ -9,12 +10,9 @@ import {
   getBvbrcGenomes,
   getBvbrcSpecialtyGenes,
 } from "../api/taxa";
+import { getPathogens } from "../api/alerts";
 import { useAuth } from "../context/AuthContext";
-
-function fmt(n) {
-  if (n === undefined || n === null) return "—";
-  return typeof n === "number" ? n.toLocaleString() : n;
-}
+import { fmt } from "../utils/format";
 
 const KINGDOM_COLOURS = {
   Viruses: "text-red-600",
@@ -854,6 +852,11 @@ export default function TaxonDetail() {
 
   const canEdit = role === "writer" || role === "admin";
 
+  const { data: pathogenList = [] } = useQuery({
+    queryKey: ["pathogens"],
+    queryFn: () => getPathogens(),
+  });
+
   useEffect(() => {
     getTaxon(Number(taxonId))
       .then(setTaxon)
@@ -915,6 +918,29 @@ export default function TaxonDetail() {
 
       <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
         {taxon.needs_taxonomy_refresh && <RefreshWarning />}
+
+        {(() => {
+          const pathogen = pathogenList.find((p) => p.taxon_id === Number(taxonId));
+          if (!pathogen) return null;
+          return (
+            <div className="flex items-start gap-2.5 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">
+              <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.3" />
+                <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.3" />
+                <path
+                  d="M8 2.5v1.5M8 12v1.5M2.5 8h1.5M12 8h1.5"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span>
+                <span className="font-medium">Known pathogen.</span>
+                {pathogen.notes && <> {pathogen.notes}</>}
+              </span>
+            </div>
+          );
+        })()}
 
         {/* Identity */}
         <section className="bg-white border border-gray-100 rounded-xl p-4">
