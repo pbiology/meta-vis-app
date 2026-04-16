@@ -96,9 +96,11 @@ export default function SampleDetail() {
       </div>
     );
 
+  const isTrana = Boolean(sample?.trana);
   const qc = sample?.taxprofiler;
   const fp = qc?.fastp;
   const bt = qc?.bowtie2;
+  const trana = sample?.trana;
   const classifiers = profile?.profiles ?? [];
 
   return (
@@ -133,41 +135,79 @@ export default function SampleDetail() {
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">
             QC metrics
           </p>
-          <div className="grid grid-cols-4 gap-2.5">
-            <MetricCard
-              label="Total reads"
-              value={fp ? fmt(fp.total_reads_before_filtering) : "—"}
-              sub="before filtering"
-            />
-            <MetricCard
-              label="Passed filter"
-              value={fp ? fmt(fp.passed_filter_reads) : "—"}
-              sub={
-                fp
-                  ? `${fmtPct((fp.passed_filter_reads / fp.total_reads_before_filtering) * 100)} of raw`
-                  : ""
-              }
-            />
-            <MetricCard
-              label="Host removed"
-              value={bt ? fmtPct(bt.overall_alignment_rate) : "—"}
-              sub="bowtie2 alignment"
-            />
-            <MetricCard
-              label="Q20 rate"
-              value={fmtPct(fp?.q20_rate ? fp.q20_rate * 100 : null)}
-              sub="fastp"
-            />
-            <MetricCard
-              label="Q30 rate"
-              value={fmtPct(fp?.q30_rate ? fp.q30_rate * 100 : null)}
-              sub="fastp"
-            />
-          </div>
+          {isTrana ? (
+            <div className="grid grid-cols-4 gap-2.5">
+              <MetricCard
+                label="Total reads"
+                value={fmt(trana?.nanoplot_unprocessed?.number_of_reads)}
+                sub="before processing"
+              />
+              <MetricCard
+                label="Passed filter"
+                value={fmt(trana?.nanoplot_processed?.number_of_reads)}
+                sub="after processing"
+              />
+              <MetricCard
+                label="Mean read length"
+                value={
+                  trana?.nanoplot_processed?.mean_read_length != null
+                    ? trana.nanoplot_processed.mean_read_length.toFixed(0)
+                    : "—"
+                }
+                sub="processed (bp)"
+              />
+              <MetricCard
+                label="Mean quality"
+                value={
+                  trana?.nanoplot_processed?.mean_read_quality != null
+                    ? trana.nanoplot_processed.mean_read_quality.toFixed(1)
+                    : "—"
+                }
+                sub="processed (Q)"
+              />
+              <MetricCard
+                label="Read N50"
+                value={fmt(trana?.nanoplot_processed?.read_length_n50)}
+                sub="processed (bp)"
+              />
+            </div>
+          ) : (
+            <div className="grid grid-cols-4 gap-2.5">
+              <MetricCard
+                label="Total reads"
+                value={fp ? fmt(fp.total_reads_before_filtering) : "—"}
+                sub="before filtering"
+              />
+              <MetricCard
+                label="Passed filter"
+                value={fp ? fmt(fp.passed_filter_reads) : "—"}
+                sub={
+                  fp
+                    ? `${fmtPct((fp.passed_filter_reads / fp.total_reads_before_filtering) * 100)} of raw`
+                    : ""
+                }
+              />
+              <MetricCard
+                label="Host removed"
+                value={bt ? fmtPct(bt.overall_alignment_rate) : "—"}
+                sub="bowtie2 alignment"
+              />
+              <MetricCard
+                label="Q20 rate"
+                value={fmtPct(fp?.q20_rate ? fp.q20_rate * 100 : null)}
+                sub="fastp"
+              />
+              <MetricCard
+                label="Q30 rate"
+                value={fmtPct(fp?.q30_rate ? fp.q30_rate * 100 : null)}
+                sub="fastp"
+              />
+            </div>
+          )}
         </section>
 
         {/* Classifier-specific QC metrics */}
-        {classifiers.length > 0 && (
+        {!isTrana && classifiers.length > 0 && (
           <section>
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">
               Classifier metrics
@@ -206,69 +246,71 @@ export default function SampleDetail() {
           </section>
         )}
 
-        {/* Metaval — viral taxa per classifier */}
-        {metavalError && (
+        {/* Metaval — viral taxa per classifier (taxprofiler only) */}
+        {!isTrana && metavalError && (
           <DataWarning message="Failed to load metaval data — metaval results may be missing." />
         )}
-        <section className="bg-white border border-gray-100 rounded-xl">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">
-              Metaval
-            </p>
-            {metavalResults.length > 0 && (
-              <div className="flex gap-1.5">
-                {classifiers.map((clf) => {
-                  const hasResults = metavalResults.some((r) => r.classifier === clf.classifier);
-                  if (!hasResults) return null;
-                  return (
-                    <button
-                      key={clf.classifier}
-                      onClick={() => setActiveTab(clf.classifier)}
-                      className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
-                        activeTab === clf.classifier
-                          ? "bg-gray-900 text-white font-medium"
-                          : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                      }`}
-                    >
-                      {clf.classifier}
-                    </button>
-                  );
-                })}
+        {!isTrana && (
+          <section className="bg-white border border-gray-100 rounded-xl">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">
+                Metaval
+              </p>
+              {metavalResults.length > 0 && (
+                <div className="flex gap-1.5">
+                  {classifiers.map((clf) => {
+                    const hasResults = metavalResults.some((r) => r.classifier === clf.classifier);
+                    if (!hasResults) return null;
+                    return (
+                      <button
+                        key={clf.classifier}
+                        onClick={() => setActiveTab(clf.classifier)}
+                        className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
+                          activeTab === clf.classifier
+                            ? "bg-gray-900 text-white font-medium"
+                            : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                        }`}
+                      >
+                        {clf.classifier}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            {metavalResults.length === 0 ? (
+              <p className="px-4 py-6 text-xs text-gray-300 text-center">No viral taxon found</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr>
+                      <th className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100">
+                        Viral taxon
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {metavalResults
+                      .filter((r) => r.classifier === activeTab)
+                      .map((r) => (
+                        <tr key={r._id} className="border-t border-gray-50 hover:bg-gray-50">
+                          <td className="px-4 py-2.5">
+                            <Link
+                              to={`/samples/${sampleId}/metaval/${r._id}`}
+                              className="text-xs italic text-gray-700 hover:text-blue-600 underline transition-colors"
+                            >
+                              {r.taxon_name.replace(/^taxid_\d+_/, "").replace(/-/g, " ")}
+                            </Link>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
               </div>
             )}
-          </div>
-          {metavalResults.length === 0 ? (
-            <p className="px-4 py-6 text-xs text-gray-300 text-center">No viral taxon found</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr>
-                    <th className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100">
-                      Viral taxon
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {metavalResults
-                    .filter((r) => r.classifier === activeTab)
-                    .map((r) => (
-                      <tr key={r._id} className="border-t border-gray-50 hover:bg-gray-50">
-                        <td className="px-4 py-2.5">
-                          <Link
-                            to={`/samples/${sampleId}/metaval/${r._id}`}
-                            className="text-xs italic text-gray-700 hover:text-blue-600 underline transition-colors"
-                          >
-                            {r.taxon_name.replace(/^taxid_\d+_/, "").replace(/-/g, " ")}
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
+          </section>
+        )}
 
         {/* Known pathogens — detected taxa that are on the pathogens list */}
         {(() => {
@@ -417,6 +459,8 @@ export default function SampleDetail() {
                     outbreakTaxonIds={outbreakTaxonIds}
                     ntcProfiles={ntcProfiles}
                     pathogenIds={pathogenIds}
+                    abundanceIsFraction={isTrana}
+                    isNtc={sample?.sample_type !== "sample"}
                   />
                 ) : null
               )}
