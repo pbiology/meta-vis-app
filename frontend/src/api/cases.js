@@ -2,7 +2,12 @@
 
 import client from "./client";
 
-export async function getCases({ page = 1, search = "", reviewed = null, analysisType = null } = {}) {
+export async function getCases({
+  page = 1,
+  search = "",
+  reviewed = null,
+  analysisType = null,
+} = {}) {
   const params = { page, search };
   if (reviewed && reviewed !== "all") {
     params.reviewed = reviewed;

@@ -39,7 +39,12 @@ export default function CaseList() {
       if (!silent) setLoading(true);
       setError(null);
       try {
-        const result = await getCases({ page, search, reviewed: filter, analysisType: analysisFilter });
+        const result = await getCases({
+          page,
+          search,
+          reviewed: filter,
+          analysisType: analysisFilter,
+        });
         setData(result);
         getOutbreaks(14)
           .then((d) => setOutbreakCaseIds(new Set(d.outbreaks.flatMap((o) => o.case_ids))))
@@ -162,7 +167,9 @@ export default function CaseList() {
                 setSearchParams(next);
               }}
               className={`text-xs font-medium px-2.5 py-1.5 rounded-md transition-colors ${
-                analysisFilter === a ? "bg-blue-100 text-blue-700" : "text-gray-600 hover:bg-gray-100"
+                analysisFilter === a
+                  ? "bg-blue-100 text-blue-700"
+                  : "text-gray-600 hover:bg-gray-100"
               }`}
             >
               {a === "all" && <>All Types</>}
