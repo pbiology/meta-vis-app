@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import KingdomBadge from "./KingdomBadge";
-import { fmt } from "../utils/format";
+import { fmt, fmtPct } from "../utils/format";
 
 const HOST_IDS = new Set([9606, 1, 0, 131567]);
 
@@ -15,6 +15,8 @@ export default function TaxonomyTable({
   outbreakTaxonIds,
   ntcProfiles,
   pathogenIds,
+  abundanceIsFraction = false,
+  isNtc = false,
 }) {
   const { sessionKingdoms, setSessionKingdoms } = useAuth();
   const [taxSearch, setTaxSearch] = useState("");
@@ -62,7 +64,8 @@ export default function TaxonomyTable({
     sample_id: ntc.sample_id,
     abundanceMap: ntc.classifiers?.[profile.classifier] ?? {},
   }));
-  const hasNtc = ntcForClassifier.length > 0;
+  const showNtcColumn = !isNtc;
+  const hasNtc = showNtcColumn && ntcForClassifier.length > 0;
 
   const tableEntries = allEntries.filter(
     (t) =>
@@ -268,28 +271,30 @@ export default function TaxonomyTable({
         <p className="text-xs text-gray-400 py-4 text-center">No organisms match your filters.</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-left" style={{ tableLayout: "fixed" }}>
-            <colgroup>
-              <col style={{ width: "30%" }} />
-              <col style={{ width: "9%" }} />
-              <col style={{ width: "9%" }} />
-              <col style={{ width: "9%" }} />
-              <col style={{ width: "11%" }} />
-              <col style={{ width: "12%" }} />
-              <col style={{ width: "20%" }} />
-            </colgroup>
+          <table className="w-full text-left">
             <thead>
               <tr>
                 {[
                   { label: "Organism", col: "name" },
                   { label: "Rank", col: "rank" },
                   { label: "Kingdom", col: "superkingdom" },
-                  { label: "Reads", col: "abundance" },
-                  {
-                    label: "Classifiers",
-                    col: allClassifierNames.length > 1 ? "concordance" : null,
-                  },
-                  { label: "Reads in NTC", col: hasNtc ? "ntc" : null },
+                  { label: abundanceIsFraction ? "Abundance" : "Reads", col: "abundance" },
+                  ...(!abundanceIsFraction
+                    ? [
+                        {
+                          label: "Classifiers",
+                          col: allClassifierNames.length > 1 ? "concordance" : null,
+                        },
+                      ]
+                    : []),
+                  ...(showNtcColumn
+                    ? [
+                        {
+                          label: abundanceIsFraction ? "Abundance in NTC" : "Reads in NTC",
+                          col: hasNtc ? "ntc" : null,
+                        },
+                      ]
+                    : []),
                   { label: "% of non-host", col: null },
                 ].map(({ label, col }) => (
                   <th
@@ -366,66 +371,72 @@ export default function TaxonomyTable({
                       <KingdomBadge kingdom={t.superkingdom} />
                     </td>
                     <td className="py-2 pr-3 text-xs text-gray-500 tabular-nums">
-                      {fmt(t.abundance)}
+                      {abundanceIsFraction ? fmtPct(t.abundance * 100) : fmt(t.abundance)}
                     </td>
-                    <td className="py-2 pr-3">
-                      {allClassifierNames.length > 1 ? (
-                        (() => {
-                          const readsPerClassifier = allClassifierNames.map((c) => {
-                            const p = (allProfiles ?? []).find((p) => p.classifier === c);
-                            const entry = p?.profile?.find((e) => e.taxon_id === t.taxon_id);
-                            return { classifier: c, reads: entry?.abundance ?? 0 };
-                          });
-                          return (
-                            <div
-                              className="flex items-center gap-1"
-                              title={readsPerClassifier
-                                .map((r) => `${r.classifier}: ${r.reads.toLocaleString()} reads`)
-                                .join("\n")}
-                            >
-                              {readsPerClassifier.map(({ classifier: c, reads }) => (
-                                <span
-                                  key={c}
-                                  className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                                    reads >= concordanceMin ? "bg-blue-500" : "bg-gray-200"
-                                  }`}
-                                />
-                              ))}
-                              <span className="text-xs text-gray-400 ml-0.5">
-                                {readsPerClassifier
-                                  .map((r) => r.reads.toLocaleString())
-                                  .join(" / ")}
+                    {!abundanceIsFraction && (
+                      <td className="py-2 pr-3">
+                        {allClassifierNames.length > 1 ? (
+                          (() => {
+                            const readsPerClassifier = allClassifierNames.map((c) => {
+                              const p = (allProfiles ?? []).find((p) => p.classifier === c);
+                              const entry = p?.profile?.find((e) => e.taxon_id === t.taxon_id);
+                              return { classifier: c, reads: entry?.abundance ?? 0 };
+                            });
+                            return (
+                              <div
+                                className="flex items-center gap-1"
+                                title={readsPerClassifier
+                                  .map((r) => `${r.classifier}: ${r.reads.toLocaleString()} reads`)
+                                  .join("\n")}
+                              >
+                                {readsPerClassifier.map(({ classifier: c, reads }) => (
+                                  <span
+                                    key={c}
+                                    className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                      reads >= concordanceMin ? "bg-blue-500" : "bg-gray-200"
+                                    }`}
+                                  />
+                                ))}
+                                <span className="text-xs text-gray-400 ml-0.5">
+                                  {readsPerClassifier
+                                    .map((r) => r.reads.toLocaleString())
+                                    .join(" / ")}
+                                </span>
+                              </div>
+                            );
+                          })()
+                        ) : (
+                          <span className="text-gray-300 text-xs">—</span>
+                        )}
+                      </td>
+                    )}
+                    {showNtcColumn && (
+                      <td className="py-2 pr-3 text-xs tabular-nums">
+                        {!hasNtc ? (
+                          <span className="text-gray-300">N/A</span>
+                        ) : (
+                          (() => {
+                            const vals = ntcForClassifier.map((ntc) => ({
+                              sample_id: ntc.sample_id,
+                              count: ntc.abundanceMap[t.taxon_id] ?? 0,
+                            }));
+                            const allZero = vals.every((v) => v.count === 0);
+                            const fmtVal = (v) =>
+                              abundanceIsFraction ? fmtPct(v * 100) : v.toLocaleString();
+                            return (
+                              <span
+                                className={allZero ? "text-gray-300" : "text-amber-600 font-medium"}
+                                title={vals
+                                  .map((v) => `${v.sample_id}: ${fmtVal(v.count)}`)
+                                  .join("\n")}
+                              >
+                                {vals.map((v) => fmtVal(v.count)).join(", ")}
                               </span>
-                            </div>
-                          );
-                        })()
-                      ) : (
-                        <span className="text-gray-300 text-xs">—</span>
-                      )}
-                    </td>
-                    <td className="py-2 pr-3 text-xs tabular-nums">
-                      {!hasNtc ? (
-                        <span className="text-gray-300">N/A</span>
-                      ) : (
-                        (() => {
-                          const vals = ntcForClassifier.map((ntc) => ({
-                            sample_id: ntc.sample_id,
-                            count: ntc.abundanceMap[t.taxon_id] ?? 0,
-                          }));
-                          const allZero = vals.every((v) => v.count === 0);
-                          return (
-                            <span
-                              className={allZero ? "text-gray-300" : "text-amber-600 font-medium"}
-                              title={vals
-                                .map((v) => `${v.sample_id}: ${v.count.toLocaleString()}`)
-                                .join("\n")}
-                            >
-                              {vals.map((v) => v.count.toLocaleString()).join(", ")}
-                            </span>
-                          );
-                        })()
-                      )}
-                    </td>
+                            );
+                          })()
+                        )}
+                      </td>
+                    )}
                     <td className="py-2">
                       <div className="flex items-center gap-2">
                         <div className="flex-1 bg-gray-100 rounded-full h-1.5 min-w-0">
