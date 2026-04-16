@@ -35,6 +35,12 @@ NO_LINEAGE_TSV = """\
     1279\tStaphylococcus\tgenus\t50
 """
 
+MIXED_CASE_RANK_TSV = """\
+    taxonomy_id\tname\trank\tlineage\tSAMPLE1
+    10239\tViruses\tNo rank\tViruses\t500
+    9606\tHomo sapiens\tSpecies\tEukaryota;Chordata\t100
+"""
+
 
 # ---------------------------------------------------------------------------
 # Happy path
@@ -106,6 +112,20 @@ def test_missing_sample_column_raises(tmp_path):
     path = write_tsv(tmp_path, MINIMAL_TSV)
     with pytest.raises(ValueError, match="not found in TAXPASTA file"):
         read_taxpasta(path, "NONEXISTENT_SAMPLE")
+
+
+# ---------------------------------------------------------------------------
+# Rank normalisation
+# ---------------------------------------------------------------------------
+
+
+def test_rank_normalised_to_lowercase(tmp_path):
+    path = write_tsv(tmp_path, MIXED_CASE_RANK_TSV)
+    records = read_taxpasta(path, "SAMPLE1")
+    virus = next(r for r in records if r.taxon_id == 10239)
+    human = next(r for r in records if r.taxon_id == 9606)
+    assert virus.rank == "no rank"
+    assert human.rank == "species"
 
 
 # ---------------------------------------------------------------------------
