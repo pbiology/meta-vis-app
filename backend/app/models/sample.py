@@ -1,6 +1,7 @@
 # app/models/sample.py
 
 from datetime import datetime, date
+from enum import Enum
 from typing import Optional, List, Literal, Dict
 from pydantic import BaseModel, ConfigDict
 
@@ -9,6 +10,16 @@ from app.ingestor.models import (
     PipelineConfiguration as PipelineConfiguration,
     PipelineInfoOutput as PipelineInfo,  # re-exported under the existing name used by the API layer
 )
+
+
+class AnalysisType(str, Enum):
+    SHOTGUN = "shotgun"
+    AMPLICON = "amplicon"
+
+
+class SequencingPlatform(str, Enum):
+    ILLUMINA = "illumina"
+    NANOPORE = "nanopore"
 
 
 class _Base(BaseModel):
@@ -166,6 +177,8 @@ class CaseResponse(_Base):
     has_krona: bool = False
     pipeline_info: Optional[PipelineInfo] = None
     metaval_pipeline_info: Optional[PipelineInfo] = None
+    analysis_type: Optional[AnalysisType] = None
+    sequencing_platform: Optional[SequencingPlatform] = None
     review: ReviewStatus = ReviewStatus()
     notes: List[CaseNote] = []
     sample_ids: List[str] = []
@@ -206,3 +219,5 @@ class IngestRequest(BaseModel):
     classifiers: List[ClassifierIngestRequest]
     samples: List[SampleIngestRequest]
     metaval: Optional[MetavalIngestRequest] = None
+    analysis_type: Optional[AnalysisType] = None
+    sequencing_platform: Optional[SequencingPlatform] = None
