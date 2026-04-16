@@ -9,6 +9,7 @@ import {
   addNote,
   deleteNote,
 } from "../api/cases";
+import { getKronaUrl } from "../api/samples";
 import Badge from "../components/Badge";
 import { useAuth } from "../context/AuthContext";
 import { fmt, fmtPct } from "../utils/format";
@@ -30,6 +31,7 @@ export default function CaseDetail() {
   const [unreviewConfirm, setUnreviewConfirm] = useState(false);
   const [kronaUrls, setKronaUrls] = useState({});
   const [kronaErrors, setKronaErrors] = useState({});
+  const [kronaSelectedSample, setKronaSelectedSample] = useState(null);
   const [kronaTab, setKronaTab] = useState(searchParams.get("classifier"));
   const [provenanceOpen, setProvenanceOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
@@ -50,26 +52,53 @@ export default function CaseDetail() {
           const requestedClassifier = searchParams.get("classifier");
           const match = fetchedCase.classifiers.find((c) => c.name === requestedClassifier);
           setKronaTab(match ? requestedClassifier : fetchedCase.classifiers[0].name);
-          const urlEntries = await Promise.all(
-            fetchedCase.classifiers
-              .filter((clf) => clf.krona_id)
-              .map(async (clf) => {
+
+          const isTrana = samplesData.some((s) => s.trana);
+          if (isTrana) {
+            // Trana: Krona is per-sample, fetch via the sample endpoint
+            const kronasamples = samplesData.filter((s) => s.has_krona);
+            setKronaSelectedSample(kronasamples[0]?._id ?? null);
+            const urlEntries = await Promise.all(
+              kronasamples.map(async (s) => {
                 try {
-                  const url = await getCaseKronaUrl(caseId, clf.name);
-                  return { name: clf.name, url, error: false };
+                  const url = await getKronaUrl(s._id);
+                  return { id: s._id, url, error: false };
                 } catch {
-                  return { name: clf.name, url: null, error: true };
+                  return { id: s._id, url: null, error: true };
                 }
               })
-          );
-          const urls = {};
-          const errors = {};
-          urlEntries.forEach(({ name, url, error }) => {
-            if (error) errors[name] = true;
-            else urls[name] = url;
-          });
-          setKronaUrls(urls);
-          setKronaErrors(errors);
+            );
+            const urls = {};
+            const errors = {};
+            urlEntries.forEach(({ id, url, error }) => {
+              if (error) errors[id] = true;
+              else urls[id] = url;
+            });
+            setKronaUrls(urls);
+            setKronaErrors(errors);
+          } else {
+            // Taxprofiler: Krona is per-classifier
+            const urlEntries = await Promise.all(
+              fetchedCase.classifiers
+                .filter((clf) => clf.krona_id)
+                .map(async (clf) => {
+                  try {
+                    const url = await getCaseKronaUrl(caseId, clf.name);
+                    return { name: clf.name, url, error: false };
+                  } catch {
+                    return { name: clf.name, url: null, error: true };
+                  }
+                })
+            );
+            const urls = {};
+            const errors = {};
+            urlEntries.forEach(({ name, url, error }) => {
+              if (error) errors[name] = true;
+              else urls[name] = url;
+            });
+            setKronaUrls(urls);
+            setKronaErrors(errors);
+          }
         }
       } catch {
         setError("Failed to load case.");
@@ -487,30 +516,67 @@ export default function CaseDetail() {
                           </table>
 
                           {/* Krona for this classifier */}
-                          {clf.krona_id && (
-                            <div className="p-4 border-t border-gray-50">
-                              {kronaErrors[clf.name] && (
-                                <p className="text-xs text-red-400">
-                                  Krona file could not be loaded.
-                                </p>
-                              )}
-                              {!kronaUrls[clf.name] && !kronaErrors[clf.name] && (
-                                <div className="flex items-center justify-center h-40 text-sm text-gray-400">
-                                  Loading Krona…
+                          {isTrana
+                            ? kronaSelectedSample && (
+                                <div className="p-4 border-t border-gray-50">
+                                  <div className="flex gap-1.5 mb-3">
+                                    {samples
+                                      .filter((s) => s.has_krona)
+                                      .map((s) => (
+                                        <button
+                                          key={s._id}
+                                          onClick={() => setKronaSelectedSample(s._id)}
+                                          className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
+                                            kronaSelectedSample === s._id
+                                              ? "bg-gray-900 text-white font-medium"
+                                              : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                                          }`}
+                                        >
+                                          {s.sample_id}
+                                        </button>
+                                      ))}
+                                  </div>
+                                  {kronaErrors[kronaSelectedSample] && (
+                                    <p className="text-xs text-red-400">
+                                      Krona file could not be loaded.
+                                    </p>
+                                  )}
+                                  {kronaUrls[kronaSelectedSample] && (
+                                    <iframe
+                                      key={kronaUrls[kronaSelectedSample]}
+                                      src={kronaUrls[kronaSelectedSample]}
+                                      title={`Krona — ${samples.find((s) => s._id === kronaSelectedSample)?.sample_id}`}
+                                      className="w-full rounded-lg border border-gray-100"
+                                      style={{ height: "85vh" }}
+                                      sandbox="allow-scripts allow-popups allow-forms"
+                                    />
+                                  )}
+                                </div>
+                              )
+                            : clf.krona_id && (
+                                <div className="p-4 border-t border-gray-50">
+                                  {kronaErrors[clf.name] && (
+                                    <p className="text-xs text-red-400">
+                                      Krona file could not be loaded.
+                                    </p>
+                                  )}
+                                  {!kronaUrls[clf.name] && !kronaErrors[clf.name] && (
+                                    <div className="flex items-center justify-center h-40 text-sm text-gray-400">
+                                      Loading Krona…
+                                    </div>
+                                  )}
+                                  {kronaUrls[clf.name] && (
+                                    <iframe
+                                      key={kronaUrls[clf.name]}
+                                      src={kronaUrls[clf.name]}
+                                      title={`Krona — ${clf.name}`}
+                                      className="w-full rounded-lg border border-gray-100"
+                                      style={{ height: "85vh" }}
+                                      sandbox="allow-scripts allow-popups allow-forms"
+                                    />
+                                  )}
                                 </div>
                               )}
-                              {kronaUrls[clf.name] && (
-                                <iframe
-                                  key={kronaUrls[clf.name]}
-                                  src={kronaUrls[clf.name]}
-                                  title={`Krona — ${clf.name}`}
-                                  className="w-full rounded-lg border border-gray-100"
-                                  style={{ height: "85vh" }}
-                                  sandbox="allow-scripts allow-popups allow-forms"
-                                />
-                              )}
-                            </div>
-                          )}
                         </div>
                       )
                   )}
