@@ -89,6 +89,8 @@ def read_taxpasta(
             and pd.isna(rank_val)
         ):
             rank_val = None
+        if isinstance(rank_val, str):
+            rank_val = rank_val.lower()
         records.append(
             TaxonEntry(
                 taxon_id=taxon_id,
