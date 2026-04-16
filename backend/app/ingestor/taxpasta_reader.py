@@ -27,12 +27,15 @@ def _superkingdom_from_lineage(lineage: str) -> Optional[str]:
     return None
 
 
-def read_taxpasta(
-    file_path: str,
-    sample_column: str,
-) -> list[TaxonEntry]:
-    path = Path(file_path)
+def load_taxpasta(file_path: str) -> pd.DataFrame:
+    """Read and validate a taxpasta TSV, returning a normalised DataFrame.
 
+    Renames ``taxonomy_id`` → ``taxon_id`` and coerces the taxon_id column to
+    int.  Sample-abundance columns are left as-is so that
+    ``extract_sample_profile`` can slice any sample on demand without
+    re-reading the file.
+    """
+    path = Path(file_path)
     if not path.exists():
         raise FileNotFoundError(f"TAXPASTA file not found: {file_path}")
 
@@ -45,6 +48,20 @@ def read_taxpasta(
             f"TAXPASTA file missing required columns: {missing}. Got: {set(df.columns)}"
         )
 
+    df = df.rename(columns={"taxonomy_id": "taxon_id"})
+    df["taxon_id"] = (
+        pd.to_numeric(df["taxon_id"], errors="coerce").fillna(0).astype(int)
+    )
+
+    return df
+
+
+def extract_sample_profile(df: pd.DataFrame, sample_column: str) -> list[TaxonEntry]:
+    """Build a list of TaxonEntry from a pre-loaded taxpasta DataFrame.
+
+    Slices *sample_column*, filters zero/invalid abundances, and converts each
+    row to a ``TaxonEntry``.  Call ``load_taxpasta`` first to obtain *df*.
+    """
     if sample_column not in df.columns:
         raise ValueError(
             f"Sample column '{sample_column}' not found in TAXPASTA file. "
@@ -53,26 +70,25 @@ def read_taxpasta(
 
     has_lineage = "lineage" in df.columns
 
-    df = df.rename(
-        columns={
-            "taxonomy_id": "taxon_id",
-            sample_column: "abundance",
-        }
-    )
+    cols = ["taxon_id", "name"]
+    if "rank" in df.columns:
+        cols.append("rank")
+    if has_lineage:
+        cols.append("lineage")
+    cols.append(sample_column)
 
-    df["taxon_id"] = (
-        pd.to_numeric(df["taxon_id"], errors="coerce").fillna(0).astype(int)
-    )
-    df["abundance"] = pd.to_numeric(df["abundance"], errors="coerce").fillna(0.0)
-    df = df[df["abundance"] > 0]
-    df = df[
-        df["abundance"].apply(
+    work = df[cols].copy()
+    work = work.rename(columns={sample_column: "abundance"})
+    work["abundance"] = pd.to_numeric(work["abundance"], errors="coerce").fillna(0.0)
+    work = work[work["abundance"] > 0]
+    work = work[
+        work["abundance"].apply(
             lambda x: isinstance(x, (int, float)) and x == x and x != float("inf")
         )
-    ].copy()
+    ]
 
     records: list[TaxonEntry] = []
-    for row in df.itertuples(index=False):
+    for row in work.itertuples(index=False):
         taxon_id = int(row.taxon_id)  # type: ignore[arg-type]
         raw_name = getattr(row, "name", None)
         name: str = (
@@ -82,7 +98,7 @@ def read_taxpasta(
         superkingdom = (
             _superkingdom_from_lineage(lineage) if isinstance(lineage, str) else None
         )
-        rank_val = getattr(row, "rank", None) if "rank" in df.columns else None
+        rank_val = getattr(row, "rank", None) if "rank" in work.columns else None
         if (
             rank_val is not None
             and (not isinstance(rank_val, str))
@@ -102,3 +118,13 @@ def read_taxpasta(
         )
 
     return records
+
+
+def read_taxpasta(file_path: str, sample_column: str) -> list[TaxonEntry]:
+    """Convenience wrapper: load file and extract one sample profile.
+
+    Kept for backward compatibility and tests.  When ingesting multiple samples
+    from the same file, prefer calling ``load_taxpasta`` once and then
+    ``extract_sample_profile`` for each sample.
+    """
+    return extract_sample_profile(load_taxpasta(file_path), sample_column)
