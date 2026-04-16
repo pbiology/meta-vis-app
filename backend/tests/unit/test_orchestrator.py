@@ -32,19 +32,21 @@ def make_kraken2_records(
     num_species=10,
     num_genera=5,
 ):
-    return [
-        {"rank_code": "U", "counts_rooted": unclassified},
-        {"rank_code": "R", "counts_rooted": classified},
-        *[{"rank_code": "S", "counts_rooted": 10} for _ in range(num_species)],
-        *[{"rank_code": "G", "counts_rooted": 20} for _ in range(num_genera)],
-    ]
+    """MultiQC v2 dict-of-dicts format."""
+    return {
+        "U": {"unclassified": unclassified},
+        "R": {"root": classified},
+        "S": {f"Species-{i}": 10 for i in range(num_species)},
+        "G": {f"Genus-{i}": 20 for i in range(num_genera)},
+    }
 
 
 def make_centrifuge_records(num_species=3, num_genera=2):
-    return [
-        *[{"rank_code": "S", "counts_rooted": 100} for _ in range(num_species)],
-        *[{"rank_code": "G", "counts_rooted": 50} for _ in range(num_genera)],
-    ]
+    """MultiQC v2 dict-of-dicts format. No R key — classified falls back to species sum."""
+    return {
+        "S": {f"Species-{i}": 100 for i in range(num_species)},
+        "G": {f"Genus-{i}": 50 for i in range(num_genera)},
+    }
 
 
 def make_fastp_lane(
@@ -178,7 +180,7 @@ class TestExtractClassifierQcKraken2:
 
     def test_empty_records_returns_empty_dict(self):
         result = _extract_classifier_qc(
-            self._qc_data(records=[]),
+            self._qc_data(records={}),
             "kraken2",
             "SAMPLE1_k2_pluspf.kraken2.kraken2.report",
         )
