@@ -110,6 +110,7 @@ class TestParseIgvFilename:
             "classifier": "kraken2",
             "taxon_name": "Shigella-virus-Moo19",
             "organism_name": "Shigella-virus-Moo19",
+            "taxon_id_from_filename": None,
         }
 
     def test_centrifuge_happy_path(self):
@@ -151,6 +152,21 @@ class TestParseIgvFilename:
             )
             is None
         )
+
+    def test_new_format_taxid_prefix_extracted(self):
+        result = _parse_igv_filename(
+            "26CE100005-DNA_centrifuge_taxid_687329_Anelloviridae_mappingorganism_Anelloviridae-sp_report.html"
+        )
+        assert result is not None
+        assert result["taxon_name"] == "taxid_687329_Anelloviridae"
+        assert result["taxon_id_from_filename"] == 687329
+
+    def test_old_format_taxon_id_from_filename_is_none(self):
+        result = _parse_igv_filename(
+            "SRR13439790_kraken2_Shigella-virus-Moo19_mappingorganism_Shigella-virus-Moo19_report.html"
+        )
+        assert result is not None
+        assert result["taxon_id_from_filename"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -563,6 +579,27 @@ class TestReadMetaval:
         result = read_metaval(str(tmp_path))
         assert result.results[0].blast.blastn == []
         assert result.results[0].blast.blastx == []
+
+    def test_taxon_id_resolved_from_new_format_filename(self, tmp_path):
+        igv_dir = make_igv_dir(tmp_path)
+        (
+            igv_dir
+            / "26CE100005-DNA_centrifuge_taxid_687329_Anelloviridae_mappingorganism_Anelloviridae-sp_report.html"
+        ).write_text("<html/>")
+        # No viral_taxids file — taxon_id must come from the filename
+        result = read_metaval(str(tmp_path))
+        assert result.results[0].taxon_id == 687329
+        assert result.results[0].taxon_name == "taxid_687329_Anelloviridae"
+
+    def test_old_format_still_resolves_taxon_id_from_viral_taxids(self, tmp_path):
+        igv_dir = make_igv_dir(tmp_path)
+        (
+            igv_dir
+            / "SRR13439790_kraken2_Shigella-virus-Moo19_mappingorganism_Shigella-virus-Moo19_report.html"
+        ).write_text("<html/>")
+        make_viral_taxids_dir(tmp_path, "kraken2", [(2886042, "Shigella-virus-Moo19")])
+        result = read_metaval(str(tmp_path))
+        assert result.results[0].taxon_id == 2886042
 
     def test_unrecognised_igv_filenames_ignored(self, tmp_path):
         igv_dir = make_igv_dir(tmp_path)

@@ -17,10 +17,16 @@ from app.ingestor.models import (
 MAX_IGV_SIZE = 10 * 1024 * 1024  # 10 MB
 
 
-def _parse_igv_filename(filename: str) -> Optional[dict[str, str]]:
+def _parse_igv_filename(filename: str) -> Optional[dict[str, str | int | None]]:
     """
     Parse an IGV report filename into its components.
-    Pattern: {sample_name}_{classifier}_{taxon_name}_mappingorganism_{organism_name}_report.html
+
+    Supports two formats:
+      Old: {sample}_{classifier}_{taxon_name}_mappingorganism_{organism_name}_report.html
+      New: {sample}_{classifier}_taxid_{id}_{taxon_name}_mappingorganism_{organism_name}_report.html
+
+    When the new format is detected, taxon_id_from_filename is set to the embedded int;
+    otherwise it is None.
     """
     pattern = (
         r"^(.+?)_(kraken2|centrifuge|diamond)_(.+?)_mappingorganism_(.+?)_report\.html$"
@@ -28,11 +34,17 @@ def _parse_igv_filename(filename: str) -> Optional[dict[str, str]]:
     m = re.match(pattern, filename)
     if not m:
         return None
+    taxon_name = m.group(3)
+    taxon_id_from_filename: Optional[int] = None
+    taxid_m = re.match(r"^taxid_(\d+)_", taxon_name)
+    if taxid_m:
+        taxon_id_from_filename = int(taxid_m.group(1))
     return {
         "sample_name": m.group(1),
         "classifier": m.group(2),
-        "taxon_name": m.group(3),
+        "taxon_name": taxon_name,
         "organism_name": m.group(4),
+        "taxon_id_from_filename": taxon_id_from_filename,
     }
 
 
@@ -263,17 +275,26 @@ def read_metaval(metaval_dir: str) -> MetavalOutput:
 
     # Group IGV files by (sample_name, classifier, taxon_name)
     groups: dict[tuple[str, str, str], list[IgvOrganism]] = {}
+    taxon_ids_from_filename: dict[tuple[str, str, str], int] = {}
     for html_file in sorted(igv_dir.glob("*_report.html")):
         parsed = _parse_igv_filename(html_file.name)
         if not parsed:
             continue
-        key = (parsed["sample_name"], parsed["classifier"], parsed["taxon_name"])
+        key = (
+            str(parsed["sample_name"]),
+            str(parsed["classifier"]),
+            str(parsed["taxon_name"]),
+        )
         if key not in groups:
             groups[key] = []
+            if parsed["taxon_id_from_filename"] is not None:
+                taxon_ids_from_filename[key] = int(
+                    parsed["taxon_id_from_filename"]
+                )  # always int when not None, set by _parse_igv_filename
         file_size = html_file.stat().st_size
         groups[key].append(
             IgvOrganism(
-                organism_name=parsed["organism_name"],
+                organism_name=str(parsed["organism_name"]),
                 igv_file_path=str(html_file),
                 igv_file_size_bytes=file_size,
                 igv_too_large=file_size > MAX_IGV_SIZE,
@@ -282,7 +303,13 @@ def read_metaval(metaval_dir: str) -> MetavalOutput:
 
     results: list[MetavalResult] = []
     for (sample_name, classifier, taxon_name), organisms in groups.items():
-        taxon_id = taxid_map.get((classifier, taxon_name))
+        # Prefer taxon_id embedded in the filename (new metaval format);
+        # fall back to viral_taxids lookup for old-format files.
+        taxon_id: Optional[int] = taxon_ids_from_filename.get(
+            (sample_name, classifier, taxon_name)
+        )
+        if taxon_id is None:
+            taxon_id = taxid_map.get((classifier, taxon_name))
         name_part = f"{sample_name}_{taxon_name}"
 
         raw_blast = blast_data.get(
