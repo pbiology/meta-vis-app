@@ -432,7 +432,7 @@ export default function MetavalDetails() {
       <div className="flex items-center justify-center h-full text-sm text-red-500">{error}</div>
     );
 
-  const taxonLabel = result?.taxon_name?.replace(/-/g, " ") ?? "—";
+  const taxonLabel = result?.taxon_name?.replace(/^taxid_\d+_/, "").replace(/-/g, " ") ?? "—";
 
   return (
     <div className="flex flex-col h-full">
