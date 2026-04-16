@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ingest_bulk_test.sh
-# Ingests test cases with random 12-character names and
+# Ingests slowowl test cases with random 12-character names and
 # order dates spread across 2026-02-01 to 2026-04-06.
 #
 # Usage:
@@ -14,8 +14,10 @@ REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 # Host path: used to run ingest.py from your machine
 INGEST_SCRIPT="$REPO_ROOT/ingest.py"
 
-# Container-visible path: used by the backend container when it reads files
-TEST_DATA="/app/test-data/speedysnake"
+# Container-visible path: used by the backend when it reads files.
+# The backend mounts the repo as /app/ inside Docker; for local uvicorn use
+# the actual host path instead, e.g. /Users/you/repos/meta-vis-app/backend/test-data/slowowl.
+TD="/app/test-data/slowowl"
 
 PASSWORD="yourpassword"
 URL="http://localhost:8000"
@@ -45,16 +47,16 @@ for i in $(seq 1 "$COUNT"); do
   if python "$INGEST_SCRIPT" \
     --case-id "$case_id" \
     --order-date "$order_date" \
-    --multiqc "$TEST_DATA/taxprofiler/multiqc_data.json" \
-    --pipeline-info "$TEST_DATA/taxprofiler/software_versions.yml" \
-    --classifier "kraken2 db=k2_pluspf taxpasta=$TEST_DATA/taxprofiler/kraken2_k2_pluspf.tsv krona=$TEST_DATA/taxprofiler/kraken2_k2_pluspf.html" \
-    --classifier "centrifuge db=p_compressed+h+v taxpasta=$TEST_DATA/taxprofiler/centrifuge_p_compressed+h+v.tsv krona=$TEST_DATA/taxprofiler/centrifuge_p_compressed+h+v.html" \
-    --classifier "diamond db=diamond taxpasta=$TEST_DATA/taxprofiler/diamond_diamond.tsv" \
-    --sample "sample_id=SRR13439799 subject_id=S-001 type=sample sample_source=csf material=DNA column_kraken2=SRR13439799_se_SRR13439799_k2_pluspf.kraken2.kraken2.report column_centrifuge=SRR13439799_se_SRR13439799_p_compressed+h+v.centrifuge column_diamond=SRR13439799_se_SRR13439799_diamond.diamond" \
-    --sample "sample_id=SRR13439802 subject_id=S-001 type=negative_ctrl sample_source=feces material=DNA column_kraken2=SRR13439802_pe_SRR13439802_k2_pluspf.kraken2.kraken2.report column_centrifuge=SRR13439802_pe_SRR13439802_p_compressed+h+v.centrifuge column_diamond=SRR13439802_pe_SRR13439802_diamond.diamond" \
-    --sample "sample_id=SRR13439790 subject_id=S-001 type=sample sample_source=blood material=RNA column_kraken2=SRR13439790_pe_SRR13439790_k2_pluspf.kraken2.kraken2.report column_centrifuge=SRR13439790_pe_SRR13439790_p_compressed+h+v.centrifuge column_diamond=SRR13439790_pe_SRR13439790_diamond.diamond" \
-    --sample "sample_id=SRR13439813 subject_id=S-001 type=negative_ctrl material=RNA column_kraken2=SRR13439813_pe_SRR13439813_k2_pluspf.kraken2.kraken2.report column_centrifuge=SRR13439813_pe_SRR13439813_p_compressed+h+v.centrifuge column_diamond=SRR13439813_pe_SRR13439813_diamond.diamond" \
-    --metaval "$TEST_DATA/metaval" \
+    --multiqc "$TD/taxprofiler/multiqc/multiqc_data.json" \
+    --pipeline-info "$TD/taxprofiler/pipeline_info/nf_core_taxprofiler_software_mqc_versions.yml" \
+    --classifier "kraken2 db=k2_pluspf taxpasta=$TD/taxprofiler/taxpasta/kraken2_k2_pluspf.tsv krona=$TD/taxprofiler/krona/kraken2_k2_pluspf.html" \
+    --classifier "centrifuge db=p_compressed+h+v taxpasta=$TD/taxprofiler/taxpasta/centrifuge_p_compressed+h+v.tsv krona=$TD/taxprofiler/krona/centrifuge_p_compressed+h+v.html" \
+    --classifier "diamond db=diamond taxpasta=$TD/taxprofiler/taxpasta/diamond_diamond.tsv" \
+    --sample "sample_id=26CE100005-DNA subject_id=26CE100005 type=sample material=DNA column_kraken2=26CE100005-DNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=26CE100005-DNA_p_compressed+h+v.centrifuge column_diamond=26CE100005-DNA_diamond.diamond" \
+    --sample "sample_id=26CE100005-RNA subject_id=26CE100005 type=sample material=RNA column_kraken2=26CE100005-RNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=26CE100005-RNA_p_compressed+h+v.centrifuge column_diamond=26CE100005-RNA_diamond.diamond" \
+    --sample "sample_id=NTC-260305-DNA type=negative_ctrl material=DNA column_kraken2=NTC-260305-DNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=NTC-260305-DNA_p_compressed+h+v.centrifuge column_diamond=NTC-260305-DNA_diamond.diamond" \
+    --sample "sample_id=NTC-260305-RNA type=negative_ctrl material=RNA column_kraken2=NTC-260305-RNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=NTC-260305-RNA_p_compressed+h+v.centrifuge column_diamond=NTC-260305-RNA_diamond.diamond" \
+    --metaval "$TD/metaval" \
     --url "$URL" \
     --password "$PASSWORD" 2>/dev/null; then
     success=$(( success + 1 ))
