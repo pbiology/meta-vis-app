@@ -188,6 +188,10 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
         "classifiers": classifier_docs,
         "has_krona": any(clf.krona for clf in request.classifiers),
         "pipeline_info": pipeline_info.model_dump(),
+        "analysis_type": request.analysis_type.value if request.analysis_type else None,
+        "sequencing_platform": request.sequencing_platform.value
+        if request.sequencing_platform
+        else None,
         "review": {
             "reviewed": False,
             "reviewed_by": None,
