@@ -300,7 +300,11 @@ export default function CaseDetail() {
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-500">{s.sample_source ?? "—"}</td>
                     <td className="px-4 py-3 text-xs text-gray-700">
-                      {fmt(s.taxprofiler?.fastp?.total_reads_before_filtering)}
+                      {fmt(
+                        s.trana
+                          ? s.trana?.nanoplot_unprocessed?.number_of_reads
+                          : s.taxprofiler?.fastp?.total_reads_before_filtering
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -316,176 +320,203 @@ export default function CaseDetail() {
           </section>
 
           {/* Classifier tabs — QC + Krona per classifier */}
-          {classifiers.length > 0 && (
-            <section className="bg-white border border-gray-100 rounded-xl">
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">
-                  Classifier results
-                </p>
-                <div className="flex gap-1.5">
-                  {classifiers.map((clf) => (
-                    <button
-                      key={clf.name}
-                      onClick={() => {
-                        setKronaTab(clf.name);
-                        setSearchParams({ classifier: clf.name });
-                      }}
-                      className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
-                        kronaTab === clf.name
-                          ? "bg-gray-900 text-white font-medium"
-                          : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                      }`}
-                    >
-                      {clf.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
+          {classifiers.length > 0 &&
+            (() => {
+              const isTrana = samples.some((s) => s.trana);
+              return (
+                <section className="bg-white border border-gray-100 rounded-xl">
+                  <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
+                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">
+                      Classifier results
+                    </p>
+                    <div className="flex gap-1.5">
+                      {classifiers.map((clf) => (
+                        <button
+                          key={clf.name}
+                          onClick={() => {
+                            setKronaTab(clf.name);
+                            setSearchParams({ classifier: clf.name });
+                          }}
+                          className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
+                            kronaTab === clf.name
+                              ? "bg-gray-900 text-white font-medium"
+                              : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                          }`}
+                        >
+                          {clf.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-              {classifiers.map(
-                (clf) =>
-                  kronaTab === clf.name && (
-                    <div key={clf.name}>
-                      {/* QC table for this classifier */}
-                      <div className="px-4 pt-3 pb-1">
-                        <p className="text-xs text-gray-300 font-mono">{clf.db}</p>
-                      </div>
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr>
-                            {[
-                              "Sample",
-                              "Unclassified",
-                              "Host",
-                              "Species",
-                              "Genera",
-                              "Positive control",
-                              "Top taxa",
-                            ].map((h) => (
-                              <th
-                                key={h}
-                                className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap"
-                              >
-                                {h}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {samples.map((s) => {
-                            const clfQc = s.taxprofiler?.classifiers?.[clf.name];
-                            const topTaxa = s.top_taxa?.[clf.name] ?? [];
-                            const spikeIn = s.spike_in_taxa?.[clf.name] ?? [];
-                            return (
-                              <tr
-                                key={s._id}
-                                onClick={() =>
-                                  navigate(`/samples/${s._id}?classifier=${kronaTab ?? ""}`)
-                                }
-                                className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
-                              >
-                                <td className="px-4 py-1.5 font-mono text-xs text-gray-700">
-                                  {s.sample_id ?? "—"}
-                                </td>
-                                <td className="px-4 py-1.5 text-xs text-gray-700">
-                                  {fmtPct(clfQc?.pct_unclassified)}
-                                </td>
-                                <td className="px-4 py-1.5 text-xs text-gray-700">
-                                  {s.host_pct?.[clf.name] != null
-                                    ? `${s.host_pct[clf.name]}%`
-                                    : "—"}
-                                </td>
-                                <td className="px-4 py-1.5 text-xs text-gray-700">
-                                  {fmt(clfQc?.num_species)}
-                                </td>
-                                <td className="px-4 py-1.5 text-xs text-gray-700">
-                                  {fmt(clfQc?.num_genera)}
-                                </td>
-                                <td className="px-4 py-1.5 text-xs">
-                                  {spikeIn.length > 0 ? (
-                                    <div className="flex flex-col gap-0.5">
-                                      {spikeIn.map((t, i) => (
-                                        <span key={i} className="text-gray-600 italic">
-                                          {t.name}
+                  {classifiers.map(
+                    (clf) =>
+                      kronaTab === clf.name && (
+                        <div key={clf.name}>
+                          {/* QC table for this classifier */}
+                          <div className="px-4 pt-3 pb-1">
+                            <p className="text-xs text-gray-300 font-mono">{clf.db}</p>
+                          </div>
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr>
+                                {(isTrana
+                                  ? ["Sample", "Reads (raw)", "Top taxa"]
+                                  : [
+                                      "Sample",
+                                      "Unclassified",
+                                      "Host",
+                                      "Species",
+                                      "Genera",
+                                      "Positive control",
+                                      "Top taxa",
+                                    ]
+                                ).map((h) => (
+                                  <th
+                                    key={h}
+                                    className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100 whitespace-nowrap"
+                                  >
+                                    {h}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {samples.map((s) => {
+                                const topTaxa = s.top_taxa?.[clf.name] ?? [];
+                                const topTaxaCell = (
+                                  <td className="px-4 py-1.5">
+                                    <div className="flex flex-col gap-0">
+                                      {topTaxa.map((t, i) => (
+                                        <span
+                                          key={i}
+                                          className="flex items-center gap-1"
+                                          style={{ fontSize: "11px", lineHeight: "1.4" }}
+                                        >
+                                          <span
+                                            className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                                              t.superkingdom === "Bacteria"
+                                                ? "bg-blue-400"
+                                                : t.superkingdom === "Viruses"
+                                                  ? "bg-red-400"
+                                                  : t.superkingdom === "Eukaryota"
+                                                    ? "bg-amber-400"
+                                                    : t.superkingdom === "Archaea"
+                                                      ? "bg-purple-400"
+                                                      : "bg-gray-300"
+                                            }`}
+                                          />
+                                          <span className="text-gray-600 italic truncate max-w-36">
+                                            {t.name}
+                                          </span>
                                           {t.pct != null && (
-                                            <span className="not-italic text-gray-400 ml-1">
-                                              {t.pct}% ({t.abundance.toLocaleString()})
+                                            <span className="text-gray-400 flex-shrink-0">
+                                              {t.pct?.toFixed(1)}%
                                             </span>
                                           )}
                                         </span>
                                       ))}
                                     </div>
-                                  ) : (
-                                    <span className="text-gray-300">Not detected</span>
-                                  )}
-                                </td>
-                                <td className="px-4 py-1.5">
-                                  <div className="flex flex-col gap-0">
-                                    {topTaxa.map((t, i) => (
-                                      <span
-                                        key={i}
-                                        className="flex items-center gap-1"
-                                        style={{ fontSize: "11px", lineHeight: "1.4" }}
-                                      >
-                                        <span
-                                          className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                                            t.superkingdom === "Bacteria"
-                                              ? "bg-blue-400"
-                                              : t.superkingdom === "Viruses"
-                                                ? "bg-red-400"
-                                                : t.superkingdom === "Eukaryota"
-                                                  ? "bg-amber-400"
-                                                  : t.superkingdom === "Archaea"
-                                                    ? "bg-purple-400"
-                                                    : "bg-gray-300"
-                                          }`}
-                                        />
-                                        <span className="text-gray-600 italic truncate max-w-36">
-                                          {t.name}
-                                        </span>
-                                        {t.pct != null && (
-                                          <span className="text-gray-400 flex-shrink-0">
-                                            {t.pct?.toFixed(1)}%
-                                          </span>
-                                        )}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                                  </td>
+                                );
+                                return (
+                                  <tr
+                                    key={s._id}
+                                    onClick={() =>
+                                      navigate(`/samples/${s._id}?classifier=${kronaTab ?? ""}`)
+                                    }
+                                    className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                                  >
+                                    <td className="px-4 py-1.5 font-mono text-xs text-gray-700">
+                                      {s.sample_id ?? "—"}
+                                    </td>
+                                    {isTrana ? (
+                                      <>
+                                        <td className="px-4 py-1.5 text-xs text-gray-700">
+                                          {fmt(s.trana?.nanoplot_unprocessed?.number_of_reads)}
+                                        </td>
+                                        {topTaxaCell}
+                                      </>
+                                    ) : (
+                                      (() => {
+                                        const clfQc = s.taxprofiler?.classifiers?.[clf.name];
+                                        const spikeIn = s.spike_in_taxa?.[clf.name] ?? [];
+                                        return (
+                                          <>
+                                            <td className="px-4 py-1.5 text-xs text-gray-700">
+                                              {fmtPct(clfQc?.pct_unclassified)}
+                                            </td>
+                                            <td className="px-4 py-1.5 text-xs text-gray-700">
+                                              {s.host_pct?.[clf.name] != null
+                                                ? `${s.host_pct[clf.name]}%`
+                                                : "—"}
+                                            </td>
+                                            <td className="px-4 py-1.5 text-xs text-gray-700">
+                                              {fmt(clfQc?.num_species)}
+                                            </td>
+                                            <td className="px-4 py-1.5 text-xs text-gray-700">
+                                              {fmt(clfQc?.num_genera)}
+                                            </td>
+                                            <td className="px-4 py-1.5 text-xs">
+                                              {spikeIn.length > 0 ? (
+                                                <div className="flex flex-col gap-0.5">
+                                                  {spikeIn.map((t, i) => (
+                                                    <span key={i} className="text-gray-600 italic">
+                                                      {t.name}
+                                                      {t.pct != null && (
+                                                        <span className="not-italic text-gray-400 ml-1">
+                                                          {t.pct}% ({t.abundance.toLocaleString()})
+                                                        </span>
+                                                      )}
+                                                    </span>
+                                                  ))}
+                                                </div>
+                                              ) : (
+                                                <span className="text-gray-300">Not detected</span>
+                                              )}
+                                            </td>
+                                            {topTaxaCell}
+                                          </>
+                                        );
+                                      })()
+                                    )}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
 
-                      {/* Krona for this classifier */}
-                      {clf.krona_id && (
-                        <div className="p-4 border-t border-gray-50">
-                          {kronaErrors[clf.name] && (
-                            <p className="text-xs text-red-400">Krona file could not be loaded.</p>
-                          )}
-                          {!kronaUrls[clf.name] && !kronaErrors[clf.name] && (
-                            <div className="flex items-center justify-center h-40 text-sm text-gray-400">
-                              Loading Krona…
+                          {/* Krona for this classifier */}
+                          {clf.krona_id && (
+                            <div className="p-4 border-t border-gray-50">
+                              {kronaErrors[clf.name] && (
+                                <p className="text-xs text-red-400">
+                                  Krona file could not be loaded.
+                                </p>
+                              )}
+                              {!kronaUrls[clf.name] && !kronaErrors[clf.name] && (
+                                <div className="flex items-center justify-center h-40 text-sm text-gray-400">
+                                  Loading Krona…
+                                </div>
+                              )}
+                              {kronaUrls[clf.name] && (
+                                <iframe
+                                  key={kronaUrls[clf.name]}
+                                  src={kronaUrls[clf.name]}
+                                  title={`Krona — ${clf.name}`}
+                                  className="w-full rounded-lg border border-gray-100"
+                                  style={{ height: "85vh" }}
+                                  sandbox="allow-scripts allow-popups allow-forms"
+                                />
+                              )}
                             </div>
                           )}
-                          {kronaUrls[clf.name] && (
-                            <iframe
-                              key={kronaUrls[clf.name]}
-                              src={kronaUrls[clf.name]}
-                              title={`Krona — ${clf.name}`}
-                              className="w-full rounded-lg border border-gray-100"
-                              style={{ height: "85vh" }}
-                              sandbox="allow-scripts allow-popups allow-forms"
-                            />
-                          )}
                         </div>
-                      )}
-                    </div>
-                  )
-              )}
-            </section>
-          )}
+                      )
+                  )}
+                </section>
+              );
+            })()}
 
           {/* Provenance */}
           {caseData && caseData.pipeline_info ? (
