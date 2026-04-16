@@ -249,7 +249,9 @@ class TestExtractClassifierQcDiamond:
         assert result["queries_aligned"] == 100
 
     def test_missing_key_returns_empty_dict(self):
-        result = _extract_classifier_qc(make_multiqc(), "diamond", "SAMPLE1_diamond.diamond")
+        result = _extract_classifier_qc(
+            make_multiqc(), "diamond", "SAMPLE1_diamond.diamond"
+        )
         assert result == {}
 
     def test_zero_queries_aligned_becomes_none(self):
