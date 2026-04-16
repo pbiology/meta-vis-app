@@ -19,6 +19,7 @@ FULL_MULTIQC = {
         "multiqc_centrifuge_centrifuge": {
             "sample1": {"R": {"root": 900}, "S": {"Homo sapiens": 800}}
         },
+        "diamond": {"sample1_diamond": {"queries_aligned": 723522}},
         "multiqc_fastqc": {"sample1": {"baz": 3}},
         "multiqc_fastp": {"sample1": {"qux": 4}},
         "multiqc_bowtie2": {"sample1": {"quux": 5}},
@@ -40,6 +41,7 @@ def test_read_multiqc_returns_all_keys(tmp_path):
     assert set(MultiQCRaw.model_fields.keys()) == {
         "kraken2",
         "centrifuge",
+        "diamond",
         "fastqc",
         "fastp",
         "bowtie2",

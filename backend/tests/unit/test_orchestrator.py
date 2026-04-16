@@ -13,6 +13,7 @@ from app.ingestor.orchestrator import _extract_classifier_qc, _extract_base_qc
 def make_multiqc(
     kraken2: dict | None = None,
     centrifuge: dict | None = None,
+    diamond: dict | None = None,
     fastqc: dict | None = None,
     fastp: dict | None = None,
     bowtie2: dict | None = None,
@@ -20,6 +21,7 @@ def make_multiqc(
     return MultiQCRaw(
         kraken2=kraken2 or {},
         centrifuge=centrifuge or {},
+        diamond=diamond or {},
         fastqc=fastqc or {},
         fastp=fastp or {},
         bowtie2=bowtie2 or {},
@@ -224,12 +226,46 @@ class TestExtractClassifierQcCentrifuge:
 
 
 # ---------------------------------------------------------------------------
+# _extract_classifier_qc — diamond
+# ---------------------------------------------------------------------------
+
+
+class TestExtractClassifierQcDiamond:
+    def _qc_data(self, col="SAMPLE1_diamond.diamond", queries_aligned=723522):
+        key = col.split(".diamond")[0]
+        return make_multiqc(diamond={key: {"queries_aligned": queries_aligned}})
+
+    def test_happy_path_returns_queries_aligned(self):
+        result = _extract_classifier_qc(
+            self._qc_data(), "diamond", "SAMPLE1_diamond.diamond"
+        )
+        assert result == {"queries_aligned": 723522}
+
+    def test_column_suffix_stripped_correctly(self):
+        col = "26CE100005-DNA_diamond.diamond"
+        key = "26CE100005-DNA_diamond"
+        qc_data = make_multiqc(diamond={key: {"queries_aligned": 100}})
+        result = _extract_classifier_qc(qc_data, "diamond", col)
+        assert result["queries_aligned"] == 100
+
+    def test_missing_key_returns_empty_dict(self):
+        result = _extract_classifier_qc(make_multiqc(), "diamond", "SAMPLE1_diamond.diamond")
+        assert result == {}
+
+    def test_zero_queries_aligned_becomes_none(self):
+        result = _extract_classifier_qc(
+            self._qc_data(queries_aligned=0), "diamond", "SAMPLE1_diamond.diamond"
+        )
+        assert result["queries_aligned"] is None
+
+
+# ---------------------------------------------------------------------------
 # _extract_classifier_qc — unknown classifier
 # ---------------------------------------------------------------------------
 
 
 def test_unknown_classifier_returns_empty_dict():
-    result = _extract_classifier_qc(make_multiqc(), "diamond", "SAMPLE1")
+    result = _extract_classifier_qc(make_multiqc(), "blast", "SAMPLE1")
     assert result == {}
 
 
