@@ -6,6 +6,7 @@ from typing import Optional, List, Literal, Dict
 from pydantic import BaseModel, ConfigDict
 
 from app.ingestor.models import (
+    NanoPlotStats as NanoPlotStats,
     TaxonEntry as TaxonEntry,
     PipelineConfiguration as PipelineConfiguration,
     PipelineInfoOutput as PipelineInfo,  # re-exported under the existing name used by the API layer
@@ -87,6 +88,26 @@ class TaxprofilerStats(_Base):
     pipeline_info: Optional[PipelineInfo] = None
 
 
+class NanoPlotStatsResponse(_Base):
+    """NanoPlot QC metrics returned by the API."""
+
+    mean_read_length: Optional[float] = None
+    mean_read_quality: Optional[float] = None
+    median_read_length: Optional[float] = None
+    median_read_quality: Optional[float] = None
+    number_of_reads: Optional[int] = None
+    read_length_n50: Optional[int] = None
+    total_bases: Optional[int] = None
+
+
+class TranaStats(_Base):
+    """QC block for Trana pipeline samples (parallel to TaxprofilerStats)."""
+
+    nanoplot_unprocessed: Optional[NanoPlotStatsResponse] = None
+    nanoplot_processed: Optional[NanoPlotStatsResponse] = None
+    pipeline_info: Optional[PipelineInfo] = None
+
+
 # ---------------------------------------------------------------------------
 # Sample metadata
 # ---------------------------------------------------------------------------
@@ -142,6 +163,7 @@ class SampleResponse(_Base):
     material: Literal["DNA", "RNA"]
     subject_id: Optional[str] = None
     taxprofiler: Optional[TaxprofilerStats] = None
+    trana: Optional[TranaStats] = None
     profiles: List[ClassifierProfile] = []
     has_krona: bool = False
     review: ReviewStatus = ReviewStatus()
@@ -219,5 +241,35 @@ class IngestRequest(BaseModel):
     classifiers: List[ClassifierIngestRequest]
     samples: List[SampleIngestRequest]
     metaval: Optional[MetavalIngestRequest] = None
+    analysis_type: Optional[AnalysisType] = None
+    sequencing_platform: Optional[SequencingPlatform] = None
+
+
+# ---------------------------------------------------------------------------
+# Trana ingest request models
+# ---------------------------------------------------------------------------
+
+
+class TranaSampleIngestRequest(BaseModel):
+    """Per-sample input for Trana pipeline ingest."""
+
+    subject_id: Optional[str] = None
+    sample_id: str
+    sample_type: Literal["sample", "positive_ctrl", "negative_ctrl"]
+    material: Literal["DNA", "RNA"]
+    sample_source: str = "N/A"
+    abundance_path: str  # path to Emu *_rel-abundance.tsv
+    krona_path: Optional[str] = None
+    nanoplot_unprocessed_path: Optional[str] = None
+    nanoplot_processed_path: Optional[str] = None
+
+
+class TranaIngestRequest(BaseModel):
+    """Top-level ingest request for a Trana pipeline run."""
+
+    case_id: str
+    order_date: Optional[date] = None
+    pipeline_info_path: str
+    samples: List[TranaSampleIngestRequest]
     analysis_type: Optional[AnalysisType] = None
     sequencing_platform: Optional[SequencingPlatform] = None
