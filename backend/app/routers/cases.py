@@ -162,6 +162,7 @@ async def list_cases(
     page: int = 1,
     search: str = "",
     reviewed: str | None = None,
+    analysis_type: str | None = None,
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
@@ -172,6 +173,8 @@ async def list_cases(
         query["review.reviewed"] = {"$ne": True}
     elif reviewed == "reviewed":
         query["review.reviewed"] = True
+    if analysis_type in ("shotgun", "amplicon"):
+        query["analysis_type"] = analysis_type
 
     total = (
         await db["cases"].estimated_document_count()
