@@ -422,7 +422,7 @@ async def get_contaminant_alerts(
 async def get_ntc_trends(
     material: Literal["DNA", "RNA"] = Query(..., description="DNA or RNA"),
     window_days: int = Query(default=90, ge=7, le=365),
-    min_reads: float = Query(default=3, ge=0),
+    min_reads: float = Query(default=3, gt=0),
     min_case_pct: float = Query(default=0.10, ge=0.0, le=1.0),
     pipeline: Literal["taxprofiler", "trana"] = Query(default="taxprofiler"),
     db: AsyncIOMotorDatabase = Depends(get_db),
