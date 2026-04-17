@@ -81,10 +81,7 @@ class TestReadNanostats:
         """Smoke test against the actual Trana example data."""
         import os
 
-        example = (
-            "test-data/16s_ont_260415_example_zymomock-20260415-171512"
-            "/nanoplot_unprocessed/1234567890AB_nanoplot_unprocessed_NanoStats.txt"
-        )
+        example = "test-data/16S_trana/nanoplot_unprocessed/1234567890AB_nanoplot_unprocessed_NanoStats.txt"
         path = os.path.join(os.path.dirname(__file__), "..", "..", example)
         if not os.path.exists(path):
             pytest.skip("Example data not available")

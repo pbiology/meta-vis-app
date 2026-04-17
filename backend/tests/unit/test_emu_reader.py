@@ -93,10 +93,7 @@ class TestReadEmuAbundance:
         """Smoke test against the actual Trana example data."""
         import os
 
-        example = (
-            "test-data/16s_ont_260415_example_zymomock-20260415-171512"
-            "/results/1234567890AB_downsampled.fastq_rel-abundance.tsv"
-        )
+        example = "test-data/16S_trana/results/1234567890AB_downsampled.fastq_rel-abundance.tsv"
         path = os.path.join(os.path.dirname(__file__), "..", "..", example)
         if not os.path.exists(path):
             pytest.skip("Example data not available")
