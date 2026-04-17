@@ -76,4 +76,3 @@ class TestReadNanostats:
 
         assert stats.mean_read_length is None
         assert stats.number_of_reads is None
-

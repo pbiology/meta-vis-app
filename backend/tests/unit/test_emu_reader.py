@@ -88,4 +88,3 @@ class TestReadEmuAbundance:
         path = write_tsv(tmp_path, content)
         with pytest.raises(ValueError, match="missing required columns"):
             read_emu_abundance(path)
-
