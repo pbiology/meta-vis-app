@@ -573,7 +573,7 @@ export default function NtcTrends() {
     setLoading(true);
     setError(null);
     getNtcTrends({
-      material,
+      material: pipeline === "trana" ? "DNA" : material,
       windowDays,
       minReads: pipeline === "trana" ? minAbundance : minReads,
       minCasePct: minCasePct / 100,
@@ -593,22 +593,24 @@ export default function NtcTrends() {
       <div className="flex items-center gap-3 px-6 py-4 bg-white border-b border-gray-100 flex-shrink-0">
         <h1 className="text-sm font-medium text-gray-900 flex-1">NTC trends</h1>
 
-        {/* Material tabs */}
-        <div className="flex items-center gap-1">
-          {["DNA", "RNA"].map((m) => (
-            <button
-              key={m}
-              onClick={() => setMaterial(m)}
-              className={`px-3 py-1 rounded-full text-xs transition-colors ${
-                material === m
-                  ? "bg-gray-900 text-white font-medium"
-                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-              }`}
-            >
-              {m}
-            </button>
-          ))}
-        </div>
+        {/* Material tabs — hidden for Trana (always DNA) */}
+        {pipeline !== "trana" && (
+          <div className="flex items-center gap-1">
+            {["DNA", "RNA"].map((m) => (
+              <button
+                key={m}
+                onClick={() => setMaterial(m)}
+                className={`px-3 py-1 rounded-full text-xs transition-colors ${
+                  material === m
+                    ? "bg-gray-900 text-white font-medium"
+                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Pipeline tabs */}
         <div className="flex items-center gap-1 border-l border-gray-100 pl-3">
