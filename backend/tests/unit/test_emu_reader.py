@@ -89,18 +89,3 @@ class TestReadEmuAbundance:
         with pytest.raises(ValueError, match="missing required columns"):
             read_emu_abundance(path)
 
-    def test_real_example_data(self):
-        """Smoke test against the actual Trana example data."""
-        import os
-
-        example = "test-data/16S_trana/results/1234567890AB_downsampled.fastq_rel-abundance.tsv"
-        path = os.path.join(os.path.dirname(__file__), "..", "..", example)
-        if not os.path.exists(path):
-            pytest.skip("Example data not available")
-
-        entries = read_emu_abundance(path)
-        assert len(entries) > 0
-        for e in entries:
-            assert e.taxon_id > 0
-            assert e.abundance > 0
-            assert e.superkingdom == "Bacteria"

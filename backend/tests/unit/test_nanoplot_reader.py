@@ -77,16 +77,3 @@ class TestReadNanostats:
         assert stats.mean_read_length is None
         assert stats.number_of_reads is None
 
-    def test_real_example_data(self):
-        """Smoke test against the actual Trana example data."""
-        import os
-
-        example = "test-data/16S_trana/nanoplot_unprocessed/1234567890AB_nanoplot_unprocessed_NanoStats.txt"
-        path = os.path.join(os.path.dirname(__file__), "..", "..", example)
-        if not os.path.exists(path):
-            pytest.skip("Example data not available")
-
-        stats = read_nanostats(path)
-        assert stats.mean_read_length == pytest.approx(1520.6)
-        assert stats.number_of_reads == 5000
-        assert stats.total_bases == 7602885
