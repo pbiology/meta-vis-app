@@ -57,6 +57,7 @@ if [ "$COUNT" -gt 0 ]; then
       --case-id "$case_id" \
       --order-date "$order_date" \
       --multiqc "$TD/taxprofiler/multiqc/multiqc_data/multiqc_data.json" \
+      --multiqc-report "$TD/taxprofiler/multiqc/multiqc_report.html" \
       --pipeline-info "$TD/taxprofiler/pipeline_info/nf_core_taxprofiler_software_mqc_versions.yml" \
       --analysis-type "shotgun" \
       --sequencing-platform "illumina" \
@@ -105,6 +106,7 @@ if [ "$TRANA_COUNT" -gt 0 ]; then
     if python "$INGEST_SCRIPT" trana \
       --case-id "$case_id" \
       --order-date "$order_date" \
+      --multiqc-report "$TD_TRANA/multiqc/multiqc_report.html" \
       --pipeline-info "$TD_TRANA/pipeline_info/software_versions.yml" \
       --analysis-type "amplicon" \
       --sequencing-platform "nanopore" \

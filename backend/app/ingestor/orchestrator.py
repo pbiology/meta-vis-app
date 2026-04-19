@@ -53,6 +53,17 @@ async def _store_krona(
     await get_blob_store().put(key, html)
 
 
+async def _store_multiqc(case_object_id: ObjectId, multiqc_html_path: str) -> None:
+    from app.database import get_blob_store
+
+    path = Path(multiqc_html_path)
+    if not path.exists():
+        raise FileNotFoundError(f"MultiQC HTML not found: {multiqc_html_path}")
+    html = path.read_text(encoding="utf-8")
+    key = f"multiqc/{case_object_id}/report.html"
+    await get_blob_store().put(key, html)
+
+
 def _compute_outbreak_taxa(
     profiles: list,
 ) -> list:
@@ -275,6 +286,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
         "sample_ids": [],
         "classifiers": classifier_docs,
         "has_krona": any(clf.krona for clf in request.classifiers),
+        "has_multiqc": bool(request.multiqc_report_path),
         "pipeline_info": pipeline_info.model_dump(),
         "analysis_type": request.analysis_type.value if request.analysis_type else None,
         "sequencing_platform": request.sequencing_platform.value
@@ -304,6 +316,9 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
         {"_id": case_object_id},
         {"$set": {"classifiers": updated_classifiers}},
     )
+
+    if request.multiqc_report_path:
+        await _store_multiqc(case_object_id, request.multiqc_report_path)
 
     # Fix 1: load each taxpasta file once, keyed by path
     import pandas as pd
@@ -471,6 +486,7 @@ async def ingest_trana_case(
         "sample_ids": [],
         "classifiers": [{"name": "emu", "db": "default", "krona_id": None}],
         "has_krona": has_krona,
+        "has_multiqc": bool(request.multiqc_report_path),
         "pipeline_info": pipeline_info.model_dump(),
         "analysis_type": request.analysis_type.value if request.analysis_type else None,
         "sequencing_platform": (
@@ -493,6 +509,9 @@ async def ingest_trana_case(
             krona_tasks.append(_store_krona(case_object_id, s.sample_id, s.krona_path))
     if krona_tasks:
         await asyncio.gather(*krona_tasks)
+
+    if request.multiqc_report_path:
+        await _store_multiqc(case_object_id, request.multiqc_report_path)
 
     sample_names = [s.sample_id for s in request.samples if s.sample_type == "sample"]
     sample_count = len(sample_names)

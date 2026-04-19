@@ -131,6 +131,7 @@ def ingest_taxprofiler(args):
         "case_id": args.case_id,
         "order_date": args.order_date,
         "multiqc_path": args.multiqc,
+        "multiqc_report_path": args.multiqc_report,
         "pipeline_info_path": args.pipeline_info,
         "classifiers": classifiers,
         "samples": samples,
@@ -155,6 +156,11 @@ def _add_taxprofiler_args(parser: argparse.ArgumentParser) -> None:
         "--order-date", default=None, help="Case order date (YYYY-MM-DD)"
     )
     parser.add_argument("--multiqc", required=True)
+    parser.add_argument(
+        "--multiqc-report",
+        default=None,
+        help="Path to multiqc_report.html (stored in object storage)",
+    )
     parser.add_argument(
         "--pipeline-info",
         required=True,
@@ -243,6 +249,7 @@ def ingest_trana(args):
     payload = {
         "case_id": args.case_id,
         "order_date": args.order_date,
+        "multiqc_report_path": args.multiqc_report,
         "pipeline_info_path": args.pipeline_info,
         "samples": samples,
         "analysis_type": args.analysis_type,
@@ -268,6 +275,11 @@ def _add_trana_args(parser: argparse.ArgumentParser) -> None:
         "--pipeline-info",
         required=True,
         help="Path to Trana software_versions.yml",
+    )
+    parser.add_argument(
+        "--multiqc-report",
+        default=None,
+        help="Path to multiqc_report.html (stored in object storage)",
     )
     parser.add_argument(
         "--sample",

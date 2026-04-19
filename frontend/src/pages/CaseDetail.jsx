@@ -6,6 +6,7 @@ import {
   reviewCase,
   unreviewCase,
   getCaseKronaUrl,
+  getCaseMultiQCUrl,
   addNote,
   deleteNote,
 } from "../api/cases";
@@ -37,6 +38,9 @@ export default function CaseDetail() {
   const [notesOpen, setNotesOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
+  const [multiqcUrl, setMultiqcUrl] = useState(null);
+  const [multiqcLoading, setMultiqcLoading] = useState(false);
+  const [multiqcError, setMultiqcError] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -169,6 +173,36 @@ export default function CaseDetail() {
     }
   }
 
+  async function loadMultiqc() {
+    if (multiqcUrl) return multiqcUrl;
+    setMultiqcLoading(true);
+    setMultiqcError(false);
+    try {
+      const url = await getCaseMultiQCUrl(caseId);
+      setMultiqcUrl(url);
+      return url;
+    } catch {
+      setMultiqcError(true);
+      return null;
+    } finally {
+      setMultiqcLoading(false);
+    }
+  }
+
+  async function handleOpenMultiqc() {
+    const url = await loadMultiqc();
+    if (url) window.open(url, "_blank");
+  }
+
+  async function handleDownloadMultiqc() {
+    const url = await loadMultiqc();
+    if (!url) return;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `multiqc_${caseId}.html`;
+    a.click();
+  }
+
   const filtered = useMemo(() => {
     if (filter === "Sample") return samples.filter((s) => s.sample_type === "sample");
     if (filter === "Controls")
@@ -284,20 +318,59 @@ export default function CaseDetail() {
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">
                 Samples
               </p>
-              <div className="flex gap-1.5">
-                {FILTERS.map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setFilter(f)}
-                    className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
-                      filter === f
-                        ? "bg-gray-900 text-white font-medium"
-                        : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                    }`}
-                  >
-                    {f}
-                  </button>
-                ))}
+              <div className="flex items-center gap-2">
+                {caseData?.has_multiqc && (
+                  <div className="flex items-center gap-1 mr-1">
+                    {multiqcError && <span className="text-xs text-red-400">Failed to load.</span>}
+                    <button
+                      onClick={handleOpenMultiqc}
+                      disabled={multiqcLoading}
+                      className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    >
+                      <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">
+                        <path
+                          d="M7 3H3v10h10V9M9 2h5v5M13 3l-6 6"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      {multiqcLoading ? "Loading…" : "MultiQC"}
+                    </button>
+                    <button
+                      onClick={handleDownloadMultiqc}
+                      disabled={multiqcLoading}
+                      className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                    >
+                      <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">
+                        <path
+                          d="M8 2v8M5 7l3 3 3-3M3 12h10"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      Download
+                    </button>
+                  </div>
+                )}
+                <div className="flex gap-1.5">
+                  {FILTERS.map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => setFilter(f)}
+                      className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
+                        filter === f
+                          ? "bg-gray-900 text-white font-medium"
+                          : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                      }`}
+                    >
+                      {f}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
             <table className="w-full text-left border-collapse">

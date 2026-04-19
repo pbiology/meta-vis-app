@@ -197,6 +197,7 @@ class CaseResponse(_Base):
     ingested_at: Optional[datetime] = None
     classifiers: List[CaseClassifier] = []
     has_krona: bool = False
+    has_multiqc: bool = False
     pipeline_info: Optional[PipelineInfo] = None
     metaval_pipeline_info: Optional[PipelineInfo] = None
     analysis_type: Optional[AnalysisType] = None
@@ -237,6 +238,7 @@ class IngestRequest(BaseModel):
     case_id: str
     order_date: Optional[date] = None
     multiqc_path: str
+    multiqc_report_path: Optional[str] = None  # path to multiqc_report.html
     pipeline_info_path: str
     classifiers: List[ClassifierIngestRequest]
     samples: List[SampleIngestRequest]
@@ -269,6 +271,7 @@ class TranaIngestRequest(BaseModel):
 
     case_id: str
     order_date: Optional[date] = None
+    multiqc_report_path: Optional[str] = None  # path to multiqc_report.html
     pipeline_info_path: str
     samples: List[TranaSampleIngestRequest]
     analysis_type: Optional[AnalysisType] = None
