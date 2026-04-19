@@ -48,6 +48,13 @@ export async function getCaseKronaUrl(caseId, classifier = "kraken2") {
   return URL.createObjectURL(resp.data);
 }
 
+export async function getCaseMultiQCUrl(caseId) {
+  const resp = await client.get(`/cases/${caseId}/multiqc`, {
+    responseType: "blob",
+  });
+  return URL.createObjectURL(resp.data);
+}
+
 export async function addNote(caseId, text) {
   const res = await client.post(`/cases/${caseId}/notes`, { text });
   return res.data;

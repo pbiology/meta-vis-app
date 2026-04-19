@@ -6,6 +6,7 @@ import {
   reviewCase,
   unreviewCase,
   getCaseKronaUrl,
+  getCaseMultiQCUrl,
   addNote,
   deleteNote,
 } from "../api/cases";
@@ -37,6 +38,9 @@ export default function CaseDetail() {
   const [notesOpen, setNotesOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
+  const [multiqcUrl, setMultiqcUrl] = useState(null);
+  const [multiqcLoading, setMultiqcLoading] = useState(false);
+  const [multiqcError, setMultiqcError] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -167,6 +171,36 @@ export default function CaseDetail() {
     } catch {
       alert("Failed to delete note.");
     }
+  }
+
+  async function loadMultiqc() {
+    if (multiqcUrl) return multiqcUrl;
+    setMultiqcLoading(true);
+    setMultiqcError(false);
+    try {
+      const url = await getCaseMultiQCUrl(caseId);
+      setMultiqcUrl(url);
+      return url;
+    } catch {
+      setMultiqcError(true);
+      return null;
+    } finally {
+      setMultiqcLoading(false);
+    }
+  }
+
+  async function handleOpenMultiqc() {
+    const url = await loadMultiqc();
+    if (url) window.open(url, "_blank");
+  }
+
+  async function handleDownloadMultiqc() {
+    const url = await loadMultiqc();
+    if (!url) return;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `multiqc_${caseId}.html`;
+    a.click();
   }
 
   const filtered = useMemo(() => {
@@ -583,6 +617,52 @@ export default function CaseDetail() {
                 </section>
               );
             })()}
+
+          {/* MultiQC report */}
+          {caseData?.has_multiqc && (
+            <section className="bg-white border border-gray-100 rounded-xl">
+              <div className="flex items-center gap-2 px-4 py-3">
+                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">
+                  MultiQC report
+                </p>
+                {multiqcError && (
+                  <span className="text-xs text-red-400">Failed to load report.</span>
+                )}
+                <button
+                  onClick={handleOpenMultiqc}
+                  disabled={multiqcLoading}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">
+                    <path
+                      d="M7 3H3v10h10V9M9 2h5v5M13 3l-6 6"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  {multiqcLoading ? "Loading…" : "Open in new tab"}
+                </button>
+                <button
+                  onClick={handleDownloadMultiqc}
+                  disabled={multiqcLoading}
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">
+                    <path
+                      d="M8 2v8M5 7l3 3 3-3M3 12h10"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  Download
+                </button>
+              </div>
+            </section>
+          )}
 
           {/* Provenance */}
           {caseData && caseData.pipeline_info ? (
