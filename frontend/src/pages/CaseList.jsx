@@ -7,14 +7,6 @@ import { getNtcContaminantCaseIds } from "../api/ntc";
 import { useAuth } from "../context/AuthContext";
 import { singleAnalysisFilter } from "../lib/analysisPreference";
 
-function pipelineShortName(c) {
-  const raw = c.pipeline_info?.pipeline_configuration?.pipeline_name ?? "";
-  if (raw.includes("taxprofiler")) {
-    return c.metaval_pipeline_info ? "Taxprofiler+Metaval" : "Taxprofiler";
-  }
-  if (raw.toLowerCase().includes("trana")) return "TRANA";
-  return raw || null;
-}
 
 export default function CaseList() {
   const [data, setData] = useState({ items: [], total: 0, pages: 1 });
@@ -208,7 +200,6 @@ export default function CaseList() {
                 {[
                   "Case name",
                   "Date",
-                  "Pipeline",
                   "Analysis",
                   "Platform",
                   "Samples",
@@ -295,9 +286,6 @@ export default function CaseList() {
                     {c.order_date ?? "—"}
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                    {pipelineShortName(c) ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
                     {c.analysis_type === "shotgun"
                       ? "Shotgun"
                       : c.analysis_type === "amplicon"
@@ -347,7 +335,7 @@ export default function CaseList() {
               {cases.length === 0 && (
                 <tr>
                   <td
-                    colSpan={role === "admin" ? 10 : 9}
+                    colSpan={role === "admin" ? 9 : 8}
                     className="px-4 py-10 text-center text-sm text-gray-400"
                   >
                     No cases found.
