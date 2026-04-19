@@ -1,7 +1,9 @@
 import client from "./client";
 
-export async function getSamples({ page = 1, search = "", filter = "" } = {}) {
-  const res = await client.get("/samples", { params: { page, search, filter } });
+export async function getSamples({ page = 1, search = "", filter = "", analysisType } = {}) {
+  const params = { page, search, filter };
+  if (analysisType) params.analysis_type = analysisType;
+  const res = await client.get("/samples", { params });
   return res.data;
 }
 

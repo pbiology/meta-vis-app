@@ -2,11 +2,13 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { getOutbreaks, getIgnorelist, addToIgnorelist } from "../api/alerts";
 import { useAuth } from "../context/AuthContext";
+import { multiAnalysisFilter } from "../lib/analysisPreference";
 
 export default function Alerts() {
   const navigate = useNavigate();
-  const { role } = useAuth();
+  const { role, preferences } = useAuth();
   const location = useLocation();
+  const visibleAnalysis = preferences?.visible_analysis_types;
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -19,7 +21,8 @@ export default function Alerts() {
 
   function load() {
     setLoading(true);
-    Promise.all([getOutbreaks(windowDays), getIgnorelist()])
+    const analysisTypes = multiAnalysisFilter(visibleAnalysis);
+    Promise.all([getOutbreaks(windowDays, analysisTypes), getIgnorelist()])
       .then(([outbreakData, ignoreData]) => {
         setData(outbreakData);
         setIgnorelist(ignoreData);
@@ -30,7 +33,7 @@ export default function Alerts() {
 
   useEffect(() => {
     load();
-  }, [windowDays]);
+  }, [windowDays, visibleAnalysis]);
 
   useEffect(() => {
     if (!data || !location.hash) return;

@@ -39,9 +39,12 @@ VALID_KINGDOMS: frozenset[str] = frozenset(
     {"Bacteria", "Viruses", "Eukaryota", "Archaea"}
 )
 
+VALID_ANALYSIS_TYPES: frozenset[str] = frozenset({"shotgun", "amplicon"})
+
 
 class UserPreferences(BaseModel):
     preferred_kingdoms: list[str] = ["Viruses"]
+    visible_analysis_types: list[str] = ["shotgun", "amplicon"]
 
     @field_validator("preferred_kingdoms")
     @classmethod
@@ -49,6 +52,16 @@ class UserPreferences(BaseModel):
         invalid = set(v) - VALID_KINGDOMS
         if invalid:
             raise ValueError(f"Invalid kingdoms: {invalid}")
+        return v
+
+    @field_validator("visible_analysis_types")
+    @classmethod
+    def analysis_types_must_be_valid(cls, v: list[str]) -> list[str]:
+        invalid = set(v) - VALID_ANALYSIS_TYPES
+        if invalid:
+            raise ValueError(f"Invalid analysis types: {invalid}")
+        if not v:
+            raise ValueError("At least one analysis type must be visible")
         return v
 
 

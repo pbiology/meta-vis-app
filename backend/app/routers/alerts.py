@@ -13,8 +13,8 @@ from app.config import settings
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
-# Simple in-memory cache — keyed by window_days
-_cache: dict[int, dict] = {}
+# Simple in-memory cache — keyed by (window_days, analysis_types tuple)
+_cache: dict[tuple, dict] = {}
 _cache_computed_at: datetime | None = None
 
 # Cache is explicitly cleared on ignorelist changes.
@@ -180,6 +180,7 @@ def parse_date(d):
 )
 async def get_outbreaks(
     window_days: int = Query(default=14, ge=1, le=365),
+    analysis_types: list[str] | None = Query(default=None),
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
@@ -194,12 +195,14 @@ async def get_outbreaks(
     # Return cached result if still fresh
     now = datetime.now(timezone.utc)
 
+    cache_key = (window_days, tuple(sorted(analysis_types)) if analysis_types else ())
+
     if (
-        window_days in _cache
+        cache_key in _cache
         and _cache_computed_at is not None
         and (now - _cache_computed_at).total_seconds() < CACHE_TTL_SECONDS
     ):
-        return _cache[window_days]
+        return _cache[cache_key]
 
     # Only include enabled configs
     configs = [c for c in settings.outbreak_configs if c.get("enabled", True)]
@@ -210,12 +213,14 @@ async def get_outbreaks(
     # Compute outbreaks for each config
     results = []
     for config in configs:
-        outbreak_data = await _compute_outbreaks_for_config(config, window_days, db)
+        outbreak_data = await _compute_outbreaks_for_config(
+            config, window_days, db, analysis_types
+        )
         results.append(outbreak_data)
 
     # Cache result
     result = {"window_days": window_days, "results": results}
-    _cache[window_days] = result
+    _cache[cache_key] = result
     _cache_computed_at = now
 
     return result
@@ -225,6 +230,7 @@ async def _compute_outbreaks_for_config(
     config: dict,
     window_days: int,
     db: AsyncIOMotorDatabase,
+    analysis_types: list[str] | None = None,
 ) -> dict:
     """
     Compute outbreaks for a single config using pre-computed outbreak_taxa.
@@ -238,11 +244,12 @@ async def _compute_outbreaks_for_config(
 
     # Only fetch cases within 2× the window
     cutoff = (date.today() - timedelta(days=window_days * 2)).isoformat()
+    case_query: dict = {"order_date": {"$gte": cutoff}}
+    if analysis_types:
+        case_query["analysis_type"] = {"$in": analysis_types}
     cases = (
         await db["cases"]
-        .find(
-            {"order_date": {"$gte": cutoff}}, {"_id": 1, "case_id": 1, "order_date": 1}
-        )
+        .find(case_query, {"_id": 1, "case_id": 1, "order_date": 1})
         .to_list(None)
     )
 

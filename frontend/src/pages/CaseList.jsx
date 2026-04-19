@@ -5,15 +5,7 @@ import Badge from "../components/Badge";
 import { getOutbreaks } from "../api/alerts";
 import { getNtcContaminantCaseIds } from "../api/ntc";
 import { useAuth } from "../context/AuthContext";
-
-function pipelineShortName(c) {
-  const raw = c.pipeline_info?.pipeline_configuration?.pipeline_name ?? "";
-  if (raw.includes("taxprofiler")) {
-    return c.metaval_pipeline_info ? "Taxprofiler+Metaval" : "Taxprofiler";
-  }
-  if (raw.toLowerCase().includes("trana")) return "TRANA";
-  return raw || null;
-}
+import { singleAnalysisFilter } from "../lib/analysisPreference";
 
 export default function CaseList() {
   const [data, setData] = useState({ items: [], total: 0, pages: 1 });
@@ -29,21 +21,23 @@ export default function CaseList() {
   const [ntcContaminantCaseIds, setNtcContaminantCaseIds] = useState(new Set());
   const [stats, setStats] = useState({ total: 0, pending: 0, reviewed: 0 });
   const navigate = useNavigate();
-  const { role } = useAuth();
+  const { role, preferences } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const filter = searchParams.get("filter") ?? "all";
   const analysisFilter = searchParams.get("analysis") ?? "all";
+  const visibleAnalysis = preferences?.visible_analysis_types;
 
   const load = useCallback(
     async (silent = false) => {
       if (!silent) setLoading(true);
       setError(null);
       try {
+        const effective = singleAnalysisFilter(visibleAnalysis, analysisFilter);
         const result = await getCases({
           page,
           search,
           reviewed: filter,
-          analysisType: analysisFilter,
+          analysisType: effective ?? "all",
         });
         setData(result);
         getOutbreaks(14)
@@ -67,7 +61,7 @@ export default function CaseList() {
         setLoading(false);
       }
     },
-    [page, search, filter, analysisFilter]
+    [page, search, filter, analysisFilter, visibleAnalysis]
   );
 
   useEffect(() => {
@@ -205,7 +199,6 @@ export default function CaseList() {
                 {[
                   "Case name",
                   "Date",
-                  "Pipeline",
                   "Analysis",
                   "Platform",
                   "Samples",
@@ -292,9 +285,6 @@ export default function CaseList() {
                     {c.order_date ?? "—"}
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                    {pipelineShortName(c) ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
                     {c.analysis_type === "shotgun"
                       ? "Shotgun"
                       : c.analysis_type === "amplicon"
@@ -344,7 +334,7 @@ export default function CaseList() {
               {cases.length === 0 && (
                 <tr>
                   <td
-                    colSpan={role === "admin" ? 10 : 9}
+                    colSpan={role === "admin" ? 9 : 8}
                     className="px-4 py-10 text-center text-sm text-gray-400"
                   >
                     No cases found.
