@@ -11,7 +11,7 @@ const ANALYSIS_TYPES = [
   },
   {
     key: "amplicon",
-    label: "16S amplicon",
+    label: "Amplicon metagenomics",
     hint: "TRANA",
   },
 ];
