@@ -66,8 +66,8 @@ export default function UserPreferences() {
     <div className="flex-1 overflow-y-auto p-8">
       <div className="max-w-lg flex flex-col gap-5">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900 mb-1">Preferences</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-sm font-semibold text-gray-900 mb-1">Preferences</h1>
+          <p className="text-xs text-gray-500">
             These settings apply to your account and persist across sessions.
           </p>
         </div>
@@ -87,7 +87,7 @@ export default function UserPreferences() {
                   onChange={() => toggleKingdom(k)}
                   className="rounded"
                 />
-                <span className="text-sm text-gray-700">{k}</span>
+                <span className="text-xs text-gray-700">{k}</span>
               </label>
             ))}
           </div>
@@ -108,7 +108,7 @@ export default function UserPreferences() {
                   onChange={() => toggleAnalysis(a.key)}
                   className="rounded"
                 />
-                <span className="text-sm text-gray-700">
+                <span className="text-xs text-gray-700">
                   {a.label}
                   <span className="text-gray-400 ml-1.5">({a.hint})</span>
                 </span>
@@ -121,7 +121,7 @@ export default function UserPreferences() {
           <button
             onClick={handleSave}
             disabled={saving || analysisEmpty}
-            className="px-4 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors"
+            className="px-4 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors"
           >
             {saving ? "Saving…" : "Save"}
           </button>
