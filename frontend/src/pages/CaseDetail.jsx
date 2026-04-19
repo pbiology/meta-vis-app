@@ -321,9 +321,7 @@ export default function CaseDetail() {
               <div className="flex items-center gap-2">
                 {caseData?.has_multiqc && (
                   <div className="flex items-center gap-1 mr-1">
-                    {multiqcError && (
-                      <span className="text-xs text-red-400">Failed to load.</span>
-                    )}
+                    {multiqcError && <span className="text-xs text-red-400">Failed to load.</span>}
                     <button
                       onClick={handleOpenMultiqc}
                       disabled={multiqcLoading}
