@@ -85,6 +85,7 @@ async def list_samples(
                 "review": 1,
                 "taxprofiler.classifiers.kraken2.pct_unclassified": 1,
                 "taxprofiler.classifiers.kraken2.num_species": 1,
+                "trana.nanoplot_processed.number_of_reads": 1,
             }
         },
     ]
@@ -199,7 +200,8 @@ async def get_krona(
     _user: dict = Depends(get_current_user),
 ):
     sample = await db["samples"].find_one(
-        {"_id": _oid(sample_id)}, {"case_id": 1, "has_krona": 1}
+        {"_id": _oid(sample_id)},
+        {"case_id": 1, "has_krona": 1, "sample_id": 1, "trana": 1},
     )
     if not sample:
         raise HTTPException(status_code=404, detail=f"Sample '{sample_id}' not found")
@@ -210,7 +212,12 @@ async def get_krona(
 
     from app.database import get_blob_store
 
-    key = f"krona/{sample['case_id']}/{classifier}.html"
+    is_trana = bool(sample.get("trana"))
+    key = (
+        f"krona/{sample['case_id']}/{sample['sample_id']}.html"
+        if is_trana
+        else f"krona/{sample['case_id']}/{classifier}.html"
+    )
     html = await get_blob_store().get(key)
     if not html:
         raise HTTPException(

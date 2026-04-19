@@ -250,7 +250,7 @@ function KingdomBreakdownChart({ data, width = 600, height = 220 }) {
 // Scatter chart — total classified reads per NTC
 // ---------------------------------------------------------------------------
 
-function ReadCountChart({ data, width = 600, height = 200 }) {
+function ReadCountChart({ data, width = 600, height = 200, isFraction = false }) {
   const [tooltip, setTooltip] = useState(null);
   const svgRef = useRef(null);
 
@@ -373,7 +373,10 @@ function ReadCountChart({ data, width = 600, height = 200 }) {
         >
           <div className="font-medium">{tooltip.data.sample_id}</div>
           <div className="text-gray-400">{tooltip.data.case_id}</div>
-          <div>{tooltip.data.classified_reads.toLocaleString()} classified reads</div>
+          <div>
+            {tooltip.data.classified_reads.toLocaleString()}{" "}
+            {isFraction ? "processed reads" : "classified reads"}
+          </div>
           <div className="text-gray-400">{tooltip.data.order_date}</div>
         </div>
       )}
@@ -385,7 +388,7 @@ function ReadCountChart({ data, width = 600, height = 200 }) {
 // Line chart — recurring taxa
 // ---------------------------------------------------------------------------
 
-function RecurringTaxaChart({ taxa, width = 600, height = 240 }) {
+function RecurringTaxaChart({ taxa, width = 600, height = 240, isFraction = false }) {
   const [tooltip, setTooltip] = useState(null);
   const svgRef = useRef(null);
 
@@ -534,7 +537,11 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240 }) {
           </div>
           <div className="text-gray-400">taxid:{tooltip.data.taxon_id}</div>
           <div className="text-gray-400">{tooltip.data.case_id}</div>
-          <div>{tooltip.data.abundance.toLocaleString()} reads</div>
+          <div>
+            {isFraction
+              ? `${(tooltip.data.abundance * 100).toFixed(2)}% abundance`
+              : `${tooltip.data.abundance.toLocaleString()} reads`}
+          </div>
           <div className="text-gray-400">{tooltip.data.order_date}</div>
         </div>
       )}
@@ -548,8 +555,10 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240 }) {
 
 export default function NtcTrends() {
   const [material, setMaterial] = useState("DNA");
+  const [pipeline, setPipeline] = useState("taxprofiler");
   const [windowDays, setWindowDays] = useState(90);
   const [minReads, setMinReads] = useState(3);
+  const [minAbundance, setMinAbundance] = useState(0.001);
   const [minCasePct, setMinCasePct] = useState(10);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -563,14 +572,20 @@ export default function NtcTrends() {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    getNtcTrends({ material, windowDays, minReads, minCasePct: minCasePct / 100 })
+    getNtcTrends({
+      material: pipeline === "trana" ? "DNA" : material,
+      windowDays,
+      minReads: pipeline === "trana" ? minAbundance : minReads,
+      minCasePct: minCasePct / 100,
+      pipeline,
+    })
       .then(setData)
       .catch(() => setError("Failed to load NTC trends."))
       .finally(() => setLoading(false));
     getNtcContaminantAlerts()
       .then((d) => setContaminantAlerts(d.alerts ?? []))
       .catch(() => {});
-  }, [material, windowDays, minReads, minCasePct]);
+  }, [material, pipeline, windowDays, minReads, minAbundance, minCasePct]);
 
   return (
     <div className="flex flex-col h-full">
@@ -578,38 +593,82 @@ export default function NtcTrends() {
       <div className="flex items-center gap-3 px-6 py-4 bg-white border-b border-gray-100 flex-shrink-0">
         <h1 className="text-sm font-medium text-gray-900 flex-1">NTC trends</h1>
 
-        {/* Material tabs */}
-        <div className="flex items-center gap-1">
-          {["DNA", "RNA"].map((m) => (
+        {/* Material tabs — hidden for Trana (always DNA) */}
+        {pipeline !== "trana" && (
+          <div className="flex items-center gap-1">
+            {["DNA", "RNA"].map((m) => (
+              <button
+                key={m}
+                onClick={() => setMaterial(m)}
+                className={`px-3 py-1 rounded-full text-xs transition-colors ${
+                  material === m
+                    ? "bg-gray-900 text-white font-medium"
+                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Pipeline tabs */}
+        <div className="flex items-center gap-1 border-l border-gray-100 pl-3">
+          {[
+            { value: "taxprofiler", label: "Taxprofiler" },
+            { value: "trana", label: "Trana" },
+          ].map(({ value, label }) => (
             <button
-              key={m}
-              onClick={() => setMaterial(m)}
+              key={value}
+              onClick={() => setPipeline(value)}
               className={`px-3 py-1 rounded-full text-xs transition-colors ${
-                material === m
+                pipeline === value
                   ? "bg-gray-900 text-white font-medium"
                   : "bg-gray-100 text-gray-500 hover:bg-gray-200"
               }`}
             >
-              {m}
+              {label}
             </button>
           ))}
         </div>
 
         {/* Filter controls */}
-        <div className="flex items-center gap-2 border-l border-gray-100 pl-3">
-          <span className="text-xs text-gray-400">Min reads</span>
-          <select
-            value={minReads}
-            onChange={(e) => setMinReads(Number(e.target.value))}
-            className="text-xs border border-gray-200 rounded-md px-2 py-1 text-gray-600 bg-white focus:outline-none"
-          >
-            {[1, 3, 5, 10, 20].map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
-        </div>
+        {pipeline === "trana" ? (
+          <div className="flex items-center gap-2 border-l border-gray-100 pl-3">
+            <span className="text-xs text-gray-400">Min abundance</span>
+            <select
+              value={minAbundance}
+              onChange={(e) => setMinAbundance(Number(e.target.value))}
+              className="text-xs border border-gray-200 rounded-md px-2 py-1 text-gray-600 bg-white focus:outline-none"
+            >
+              {[
+                { value: 0.001, label: "0.1%" },
+                { value: 0.005, label: "0.5%" },
+                { value: 0.01, label: "1%" },
+                { value: 0.05, label: "5%" },
+              ].map(({ value, label }) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 border-l border-gray-100 pl-3">
+            <span className="text-xs text-gray-400">Min reads</span>
+            <select
+              value={minReads}
+              onChange={(e) => setMinReads(Number(e.target.value))}
+              className="text-xs border border-gray-200 rounded-md px-2 py-1 text-gray-600 bg-white focus:outline-none"
+            >
+              {[1, 3, 5, 10, 20].map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="flex items-center gap-2 border-l border-gray-100 pl-3">
           <span className="text-xs text-gray-400">Min cases</span>
           <select
@@ -742,7 +801,11 @@ export default function NtcTrends() {
                 Each dot is one NTC. Dashed line at 1 000 reads.
               </p>
               {readCountWidth > 0 && (
-                <ReadCountChart data={data.read_counts} width={readCountWidth - 32} />
+                <ReadCountChart
+                  data={data.read_counts}
+                  width={readCountWidth - 32}
+                  isFraction={pipeline === "trana"}
+                />
               )}
             </section>
 
@@ -751,14 +814,21 @@ export default function NtcTrends() {
               <div className="flex items-center justify-between mb-1">
                 <h2 className="text-xs font-medium text-gray-600">Recurring taxa</h2>
                 <span className="text-xs text-gray-400">
-                  ≥ {minCasePct}% of cases · &gt; {minReads} reads · kraken2
+                  ≥ {minCasePct}% of cases ·{" "}
+                  {pipeline === "trana"
+                    ? `> ${(minAbundance * 100).toFixed(1)}% abundance · emu`
+                    : `> ${minReads} reads · kraken2`}
                 </span>
               </div>
               <p className="text-xs text-gray-400 mb-3">
                 Taxa present in ≥ {data.min_case_count} of {data.total_ntcs} NTCs in this window.
               </p>
               {recurringWidth > 0 && (
-                <RecurringTaxaChart taxa={data.recurring_taxa} width={recurringWidth - 32} />
+                <RecurringTaxaChart
+                  taxa={data.recurring_taxa}
+                  width={recurringWidth - 32}
+                  isFraction={pipeline === "trana"}
+                />
               )}
             </section>
           </>

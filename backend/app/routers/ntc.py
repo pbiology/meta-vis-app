@@ -422,8 +422,9 @@ async def get_contaminant_alerts(
 async def get_ntc_trends(
     material: Literal["DNA", "RNA"] = Query(..., description="DNA or RNA"),
     window_days: int = Query(default=90, ge=7, le=365),
-    min_reads: int = Query(default=3, ge=1),
+    min_reads: float = Query(default=3, gt=0),
     min_case_pct: float = Query(default=0.10, ge=0.0, le=1.0),
+    pipeline: Literal["taxprofiler", "trana"] = Query(default="taxprofiler"),
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ) -> dict:
@@ -436,7 +437,7 @@ async def get_ntc_trends(
     """
     from datetime import date
 
-    cache_key = (material, window_days, min_reads, min_case_pct)
+    cache_key = (material, window_days, min_reads, min_case_pct, pipeline)
     now = time.monotonic()
     cached = _trends_cache.get(cache_key)
     if cached is not None and now - cached[0] < _TRENDS_TTL:
@@ -462,6 +463,7 @@ async def get_ntc_trends(
     if not total_ntcs:
         result: dict = {
             "material": material,
+            "pipeline": pipeline,
             "window_days": window_days,
             "total_ntcs": 0,
             "read_counts": [],
@@ -474,13 +476,14 @@ async def get_ntc_trends(
     min_case_count = max(1, round(total_ntcs * min_case_pct))
 
     # --- Aggregation pipelines ---
-    # Shared opening stages: match NTC samples, unwind to individual kraken2
-    # profile entries, and exclude ignored taxa — all inside MongoDB so that
-    # full profile arrays are never transferred to Python.
-    _unwind_kraken2: list[dict] = [
+    # Shared opening stages: match NTC samples, unwind to individual profile
+    # entries for the selected classifier, and exclude ignored taxa — all inside
+    # MongoDB so that full profile arrays are never transferred to Python.
+    classifier = "emu" if pipeline == "trana" else "kraken2"
+    _unwind_profiles: list[dict] = [
         {"$match": base_query},
         {"$unwind": "$profiles"},
-        {"$match": {"profiles.classifier": "kraken2"}},
+        {"$match": {"profiles.classifier": classifier}},
         {"$unwind": "$profiles.profile"},
         {"$match": {"profiles.profile.taxon_id": {"$nin": excluded_ids}}},
     ]
@@ -488,7 +491,7 @@ async def get_ntc_trends(
     # kingdom_breakdown: sum abundances per (sample, superkingdom).
     # The superkingdom "Other" bucketing is done in Python after the aggregation
     # to avoid $cond/$in operators that some drivers/mocks don't support.
-    kb_pipeline: list[dict] = _unwind_kraken2 + [
+    kb_pipeline: list[dict] = _unwind_profiles + [
         {
             "$group": {
                 "_id": {
@@ -515,7 +518,7 @@ async def get_ntc_trends(
     # recurring_taxa: find taxa that appear in >= min_case_count distinct cases.
     # Deduplicate per (taxon_id, sample_id, case_id) first to avoid double-counting
     # taxa that appear at multiple ranks within the same sample.
-    rt_pipeline: list[dict] = _unwind_kraken2 + [
+    rt_pipeline: list[dict] = _unwind_profiles + [
         {"$match": {"profiles.profile.abundance": {"$gt": min_reads}}},
         # Deduplicate per (taxon, sample, case) — take max abundance.
         {
@@ -554,58 +557,64 @@ async def get_ntc_trends(
     ]
 
     # Run read_counts query and both aggregations in parallel.
-    # The root-node aggregation (taxon_id == 1) is used as a fallback for
-    # samples whose taxprofiler QC data doesn't carry classified_reads directly.
-    rc_cursor = (
-        db["samples"]
-        .find(
-            base_query,
-            {
-                "sample_id": 1,
-                "case_id_str": 1,
-                "order_date": 1,
-                "taxprofiler.classifiers.kraken2.classified_reads": 1,
-            },
+    # For taxprofiler, a root-node aggregation (taxon_id == 1) provides a fallback
+    # for samples whose QC data doesn't carry classified_reads directly.
+    # For trana, reads come from nanoplot_processed; no root fallback needed.
+    rc_projection: dict = {"sample_id": 1, "case_id_str": 1, "order_date": 1}
+    if pipeline == "trana":
+        rc_projection["trana.nanoplot_processed.number_of_reads"] = 1
+    else:
+        rc_projection["taxprofiler.classifiers.kraken2.classified_reads"] = 1
+
+    rc_cursor = db["samples"].find(base_query, rc_projection).sort("order_date", 1)
+
+    if pipeline == "trana":
+        rc_docs, kb_docs, rt_docs = await asyncio.gather(
+            rc_cursor.to_list(None),
+            db["samples"].aggregate(kb_pipeline).to_list(None),
+            db["samples"].aggregate(rt_pipeline).to_list(None),
         )
-        .sort("order_date", 1)
-    )
-
-    root_agg_pipeline: list[dict] = [
-        {"$match": base_query},
-        {"$unwind": "$profiles"},
-        {"$match": {"profiles.classifier": "kraken2"}},
-        {"$unwind": "$profiles.profile"},
-        {"$match": {"profiles.profile.taxon_id": 1}},
-        {
-            "$group": {
-                "_id": "$sample_id",
-                "root_abundance": {"$first": "$profiles.profile.abundance"},
-            }
-        },
-    ]
-
-    rc_docs, kb_docs, rt_docs, root_docs = await asyncio.gather(
-        rc_cursor.to_list(None),
-        db["samples"].aggregate(kb_pipeline).to_list(None),
-        db["samples"].aggregate(rt_pipeline).to_list(None),
-        db["samples"].aggregate(root_agg_pipeline).to_list(None),
-    )
-
-    root_by_sample: dict[str, int] = {
-        doc["_id"]: doc["root_abundance"] for doc in root_docs
-    }
+        root_by_sample: dict[str, int] = {}
+    else:
+        root_agg_pipeline: list[dict] = [
+            {"$match": base_query},
+            {"$unwind": "$profiles"},
+            {"$match": {"profiles.classifier": "kraken2"}},
+            {"$unwind": "$profiles.profile"},
+            {"$match": {"profiles.profile.taxon_id": 1}},
+            {
+                "$group": {
+                    "_id": "$sample_id",
+                    "root_abundance": {"$first": "$profiles.profile.abundance"},
+                }
+            },
+        ]
+        rc_docs, kb_docs, rt_docs, root_docs = await asyncio.gather(
+            rc_cursor.to_list(None),
+            db["samples"].aggregate(kb_pipeline).to_list(None),
+            db["samples"].aggregate(rt_pipeline).to_list(None),
+            db["samples"].aggregate(root_agg_pipeline).to_list(None),
+        )
+        root_by_sample = {doc["_id"]: doc["root_abundance"] for doc in root_docs}
 
     # --- Assemble read_counts ---
     read_counts: list[dict] = []
     for doc in rc_docs:
-        classified = (
-            doc.get("taxprofiler", {})
-            .get("classifiers", {})
-            .get("kraken2", {})
-            .get("classified_reads")
-        )
-        if classified is None:
-            classified = root_by_sample.get(doc["sample_id"])
+        if pipeline == "trana":
+            classified: int | None = (
+                doc.get("trana", {})
+                .get("nanoplot_processed", {})
+                .get("number_of_reads")
+            )
+        else:
+            classified = (
+                doc.get("taxprofiler", {})
+                .get("classifiers", {})
+                .get("kraken2", {})
+                .get("classified_reads")
+            )
+            if classified is None:
+                classified = root_by_sample.get(doc["sample_id"])
         read_counts.append(
             {
                 "sample_id": doc["sample_id"],
@@ -666,6 +675,7 @@ async def get_ntc_trends(
 
     result = {
         "material": material,
+        "pipeline": pipeline,
         "window_days": window_days,
         "total_ntcs": total_ntcs,
         "min_case_count": min_case_count,

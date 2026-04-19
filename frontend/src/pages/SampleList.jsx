@@ -107,7 +107,7 @@ export default function SampleList() {
                   "Order date",
                   "Case",
                   "Type",
-                  "Unclassified",
+                  "Unclassified / Reads",
                   "Species",
                   "Case status",
                 ].map((h) => (
@@ -138,10 +138,12 @@ export default function SampleList() {
                     <Badge type={s.sample_type} />
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-700">
-                    {fmtPct(s.taxprofiler?.classifiers?.kraken2?.pct_unclassified)}
+                    {s.trana
+                      ? fmt(s.trana?.nanoplot_processed?.number_of_reads)
+                      : fmtPct(s.taxprofiler?.classifiers?.kraken2?.pct_unclassified)}
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-700">
-                    {fmt(s.taxprofiler?.classifiers?.kraken2?.num_species)}
+                    {s.trana ? "—" : fmt(s.taxprofiler?.classifiers?.kraken2?.num_species)}
                   </td>
                   <td className="px-4 py-3">
                     <Badge type={s.review?.reviewed ? "reviewed" : "pending"} />

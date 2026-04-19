@@ -1,17 +1,29 @@
 #!/usr/bin/env python
 """
-Ingest a taxprofiler case into meta-vis-app.
+Ingest pipeline results into meta-vis-app.
 
-Usage:
-    python ingest.py \
-        --case-id slowtiger \
-        --taxonomy-db k2_pluspf \
-        --multiqc  /path/to/multiqc_data.json \
-        --pipeline-info /path/to/pipeline_info \
-        --classifier "kraken2 db=k2_pluspf taxpasta=/path/kraken2.tsv krona=/path/kraken2.html" \
-        --classifier "centrifuge db=p_compressed+h+v taxpasta=/path/centrifuge.tsv krona=/path/centrifuge.html" \
-        --sample "subject_id=S-001 sample_id=PE-04-28 type=sample material=DNA order_date=2026-02-20 column_kraken2=PE-04-28_k2_pluspf.kraken2.kraken2.report column_centrifuge=PE-04-28_p_compressed+h+v.centrifuge" \
+Subcommands:
+
+  taxprofiler  Ingest a taxprofiler (shotgun metagenomics) case
+  trana        Ingest a Trana (16S amplicon, ONT, Emu) case
+
+Examples:
+
+    python ingest.py taxprofiler \\
+        --case-id slowtiger \\
+        --multiqc  /path/to/multiqc_data.json \\
+        --pipeline-info /path/to/software_versions.yml \\
+        --classifier "kraken2 db=k2_pluspf taxpasta=/path/kraken2.tsv krona=/path/kraken2.html" \\
+        --sample "sample_id=PE-04-28 type=sample material=DNA column_kraken2=PE-04-28_k2_pluspf" \\
         --password yourpassword
+
+    python ingest.py trana \\
+        --case-id trana_run1 \\
+        --pipeline-info /path/to/software_versions.yml \\
+        --sample "sample_id=S1 type=sample material=DNA abundance_path=/path/to/S1_rel-abundance.tsv" \\
+        --password yourpassword
+
+Backward-compatible: calling without a subcommand (old style) routes to taxprofiler.
 """
 
 import argparse
@@ -32,6 +44,11 @@ def get_session(base_url: str, username: str, password: str) -> requests.Session
     data = resp.json()
     print(f"Logged in as {data['username']} ({data['role']})")
     return session
+
+
+# ---------------------------------------------------------------------------
+# Taxprofiler subcommand
+# ---------------------------------------------------------------------------
 
 
 def parse_classifier(raw: str) -> dict:
@@ -103,7 +120,7 @@ def parse_sample(raw: str, classifier_names: list) -> dict:
     }
 
 
-def ingest(args):
+def ingest_taxprofiler(args):
     session = get_session(args.url, args.username, args.password)
 
     classifiers = [parse_classifier(c) for c in args.classifier]
@@ -129,23 +146,10 @@ def ingest(args):
         json=payload,
     )
 
-    if resp.status_code == 200:
-        result = resp.json()
-        print(f"✓ Ingested case '{result['case_id']}'")
-        print(f"  Case ObjectId : {result['case_object_id']}")
-        print(f"  Samples       : {result['samples_ingested']}")
-        for sid in result["sample_ids"]:
-            print(f"  Sample ID     : {sid}")
-    else:
-        print(f"Ingest failed ({resp.status_code}): {resp.text}")
-        sys.exit(1)
+    _print_result(resp, args.case_id)
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Ingest a taxprofiler case into meta-vis-app",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
+def _add_taxprofiler_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--case-id", required=True)
     parser.add_argument(
         "--order-date", default=None, help="Case order date (YYYY-MM-DD)"
@@ -191,8 +195,161 @@ def main():
     parser.add_argument("--username", default="admin")
     parser.add_argument("--password", required=True)
 
+
+# ---------------------------------------------------------------------------
+# Trana subcommand
+# ---------------------------------------------------------------------------
+
+
+def parse_trana_sample(raw: str) -> dict:
+    """
+    Parse a --sample argument for Trana ingest.
+    Required keys: sample_id, type, material, abundance_path
+    Optional keys: subject_id, sample_source, krona_path,
+                   nanoplot_unprocessed_path, nanoplot_processed_path
+    """
+    parts = {}
+    for token in raw.split():
+        if "=" not in token:
+            print(f"Invalid sample token '{token}' — expected key=value")
+            sys.exit(1)
+        k, v = token.split("=", 1)
+        parts[k.strip()] = v.strip()
+
+    required = {"sample_id", "type", "material", "abundance_path"}
+    missing = required - parts.keys()
+    if missing:
+        print(f"Sample is missing required keys: {missing}")
+        sys.exit(1)
+
+    return {
+        "subject_id": parts.get("subject_id"),
+        "sample_id": parts["sample_id"],
+        "sample_type": parts["type"],
+        "material": parts["material"],
+        "sample_source": parts.get("sample_source", "N/A"),
+        "abundance_path": parts["abundance_path"],
+        "krona_path": parts.get("krona_path"),
+        "nanoplot_unprocessed_path": parts.get("nanoplot_unprocessed_path"),
+        "nanoplot_processed_path": parts.get("nanoplot_processed_path"),
+    }
+
+
+def ingest_trana(args):
+    session = get_session(args.url, args.username, args.password)
+
+    samples = [parse_trana_sample(s) for s in args.sample]
+
+    payload = {
+        "case_id": args.case_id,
+        "order_date": args.order_date,
+        "pipeline_info_path": args.pipeline_info,
+        "samples": samples,
+        "analysis_type": args.analysis_type,
+        "sequencing_platform": args.sequencing_platform,
+    }
+
+    print(f"Ingesting {len(samples)} Trana sample(s) for case '{args.case_id}' ...")
+
+    resp = session.post(
+        f"{args.url}/api/v1/ingest/trana",
+        json=payload,
+    )
+
+    _print_result(resp, args.case_id)
+
+
+def _add_trana_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--case-id", required=True)
+    parser.add_argument(
+        "--order-date", default=None, help="Case order date (YYYY-MM-DD)"
+    )
+    parser.add_argument(
+        "--pipeline-info",
+        required=True,
+        help="Path to Trana software_versions.yml",
+    )
+    parser.add_argument(
+        "--sample",
+        action="append",
+        required=True,
+        metavar="KEY=VALUE ...",
+        help=(
+            "Sample descriptor. Required: sample_id, type, material, abundance_path. "
+            "Optional: subject_id, sample_source, krona_path, "
+            "nanoplot_unprocessed_path, nanoplot_processed_path. "
+            "Repeat for each sample."
+        ),
+    )
+    parser.add_argument(
+        "--analysis-type",
+        choices=["shotgun", "amplicon"],
+        default="amplicon",
+        help="Analysis type (default: amplicon)",
+    )
+    parser.add_argument(
+        "--sequencing-platform",
+        choices=["illumina", "nanopore"],
+        default="nanopore",
+        help="Sequencing platform (default: nanopore)",
+    )
+    parser.add_argument("--url", default="http://localhost:8000")
+    parser.add_argument("--username", default="admin")
+    parser.add_argument("--password", required=True)
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
+
+
+def _print_result(resp: requests.Response, case_id: str) -> None:
+    if resp.status_code == 200:
+        result = resp.json()
+        print(f"Ingested case '{result['case_id']}'")
+        print(f"  Case ObjectId : {result['case_object_id']}")
+        print(f"  Samples       : {result['samples_ingested']}")
+        for sid in result["sample_ids"]:
+            print(f"  Sample ID     : {sid}")
+    else:
+        print(f"Ingest failed ({resp.status_code}): {resp.text}")
+        sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+_SUBCOMMANDS = {"taxprofiler", "trana"}
+
+
+def main():
+    # Backward compatibility: if first arg is not a subcommand, assume taxprofiler
+    if len(sys.argv) > 1 and sys.argv[1] not in _SUBCOMMANDS and sys.argv[1] != "-h":
+        sys.argv.insert(1, "taxprofiler")
+
+    parser = argparse.ArgumentParser(
+        description="Ingest pipeline results into meta-vis-app",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    tp_parser = subparsers.add_parser(
+        "taxprofiler", help="Ingest a taxprofiler (shotgun metagenomics) case"
+    )
+    _add_taxprofiler_args(tp_parser)
+
+    tr_parser = subparsers.add_parser(
+        "trana", help="Ingest a Trana (16S amplicon, ONT, Emu) case"
+    )
+    _add_trana_args(tr_parser)
+
     args = parser.parse_args()
-    ingest(args)
+
+    if args.command == "taxprofiler":
+        ingest_taxprofiler(args)
+    elif args.command == "trana":
+        ingest_trana(args)
 
 
 if __name__ == "__main__":

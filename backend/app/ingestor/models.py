@@ -74,6 +74,23 @@ class MultiQCRaw(_StrictBase):
 
 
 # ---------------------------------------------------------------------------
+# NanoPlot QC (Trana pipeline)
+# ---------------------------------------------------------------------------
+
+
+class NanoPlotStats(_StrictBase):
+    """QC metrics parsed from a NanoPlot NanoStats.txt file."""
+
+    mean_read_length: Optional[float] = None
+    mean_read_quality: Optional[float] = None
+    median_read_length: Optional[float] = None
+    median_read_quality: Optional[float] = None
+    number_of_reads: Optional[int] = None
+    read_length_n50: Optional[int] = None
+    total_bases: Optional[int] = None
+
+
+# ---------------------------------------------------------------------------
 # Metaval output models
 # ---------------------------------------------------------------------------
 

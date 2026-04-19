@@ -8,15 +8,18 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from typing import Any
 from pymongo import UpdateOne
 
-from app.models.sample import IngestRequest
+from app.models.sample import IngestRequest, TranaIngestRequest
 from app.ingestor.taxpasta_reader import load_taxpasta, extract_sample_profile
 from app.ingestor.multiqc_reader import read_multiqc
 from app.ingestor.pipeline_info_reader import read_pipeline_info
 from app.ingestor.metaval_reader import read_metaval
+from app.ingestor.emu_reader import read_emu_abundance
+from app.ingestor.nanoplot_reader import read_nanostats
 from app.ingestor.models import (
     MetavalOutput,
     MetavalResult,
     MultiQCRaw,
+    NanoPlotStats,
     PipelineInfoOutput,
     TaxonEntry,
 )
@@ -435,6 +438,154 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
                 for r in metaval_results
             ]
         )
+
+    return {
+        "case_id": request.case_id,
+        "case_object_id": str(case_object_id),
+        "samples_ingested": len(sample_ids),
+        "sample_ids": [str(sid) for sid in sample_ids],
+    }
+
+
+async def ingest_trana_case(
+    request: TranaIngestRequest, db: AsyncIOMotorDatabase
+) -> dict:
+    """Ingest a Trana pipeline case (16S amplicon, ONT, Emu classifier)."""
+    now = datetime.now(timezone.utc)
+
+    pipeline_info: PipelineInfoOutput = read_pipeline_info(request.pipeline_info_path)
+
+    existing_case = await db["cases"].find_one({"case_id": request.case_id})
+    if existing_case:
+        raise ValueError(
+            f"Case '{request.case_id}' already exists. "
+            f"Delete the existing case first, or use a unique case_id."
+        )
+
+    has_krona = any(s.krona_path for s in request.samples)
+
+    case_doc: dict[str, Any] = {
+        "case_id": request.case_id,
+        "order_date": request.order_date.isoformat() if request.order_date else None,
+        "ingested_at": now,
+        "sample_ids": [],
+        "classifiers": [{"name": "emu", "db": "default", "krona_id": None}],
+        "has_krona": has_krona,
+        "pipeline_info": pipeline_info.model_dump(),
+        "analysis_type": request.analysis_type.value if request.analysis_type else None,
+        "sequencing_platform": (
+            request.sequencing_platform.value if request.sequencing_platform else None
+        ),
+        "review": {
+            "reviewed": False,
+            "reviewed_by": None,
+            "reviewed_at": None,
+            "notes": None,
+        },
+    }
+    case_result = await db["cases"].insert_one(case_doc)
+    case_object_id = case_result.inserted_id
+
+    # Upload per-sample Krona files
+    krona_tasks = []
+    for s in request.samples:
+        if s.krona_path:
+            krona_tasks.append(_store_krona(case_object_id, s.sample_id, s.krona_path))
+    if krona_tasks:
+        await asyncio.gather(*krona_tasks)
+
+    sample_names = [s.sample_id for s in request.samples if s.sample_type == "sample"]
+    sample_count = len(sample_names)
+    control_count = len(
+        [
+            s
+            for s in request.samples
+            if s.sample_type in ("positive_ctrl", "negative_ctrl")
+        ]
+    )
+
+    sample_docs: list[dict[str, Any]] = []
+    all_profiles: list[dict[str, Any]] = []
+
+    for s in request.samples:
+        subject_object_id = None
+        if s.subject_id:
+            subject_object_id = await _upsert_subject(db, s.subject_id)
+
+        taxon_entries: list[TaxonEntry] = read_emu_abundance(s.abundance_path)
+        profile: dict[str, Any] = {
+            "classifier": "emu",
+            "classifier_db": "default",
+            "profile": [e.model_dump() for e in taxon_entries],
+        }
+        profiles = [profile]
+        all_profiles.extend(profiles)
+
+        outbreak_taxa = _compute_outbreak_taxa(profiles)
+
+        all_taxon_ids: list[int] = [e.taxon_id for e in taxon_entries]
+
+        # Read NanoPlot QC if paths provided
+        nanoplot_unprocessed: NanoPlotStats | None = None
+        nanoplot_processed: NanoPlotStats | None = None
+        if s.nanoplot_unprocessed_path:
+            nanoplot_unprocessed = read_nanostats(s.nanoplot_unprocessed_path)
+        if s.nanoplot_processed_path:
+            nanoplot_processed = read_nanostats(s.nanoplot_processed_path)
+
+        trana_qc: dict[str, Any] = {
+            "nanoplot_unprocessed": (
+                nanoplot_unprocessed.model_dump() if nanoplot_unprocessed else None
+            ),
+            "nanoplot_processed": (
+                nanoplot_processed.model_dump() if nanoplot_processed else None
+            ),
+            "pipeline_info": pipeline_info.model_dump(),
+        }
+
+        sample_docs.append(
+            {
+                "case_id": case_object_id,
+                "case_id_str": request.case_id,
+                "sample_id": s.sample_id,
+                "sample_source": s.sample_source,
+                "order_date": (
+                    request.order_date.isoformat() if request.order_date else None
+                ),
+                "subject_id": subject_object_id,
+                "sample_type": s.sample_type,
+                "material": s.material,
+                "trana": trana_qc,
+                "profiles": profiles,
+                "outbreak_taxa": outbreak_taxa,
+                "all_taxon_ids": all_taxon_ids,
+                "has_krona": bool(s.krona_path),
+                "review": {
+                    "reviewed": False,
+                    "reviewed_by": None,
+                    "reviewed_at": None,
+                    "notes": None,
+                },
+                "ingested_at": now,
+            }
+        )
+
+    await _upsert_taxa_from_profiles(all_profiles, db)
+
+    insert_result = await db["samples"].insert_many(sample_docs)
+    sample_ids = list(insert_result.inserted_ids)
+
+    await db["cases"].update_one(
+        {"_id": case_object_id},
+        {
+            "$set": {
+                "sample_ids": sample_ids,
+                "sample_count": sample_count,
+                "control_count": control_count,
+                "sample_names": sample_names,
+            }
+        },
+    )
 
     return {
         "case_id": request.case_id,
