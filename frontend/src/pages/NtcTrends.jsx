@@ -1,12 +1,16 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { getNtcTrends, getNtcContaminantAlerts } from "../api/ntc";
 import { scaleTime, scaleLinear, scaleOrdinal } from "@visx/scale";
 import { LinePath, Circle } from "@visx/shape";
 import { AxisBottom, AxisLeft } from "@visx/axis";
 import { GridRows } from "@visx/grid";
 import { Group } from "@visx/group";
 import { curveMonotoneX } from "@visx/curve";
+import { getNtcTrends, getNtcContaminantAlerts } from "../api/ntc";
+import { useAuth } from "../context/AuthContext";
+
+// Map between NtcTrends' pipeline param and the user-preference analysis type.
+const PIPELINE_TO_ANALYSIS = { taxprofiler: "shotgun", trana: "amplicon" };
 
 // Measures the pixel width of a DOM element, updating on resize.
 function useContainerWidth() {
@@ -554,8 +558,27 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240, isFraction = fals
 // ---------------------------------------------------------------------------
 
 export default function NtcTrends() {
+  const { preferences } = useAuth();
+  const visibleAnalysis = preferences?.visible_analysis_types ?? ["shotgun", "amplicon"];
+  const availablePipelines = useMemo(
+    () =>
+      [
+        { value: "taxprofiler", label: "Taxprofiler" },
+        { value: "trana", label: "Trana" },
+      ].filter((p) => visibleAnalysis.includes(PIPELINE_TO_ANALYSIS[p.value])),
+    [visibleAnalysis]
+  );
+
   const [material, setMaterial] = useState("DNA");
-  const [pipeline, setPipeline] = useState("taxprofiler");
+  const [pipeline, setPipeline] = useState(availablePipelines[0]?.value ?? "taxprofiler");
+
+  // If the user's preferences change and the current pipeline is hidden,
+  // switch to the first available one.
+  useEffect(() => {
+    if (!availablePipelines.some((p) => p.value === pipeline)) {
+      if (availablePipelines.length > 0) setPipeline(availablePipelines[0].value);
+    }
+  }, [availablePipelines, pipeline]);
   const [windowDays, setWindowDays] = useState(90);
   const [minReads, setMinReads] = useState(3);
   const [minAbundance, setMinAbundance] = useState(0.001);
@@ -614,10 +637,7 @@ export default function NtcTrends() {
 
         {/* Pipeline tabs */}
         <div className="flex items-center gap-1 border-l border-gray-100 pl-3">
-          {[
-            { value: "taxprofiler", label: "Taxprofiler" },
-            { value: "trana", label: "Trana" },
-          ].map(({ value, label }) => (
+          {availablePipelines.map(({ value, label }) => (
             <button
               key={value}
               onClick={() => setPipeline(value)}
