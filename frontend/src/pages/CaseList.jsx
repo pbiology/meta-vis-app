@@ -5,6 +5,7 @@ import Badge from "../components/Badge";
 import { getOutbreaks } from "../api/alerts";
 import { getNtcContaminantCaseIds } from "../api/ntc";
 import { useAuth } from "../context/AuthContext";
+import { singleAnalysisFilter } from "../lib/analysisPreference";
 
 function pipelineShortName(c) {
   const raw = c.pipeline_info?.pipeline_configuration?.pipeline_name ?? "";
@@ -29,21 +30,23 @@ export default function CaseList() {
   const [ntcContaminantCaseIds, setNtcContaminantCaseIds] = useState(new Set());
   const [stats, setStats] = useState({ total: 0, pending: 0, reviewed: 0 });
   const navigate = useNavigate();
-  const { role } = useAuth();
+  const { role, preferences } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const filter = searchParams.get("filter") ?? "all";
   const analysisFilter = searchParams.get("analysis") ?? "all";
+  const visibleAnalysis = preferences?.visible_analysis_types;
 
   const load = useCallback(
     async (silent = false) => {
       if (!silent) setLoading(true);
       setError(null);
       try {
+        const effective = singleAnalysisFilter(visibleAnalysis, analysisFilter);
         const result = await getCases({
           page,
           search,
           reviewed: filter,
-          analysisType: analysisFilter,
+          analysisType: effective ?? "all",
         });
         setData(result);
         getOutbreaks(14)
@@ -67,7 +70,7 @@ export default function CaseList() {
         setLoading(false);
       }
     },
-    [page, search, filter, analysisFilter]
+    [page, search, filter, analysisFilter, visibleAnalysis]
   );
 
   useEffect(() => {

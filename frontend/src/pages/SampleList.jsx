@@ -3,10 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { getSamples } from "../api/samples";
 import Badge from "../components/Badge";
 import { fmt, fmtPct } from "../utils/format";
+import { useAuth } from "../context/AuthContext";
+import { singleAnalysisFilter } from "../lib/analysisPreference";
 
 const FILTERS = ["All", "Samples", "Controls"];
 
 export default function SampleList() {
+  const { preferences } = useAuth();
+  const visibleAnalysis = preferences?.visible_analysis_types;
   const [data, setData] = useState({ items: [], total: 0, pages: 1 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -22,14 +26,20 @@ export default function SampleList() {
     setLoading(true);
     setError(null);
     try {
-      const result = await getSamples({ page, search, filter: filterParam });
+      const analysisType = singleAnalysisFilter(visibleAnalysis);
+      const result = await getSamples({
+        page,
+        search,
+        filter: filterParam,
+        analysisType,
+      });
       setData(result);
     } catch {
       setError("Failed to load samples.");
     } finally {
       setLoading(false);
     }
-  }, [page, search, filterParam]);
+  }, [page, search, filterParam, visibleAnalysis]);
 
   useEffect(() => {
     load();
