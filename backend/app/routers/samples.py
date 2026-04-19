@@ -37,6 +37,7 @@ async def list_samples(
     page: int = 1,
     search: str = "",
     filter: str = "",
+    analysis_type: str | None = None,
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
@@ -46,6 +47,11 @@ async def list_samples(
         query["sample_type"] = "sample"
     elif filter == "controls":
         query["sample_type"] = {"$in": ["positive_ctrl", "negative_ctrl"]}
+
+    if analysis_type == "shotgun":
+        query["taxprofiler"] = {"$exists": True}
+    elif analysis_type == "amplicon":
+        query["trana"] = {"$exists": True}
 
     if search.strip():
         query["sample_id"] = {"$regex": search.strip()}
