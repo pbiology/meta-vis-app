@@ -23,9 +23,7 @@ export function MetricStrip({ metrics }) {
           >
             {m.value ?? "—"}
           </span>
-          {m.sub && (
-            <span className="text-[10px] text-gray-400">{m.sub}</span>
-          )}
+          {m.sub && <span className="text-[10px] text-gray-400">{m.sub}</span>}
         </div>
       ))}
     </div>

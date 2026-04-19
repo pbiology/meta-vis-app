@@ -138,28 +138,69 @@ export default function SampleDetail() {
           {isTrana ? (
             <MetricStrip
               metrics={[
-                { label: "Total reads",      value: fmt(trana?.nanoplot_unprocessed?.number_of_reads), sub: "before processing" },
-                { label: "Passed filter",    value: fmt(trana?.nanoplot_processed?.number_of_reads),   sub: "after processing" },
-                { label: "Mean read length",
-                  value: trana?.nanoplot_processed?.mean_read_length != null
-                    ? trana.nanoplot_processed.mean_read_length.toFixed(0) : "—",
-                  sub: "bp" },
-                { label: "Mean quality",
-                  value: trana?.nanoplot_processed?.mean_read_quality != null
-                    ? trana.nanoplot_processed.mean_read_quality.toFixed(1) : "—",
-                  sub: "Q" },
-                { label: "Read N50", value: fmt(trana?.nanoplot_processed?.read_length_n50), sub: "bp" },
+                {
+                  label: "Total reads",
+                  value: fmt(trana?.nanoplot_unprocessed?.number_of_reads),
+                  sub: "before processing",
+                },
+                {
+                  label: "Passed filter",
+                  value: fmt(trana?.nanoplot_processed?.number_of_reads),
+                  sub: "after processing",
+                },
+                {
+                  label: "Mean read length",
+                  value:
+                    trana?.nanoplot_processed?.mean_read_length != null
+                      ? trana.nanoplot_processed.mean_read_length.toFixed(0)
+                      : "—",
+                  sub: "bp",
+                },
+                {
+                  label: "Mean quality",
+                  value:
+                    trana?.nanoplot_processed?.mean_read_quality != null
+                      ? trana.nanoplot_processed.mean_read_quality.toFixed(1)
+                      : "—",
+                  sub: "Q",
+                },
+                {
+                  label: "Read N50",
+                  value: fmt(trana?.nanoplot_processed?.read_length_n50),
+                  sub: "bp",
+                },
               ]}
             />
           ) : (
             <MetricStrip
               metrics={[
-                { label: "Total reads",   value: fp ? fmt(fp.total_reads_before_filtering) : "—", sub: "before filtering" },
-                { label: "Passed filter", value: fp ? fmt(fp.passed_filter_reads) : "—",
-                  sub: fp ? `${fmtPct((fp.passed_filter_reads / fp.total_reads_before_filtering) * 100)} of raw` : "" },
-                { label: "Host removed",  value: bt ? fmtPct(bt.overall_alignment_rate) : "—", sub: "bowtie2" },
-                { label: "Q20 rate",      value: fmtPct(fp?.q20_rate ? fp.q20_rate * 100 : null), sub: "fastp" },
-                { label: "Q30 rate",      value: fmtPct(fp?.q30_rate ? fp.q30_rate * 100 : null), sub: "fastp" },
+                {
+                  label: "Total reads",
+                  value: fp ? fmt(fp.total_reads_before_filtering) : "—",
+                  sub: "before filtering",
+                },
+                {
+                  label: "Passed filter",
+                  value: fp ? fmt(fp.passed_filter_reads) : "—",
+                  sub: fp
+                    ? `${fmtPct((fp.passed_filter_reads / fp.total_reads_before_filtering) * 100)} of raw`
+                    : "",
+                },
+                {
+                  label: "Host removed",
+                  value: bt ? fmtPct(bt.overall_alignment_rate) : "—",
+                  sub: "bowtie2",
+                },
+                {
+                  label: "Q20 rate",
+                  value: fmtPct(fp?.q20_rate ? fp.q20_rate * 100 : null),
+                  sub: "fastp",
+                },
+                {
+                  label: "Q30 rate",
+                  value: fmtPct(fp?.q30_rate ? fp.q30_rate * 100 : null),
+                  sub: "fastp",
+                },
               ]}
             />
           )}
@@ -189,7 +230,7 @@ export default function SampleDetail() {
                           warn: (clfQc?.pct_unclassified ?? 0) > 20,
                         },
                         { label: "Species", value: fmt(clfQc?.num_species), sub: clf.classifier },
-                        { label: "Genera",  value: fmt(clfQc?.num_genera),  sub: clf.classifier },
+                        { label: "Genera", value: fmt(clfQc?.num_genera), sub: clf.classifier },
                       ]}
                     />
                   </div>
