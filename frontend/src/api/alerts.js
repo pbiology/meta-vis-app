@@ -1,7 +1,15 @@
 import client from "./client";
 
-export async function getOutbreaks(windowDays = 14) {
-  const res = await client.get("/alerts/outbreaks", { params: { window_days: windowDays } });
+export async function getOutbreaks(windowDays = 14, analysisTypes = null) {
+  const params = { window_days: windowDays };
+  if (analysisTypes && analysisTypes.length > 0) {
+    params.analysis_types = analysisTypes;
+  }
+  const res = await client.get("/alerts/outbreaks", {
+    params,
+    // FastAPI list[str] expects repeated ?analysis_types=shotgun&analysis_types=amplicon
+    paramsSerializer: { indexes: null },
+  });
   // Transform the new response format into a flat list of outbreaks
   // New API returns: { results: [{ config_name, outbreaks: [...] }, ...] }
   // Frontend expects: { outbreaks: [...] } for backward compatibility
