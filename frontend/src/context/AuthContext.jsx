@@ -1,7 +1,10 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { getMyPreferences, updateMyPreferences } from "../api/users";
 
-const DEFAULT_PREFERENCES = { preferred_kingdoms: ["Viruses"] };
+const DEFAULT_PREFERENCES = {
+  preferred_kingdoms: ["Viruses"],
+  visible_analysis_types: ["shotgun", "amplicon"],
+};
 
 const AuthContext = createContext(null);
 
