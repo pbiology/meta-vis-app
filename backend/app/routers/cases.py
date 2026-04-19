@@ -296,6 +296,7 @@ async def delete_case(
     store = get_blob_store()
     await store.delete_prefix(f"krona/{oid}/")
     await store.delete_prefix(f"igv/{oid}/")
+    await store.delete_prefix(f"multiqc/{oid}/")
     await db["metaval_results"].delete_many({"case_id": oid})
     await db["cases"].delete_one({"_id": oid})
 
@@ -329,6 +330,26 @@ async def get_krona(
         raise HTTPException(
             status_code=404, detail=f"No Krona file for classifier '{classifier}'"
         )
+
+    return HTMLResponse(content=html)
+
+
+@router.get("/{case_id}/multiqc", summary="Serve MultiQC HTML report for a case")
+async def get_multiqc(
+    case_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+):
+    case = await db["cases"].find_one({"case_id": case_id})
+    if not case:
+        raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
+
+    from app.database import get_blob_store
+
+    key = f"multiqc/{case['_id']}/report.html"
+    html = await get_blob_store().get(key)
+    if not html:
+        raise HTTPException(status_code=404, detail="No MultiQC report for this case")
 
     return HTMLResponse(content=html)
 
