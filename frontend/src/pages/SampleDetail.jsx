@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link, useSearchParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query";
 import { getSample, getProfile, getNtcProfiles } from "../api/samples";
 import Badge from "../components/Badge";
-import MetricCard from "../components/MetricCard";
+import { MetricStrip } from "../components/MetricStrip";
 import TaxonomyTable from "../components/TaxonomyTable";
 import { getMetavalForSample } from "../api/metaval";
 import { getOutbreaks, getPathogens } from "../api/alerts";
@@ -136,109 +136,103 @@ export default function SampleDetail() {
             QC metrics
           </p>
           {isTrana ? (
-            <div className="grid grid-cols-4 gap-2.5">
-              <MetricCard
-                label="Total reads"
-                value={fmt(trana?.nanoplot_unprocessed?.number_of_reads)}
-                sub="before processing"
-              />
-              <MetricCard
-                label="Passed filter"
-                value={fmt(trana?.nanoplot_processed?.number_of_reads)}
-                sub="after processing"
-              />
-              <MetricCard
-                label="Mean read length"
-                value={
-                  trana?.nanoplot_processed?.mean_read_length != null
-                    ? trana.nanoplot_processed.mean_read_length.toFixed(0)
-                    : "—"
-                }
-                sub="processed (bp)"
-              />
-              <MetricCard
-                label="Mean quality"
-                value={
-                  trana?.nanoplot_processed?.mean_read_quality != null
-                    ? trana.nanoplot_processed.mean_read_quality.toFixed(1)
-                    : "—"
-                }
-                sub="processed (Q)"
-              />
-              <MetricCard
-                label="Read N50"
-                value={fmt(trana?.nanoplot_processed?.read_length_n50)}
-                sub="processed (bp)"
-              />
-            </div>
+            <MetricStrip
+              metrics={[
+                {
+                  label: "Total reads",
+                  value: fmt(trana?.nanoplot_unprocessed?.number_of_reads),
+                  sub: "before processing",
+                },
+                {
+                  label: "Passed filter",
+                  value: fmt(trana?.nanoplot_processed?.number_of_reads),
+                  sub: "after processing",
+                },
+                {
+                  label: "Mean read length",
+                  value:
+                    trana?.nanoplot_processed?.mean_read_length != null
+                      ? trana.nanoplot_processed.mean_read_length.toFixed(0)
+                      : "—",
+                  sub: "bp",
+                },
+                {
+                  label: "Mean quality",
+                  value:
+                    trana?.nanoplot_processed?.mean_read_quality != null
+                      ? trana.nanoplot_processed.mean_read_quality.toFixed(1)
+                      : "—",
+                  sub: "Q",
+                },
+                {
+                  label: "Read N50",
+                  value: fmt(trana?.nanoplot_processed?.read_length_n50),
+                  sub: "bp",
+                },
+              ]}
+            />
           ) : (
-            <div className="grid grid-cols-4 gap-2.5">
-              <MetricCard
-                label="Total reads"
-                value={fp ? fmt(fp.total_reads_before_filtering) : "—"}
-                sub="before filtering"
-              />
-              <MetricCard
-                label="Passed filter"
-                value={fp ? fmt(fp.passed_filter_reads) : "—"}
-                sub={
-                  fp
+            <MetricStrip
+              metrics={[
+                {
+                  label: "Total reads",
+                  value: fp ? fmt(fp.total_reads_before_filtering) : "—",
+                  sub: "before filtering",
+                },
+                {
+                  label: "Passed filter",
+                  value: fp ? fmt(fp.passed_filter_reads) : "—",
+                  sub: fp
                     ? `${fmtPct((fp.passed_filter_reads / fp.total_reads_before_filtering) * 100)} of raw`
-                    : ""
-                }
-              />
-              <MetricCard
-                label="Host removed"
-                value={bt ? fmtPct(bt.overall_alignment_rate) : "—"}
-                sub="bowtie2 alignment"
-              />
-              <MetricCard
-                label="Q20 rate"
-                value={fmtPct(fp?.q20_rate ? fp.q20_rate * 100 : null)}
-                sub="fastp"
-              />
-              <MetricCard
-                label="Q30 rate"
-                value={fmtPct(fp?.q30_rate ? fp.q30_rate * 100 : null)}
-                sub="fastp"
-              />
-            </div>
+                    : "",
+                },
+                {
+                  label: "Host removed",
+                  value: bt ? fmtPct(bt.overall_alignment_rate) : "—",
+                  sub: "bowtie2",
+                },
+                {
+                  label: "Q20 rate",
+                  value: fmtPct(fp?.q20_rate ? fp.q20_rate * 100 : null),
+                  sub: "fastp",
+                },
+                {
+                  label: "Q30 rate",
+                  value: fmtPct(fp?.q30_rate ? fp.q30_rate * 100 : null),
+                  sub: "fastp",
+                },
+              ]}
+            />
           )}
         </section>
 
-        {/* Classifier-specific QC metrics */}
+        {/* Classifier metrics */}
         {!isTrana && classifiers.length > 0 && (
           <section>
             <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">
               Classifier metrics
             </p>
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
               {classifiers.map((clf) => {
                 const clfQc = qc?.classifiers?.[clf.classifier];
                 return (
                   <div key={clf.classifier}>
-                    <p className="text-xs text-gray-400 mb-2">
+                    <p className="text-xs text-gray-400 mb-1.5">
                       {clf.classifier}
                       <span className="ml-1.5 text-gray-300">&middot; {clf.classifier_db}</span>
                     </p>
-                    <div className="grid grid-cols-4 gap-2.5">
-                      <MetricCard
-                        label="Unclassified"
-                        value={fmtPct(clfQc?.pct_unclassified)}
-                        sub={clfQc ? `${fmt(clfQc.unclassified_reads)} reads` : ""}
-                        warn={(clfQc?.pct_unclassified ?? 0) > 20}
-                      />
-                      <MetricCard
-                        label="Species"
-                        value={fmt(clfQc?.num_species)}
-                        sub={clf.classifier}
-                      />
-                      <MetricCard
-                        label="Genera"
-                        value={fmt(clfQc?.num_genera)}
-                        sub={clf.classifier}
-                      />
-                    </div>
+                    <MetricStrip
+                      metrics={[
+                        {
+                          label: "Unclassified",
+                          value: fmtPct(clfQc?.pct_unclassified),
+                          sub: clfQc ? `${fmt(clfQc.unclassified_reads)} reads` : "",
+                          warn: (clfQc?.pct_unclassified ?? 0) > 20,
+                        },
+                        { label: "Species", value: fmt(clfQc?.num_species), sub: clf.classifier },
+                        { label: "Genera", value: fmt(clfQc?.num_genera), sub: clf.classifier },
+                      ]}
+                    />
                   </div>
                 );
               })}
