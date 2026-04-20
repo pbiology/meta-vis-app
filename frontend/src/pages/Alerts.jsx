@@ -6,7 +6,7 @@ import { multiAnalysisFilter } from "../lib/analysisPreference";
 
 export default function Alerts() {
   const navigate = useNavigate();
-  const { role, preferences } = useAuth();
+  const { role, preferences, preferencesLoaded } = useAuth();
   const location = useLocation();
   const visibleAnalysis = preferences?.visible_analysis_types;
 
@@ -20,6 +20,7 @@ export default function Alerts() {
   const sectionRefs = useRef({});
 
   function load() {
+    if (!preferencesLoaded) return;
     setLoading(true);
     const analysisTypes = multiAnalysisFilter(visibleAnalysis);
     Promise.all([getOutbreaks(windowDays, analysisTypes), getIgnorelist()])
@@ -33,7 +34,7 @@ export default function Alerts() {
 
   useEffect(() => {
     load();
-  }, [windowDays, visibleAnalysis]);
+  }, [windowDays, visibleAnalysis, preferencesLoaded]);
 
   useEffect(() => {
     if (!data || !location.hash) return;
