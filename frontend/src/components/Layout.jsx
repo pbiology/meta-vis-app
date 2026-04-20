@@ -177,7 +177,7 @@ export default function Layout() {
           />
           <NavItem
             to="/alerts"
-            label="Alerts"
+            label="Outbreak alerts"
             icon={
               <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
                 <path
