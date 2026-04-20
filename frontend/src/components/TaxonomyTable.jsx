@@ -14,6 +14,7 @@ export default function TaxonomyTable({
   sampleId,
   outbreakTaxonIds,
   ntcProfiles,
+  contaminantConfig,
   pathogenIds,
   abundanceIsFraction = false,
   isNtc = false,
@@ -85,6 +86,20 @@ export default function TaxonomyTable({
 
   const ntcSum = (taxon_id) =>
     ntcForClassifier.reduce((sum, ntc) => sum + (ntc.abundanceMap[taxon_id] ?? 0), 0);
+
+  // Contaminant flag: NTC read sum (already scoped to this sample's material
+  // by the backend query, and to the current classifier by `ntcForClassifier`
+  // above) exceeds the configured threshold, and the taxon's rank is one
+  // the clinicians consider actionable.
+  const contaminantThreshold = contaminantConfig?.threshold ?? null;
+  const eligibleRanks = contaminantConfig?.eligible_ranks
+    ? new Set(contaminantConfig.eligible_ranks)
+    : null;
+  const isContaminant = (t) => {
+    if (!hasNtc || contaminantThreshold == null || !eligibleRanks) return false;
+    if (!eligibleRanks.has(t.rank ?? "no rank")) return false;
+    return ntcSum(t.taxon_id) > contaminantThreshold;
+  };
 
   const sorted = [...filtered].sort((a, b) => {
     if (taxSort.col === "name") return taxSort.dir * a.name.localeCompare(b.name);
@@ -339,6 +354,14 @@ export default function TaxonomyTable({
                         {pathogenIds?.has(t.taxon_id) && (
                           <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-red-50 text-red-600 font-medium">
                             pathogen
+                          </span>
+                        )}
+                        {isContaminant(t) && (
+                          <span
+                            title={`NTC reads (${ntcSum(t.taxon_id)}) exceed threshold of ${contaminantThreshold}`}
+                            className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-orange-50 text-orange-700 font-medium"
+                          >
+                            contaminant
                           </span>
                         )}
                         {outbreakTaxonIds.has(t.taxon_id) && (
