@@ -45,11 +45,13 @@ export default function SampleDetail() {
     enabled: !!sample,
   });
 
-  const { data: ntcProfiles = [], isError: ntcError } = useQuery({
+  const { data: ntcData, isError: ntcError } = useQuery({
     queryKey: ["ntcProfiles", sampleId],
     queryFn: () => getNtcProfiles(sampleId),
     enabled: !!sample,
   });
+  const ntcProfiles = ntcData?.profiles ?? [];
+  const contaminantConfig = ntcData?.contaminant_config ?? null;
 
   const { data: outbreakData, isError: outbreakError } = useQuery({
     queryKey: ["outbreaks", { windowDays: 14 }],
@@ -452,6 +454,7 @@ export default function SampleDetail() {
                     sampleId={sampleId}
                     outbreakTaxonIds={outbreakTaxonIds}
                     ntcProfiles={ntcProfiles}
+                    contaminantConfig={contaminantConfig}
                     pathogenIds={pathogenIds}
                     abundanceIsFraction={isTrana}
                     isNtc={sample?.sample_type !== "sample"}

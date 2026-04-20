@@ -7,6 +7,10 @@ from bson import ObjectId
 from app.models.sample import SampleResponse
 
 from app.audit import log_audit_event
+from app.constants import (
+    CONTAMINANT_ELIGIBLE_RANKS,
+    CONTAMINANT_NTC_READ_THRESHOLD,
+)
 from app.database import get_db
 from app.auth.utils import get_current_user
 
@@ -174,7 +178,7 @@ async def get_ntc_profiles(
         .to_list(length=50)
     )
 
-    result = []
+    profiles = []
     for ntc in ntc_docs:
         ntc_sample_id = ntc.get("sample_id", str(ntc["_id"]))
         classifiers = {}
@@ -186,14 +190,20 @@ async def get_ntc_profiles(
                 if e.get("abundance", 0) > 0
             }
             classifiers[clf] = abundance_map
-        result.append(
+        profiles.append(
             {
                 "sample_id": ntc_sample_id,
                 "classifiers": classifiers,
             }
         )
 
-    return result
+    return {
+        "profiles": profiles,
+        "contaminant_config": {
+            "threshold": CONTAMINANT_NTC_READ_THRESHOLD,
+            "eligible_ranks": sorted(CONTAMINANT_ELIGIBLE_RANKS),
+        },
+    }
 
 
 @router.get(
