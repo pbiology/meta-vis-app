@@ -21,7 +21,7 @@ export default function CaseList() {
   const [ntcContaminantCaseIds, setNtcContaminantCaseIds] = useState(new Set());
   const [stats, setStats] = useState({ total: 0, pending: 0, reviewed: 0 });
   const navigate = useNavigate();
-  const { role, preferences } = useAuth();
+  const { role, preferences, preferencesLoaded } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const filter = searchParams.get("filter") ?? "all";
   const analysisFilter = searchParams.get("analysis") ?? "all";
@@ -29,6 +29,7 @@ export default function CaseList() {
 
   const load = useCallback(
     async (silent = false) => {
+      if (!preferencesLoaded) return;
       if (!silent) setLoading(true);
       setError(null);
       try {
@@ -61,7 +62,7 @@ export default function CaseList() {
         setLoading(false);
       }
     },
-    [page, search, filter, analysisFilter, visibleAnalysis]
+    [page, search, filter, analysisFilter, visibleAnalysis, preferencesLoaded]
   );
 
   useEffect(() => {

@@ -9,7 +9,7 @@ import { singleAnalysisFilter } from "../lib/analysisPreference";
 const FILTERS = ["All", "Samples", "Controls"];
 
 export default function SampleList() {
-  const { preferences } = useAuth();
+  const { preferences, preferencesLoaded } = useAuth();
   const visibleAnalysis = preferences?.visible_analysis_types;
   const [data, setData] = useState({ items: [], total: 0, pages: 1 });
   const [loading, setLoading] = useState(true);
@@ -23,6 +23,7 @@ export default function SampleList() {
   const filterParam = filter === "Samples" ? "sample" : filter === "Controls" ? "controls" : "";
 
   const load = useCallback(async () => {
+    if (!preferencesLoaded) return;
     setLoading(true);
     setError(null);
     try {
@@ -39,7 +40,7 @@ export default function SampleList() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, filterParam, visibleAnalysis]);
+  }, [page, search, filterParam, visibleAnalysis, preferencesLoaded]);
 
   useEffect(() => {
     load();

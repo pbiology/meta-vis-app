@@ -558,7 +558,7 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240, isFraction = fals
 // ---------------------------------------------------------------------------
 
 export default function NtcTrends() {
-  const { preferences } = useAuth();
+  const { preferences, preferencesLoaded } = useAuth();
   const visibleAnalysis = preferences?.visible_analysis_types ?? ["shotgun", "amplicon"];
   const availablePipelines = useMemo(
     () =>
@@ -593,6 +593,7 @@ export default function NtcTrends() {
   const [recurringRef, recurringWidth] = useContainerWidth();
 
   useEffect(() => {
+    if (!preferencesLoaded) return;
     setLoading(true);
     setError(null);
     getNtcTrends({
@@ -608,7 +609,7 @@ export default function NtcTrends() {
     getNtcContaminantAlerts()
       .then((d) => setContaminantAlerts(d.alerts ?? []))
       .catch(() => {});
-  }, [material, pipeline, windowDays, minReads, minAbundance, minCasePct]);
+  }, [material, pipeline, windowDays, minReads, minAbundance, minCasePct, preferencesLoaded]);
 
   return (
     <div className="flex flex-col h-full">
