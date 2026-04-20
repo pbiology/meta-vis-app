@@ -557,9 +557,35 @@ async def get_taxon_occurrences(
 
     cases = await db["samples"].aggregate(pipeline).to_list(length=200)
 
+    all_classifiers: set[str] = set()
+    reshaped_cases: list[dict] = []
+    for case in cases:
+        by_sample: dict[str, dict[str, float]] = {}
+        case_classifiers: set[str] = set()
+        for entry in case.get("samples", []):
+            sample_id = entry["sample_id"]
+            classifier = entry["classifier"]
+            abundance = entry["abundance"]
+            by_sample.setdefault(sample_id, {})[classifier] = abundance
+            case_classifiers.add(classifier)
+        all_classifiers.update(case_classifiers)
+        reshaped_cases.append(
+            {
+                "case_id": case["case_id"],
+                "order_date": case.get("order_date"),
+                "sample_count": case.get("sample_count", len(by_sample)),
+                "classifiers": sorted(case_classifiers),
+                "samples": [
+                    {"sample_id": sid, "reads": by_sample[sid]}
+                    for sid in sorted(by_sample)
+                ],
+            }
+        )
+
     return {
         "taxon_id": taxon_id,
         "window_days": window_days,
-        "total_cases": len(cases),
-        "cases": cases,
+        "total_cases": len(reshaped_cases),
+        "all_classifiers": sorted(all_classifiers),
+        "cases": reshaped_cases,
     }
