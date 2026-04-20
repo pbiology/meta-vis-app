@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -223,7 +223,7 @@ function OccurrencesSection({ taxonId }) {
             <table className="w-full text-left">
               <thead>
                 <tr>
-                  {["Case", "Order date", "Samples", "Classifiers / reads"].map((h) => (
+                  {["Case", "Order date", "Samples", "Reads by sample × classifier"].map((h) => (
                     <th
                       key={h}
                       className="px-4 py-2 text-xs font-medium text-gray-400 border-b border-gray-100"
@@ -234,37 +234,71 @@ function OccurrencesSection({ taxonId }) {
                 </tr>
               </thead>
               <tbody>
-                {data.cases.map((c, i) => (
-                  <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
-                    <td className="px-4 py-2.5">
-                      <Link
-                        to={`/cases/${c.case_id}`}
-                        className="text-xs font-mono text-blue-600 hover:underline"
-                      >
-                        {c.case_id}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-gray-500 tabular-nums">
-                      {c.order_date ?? "—"}
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-gray-500 tabular-nums">
-                      {c.sample_count}
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <div className="flex flex-wrap gap-1.5">
-                        {c.samples.map((s, j) => (
-                          <span
-                            key={j}
-                            className="text-xs text-gray-500 tabular-nums"
-                            title={s.sample_id}
+                {data.cases.map((c, i) => {
+                  const classifiers = data.all_classifiers ?? c.classifiers ?? [];
+                  const gridCols = `minmax(0, auto) repeat(${classifiers.length}, minmax(0, 1fr))`;
+                  return (
+                    <tr key={i} className="border-t border-gray-50 hover:bg-gray-50 align-top">
+                      <td className="px-4 py-2.5">
+                        <Link
+                          to={`/cases/${c.case_id}`}
+                          className="text-xs font-mono text-blue-600 hover:underline"
+                        >
+                          {c.case_id}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-gray-500 tabular-nums">
+                        {c.order_date ?? "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-gray-500 tabular-nums">
+                        {c.sample_count}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {classifiers.length === 0 ? (
+                          <span className="text-xs text-gray-300">—</span>
+                        ) : (
+                          <div
+                            className="inline-grid gap-x-4 gap-y-1 items-baseline"
+                            style={{ gridTemplateColumns: gridCols }}
                           >
-                            <span className="text-gray-400">{s.classifier}</span> {fmt(s.abundance)}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                            <span />
+                            {classifiers.map((cl) => (
+                              <span
+                                key={cl}
+                                className="text-[10px] uppercase tracking-wider text-gray-400 text-right"
+                              >
+                                {cl}
+                              </span>
+                            ))}
+                            {c.samples.map((s) => (
+                              <React.Fragment key={s.sample_id}>
+                                <span
+                                  className="text-xs font-mono text-gray-500 truncate max-w-[12rem]"
+                                  title={s.sample_id}
+                                >
+                                  {s.sample_id}
+                                </span>
+                                {classifiers.map((cl) => {
+                                  const v = s.reads?.[cl];
+                                  return (
+                                    <span
+                                      key={cl}
+                                      className={`text-xs tabular-nums text-right ${
+                                        v == null ? "text-gray-300" : "text-gray-700"
+                                      }`}
+                                    >
+                                      {v == null ? "—" : fmt(v)}
+                                    </span>
+                                  );
+                                })}
+                              </React.Fragment>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
