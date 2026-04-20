@@ -203,7 +203,10 @@ class TestGetNtcProfiles:
         oid, _ = await insert_sample(fake_db, "SRR001", material="DNA")
         resp = client.get(f"/api/v1/samples/{oid}/ntc_profiles")
         assert resp.status_code == 200
-        assert resp.json() == []
+        body = resp.json()
+        assert body["profiles"] == []
+        assert body["contaminant_config"]["threshold"] == 5
+        assert "species" in body["contaminant_config"]["eligible_ranks"]
 
     async def test_returns_ntc_in_same_case(self, client, fake_db):
         # Insert a sample and an NTC in the same case
@@ -236,8 +239,60 @@ class TestGetNtcProfiles:
         )
         resp = client.get(f"/api/v1/samples/{sample_result.inserted_id}/ntc_profiles")
         assert resp.status_code == 200
-        assert len(resp.json()) == 1
-        assert resp.json()[0]["sample_id"] == "CTRL01"
+        body = resp.json()
+        assert len(body["profiles"]) == 1
+        assert body["profiles"][0]["sample_id"] == "CTRL01"
+
+    async def test_excludes_ntcs_of_other_material(self, client, fake_db):
+        # A DNA sample must never receive RNA NTCs in its contaminant baseline —
+        # the two are technically incomparable. Invariant guards the
+        # contaminant-pill logic downstream.
+        case_oid = ObjectId()
+        sample_result = await fake_db["samples"].insert_one(
+            {
+                "case_id": case_oid,
+                "case_id_str": "testcase",
+                "sample_id": "SRR001",
+                "sample_type": "sample",
+                "material": "DNA",
+                "has_krona": False,
+                "profiles": [],
+                "review": {"reviewed": False},
+                "ingested_at": datetime.now(timezone.utc),
+            }
+        )
+        # RNA NTC — must be filtered out
+        await fake_db["samples"].insert_one(
+            {
+                "case_id": case_oid,
+                "case_id_str": "testcase",
+                "sample_id": "CTRL_RNA",
+                "sample_type": "negative_ctrl",
+                "material": "RNA",
+                "has_krona": False,
+                "profiles": [{"classifier": "kraken2", "profile": []}],
+                "review": {"reviewed": False},
+                "ingested_at": datetime.now(timezone.utc),
+            }
+        )
+        # DNA NTC — must be included
+        await fake_db["samples"].insert_one(
+            {
+                "case_id": case_oid,
+                "case_id_str": "testcase",
+                "sample_id": "CTRL_DNA",
+                "sample_type": "negative_ctrl",
+                "material": "DNA",
+                "has_krona": False,
+                "profiles": [{"classifier": "kraken2", "profile": []}],
+                "review": {"reviewed": False},
+                "ingested_at": datetime.now(timezone.utc),
+            }
+        )
+        resp = client.get(f"/api/v1/samples/{sample_result.inserted_id}/ntc_profiles")
+        assert resp.status_code == 200
+        profiles = resp.json()["profiles"]
+        assert [p["sample_id"] for p in profiles] == ["CTRL_DNA"]
 
     async def test_unknown_sample_returns_404(self, client, fake_db):
         resp = client.get(f"/api/v1/samples/{ObjectId()}/ntc_profiles")
