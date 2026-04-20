@@ -13,6 +13,51 @@ set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 
+ADJECTIVES_FILE="$REPO_ROOT/backend/test-data/adjectives.txt"
+ANIMALS_FILE="$REPO_ROOT/backend/test-data/animals.txt"
+
+if [ ! -f "$ADJECTIVES_FILE" ] || [ ! -f "$ANIMALS_FILE" ]; then
+  echo "Error: missing word list file(s): $ADJECTIVES_FILE, $ANIMALS_FILE" >&2
+  exit 1
+fi
+
+# Load word lists into arrays (skip blank lines).
+adjectives=()
+while IFS= read -r line; do
+  [ -n "$line" ] && adjectives+=("$line")
+done < "$ADJECTIVES_FILE"
+
+animals=()
+while IFS= read -r line; do
+  [ -n "$line" ] && animals+=("$line")
+done < "$ANIMALS_FILE"
+
+used_ids=()
+
+generate_case_id() {
+  local max_combos=$(( ${#adjectives[@]} * ${#animals[@]} ))
+  if [ "${#used_ids[@]}" -ge "$max_combos" ]; then
+    echo "Error: exhausted all $max_combos adjective-animal combinations" >&2
+    return 1
+  fi
+  local candidate
+  while :; do
+    local adj="${adjectives[$(( RANDOM % ${#adjectives[@]} ))]}"
+    local ani="${animals[$(( RANDOM % ${#animals[@]} ))]}"
+    candidate="${adj}${ani}"
+    local taken=0
+    for existing in ${used_ids[@]+"${used_ids[@]}"}; do
+      if [ "$existing" = "$candidate" ]; then
+        taken=1
+        break
+      fi
+    done
+    [ "$taken" -eq 0 ] && break
+  done
+  used_ids+=("$candidate")
+  echo "$candidate"
+}
+
 # Host path: used to run ingest.py from your machine
 INGEST_SCRIPT="$REPO_ROOT/ingest.py"
 
@@ -46,7 +91,7 @@ if [ "$COUNT" -gt 0 ]; then
   fail=0
 
   for i in $(seq 1 "$COUNT"); do
-    case_id=$(LC_ALL=C tr -dc 'a-z' < /dev/urandom | head -c 12)
+    case_id=$(generate_case_id)
 
     offset_days=$(( RANDOM % (range_days + 1) ))
     offset_secs=$(( offset_days * 86400 ))
@@ -96,7 +141,7 @@ if [ "$TRANA_COUNT" -gt 0 ]; then
   t_fail=0
 
   for i in $(seq 1 "$TRANA_COUNT"); do
-    case_id="trana-$(LC_ALL=C tr -dc 'a-z' < /dev/urandom | head -c 8)"
+    case_id=$(generate_case_id)
 
     offset_days=$(( RANDOM % (range_days + 1) ))
     offset_secs=$(( offset_days * 86400 ))

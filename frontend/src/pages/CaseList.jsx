@@ -149,29 +149,31 @@ export default function CaseList() {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2 border-l border-gray-200 pl-3">
-          {["all", "shotgun", "amplicon"].map((a) => (
-            <button
-              key={a}
-              onClick={() => {
-                setPage(1);
-                const next = new URLSearchParams(searchParams);
-                if (a === "all") next.delete("analysis");
-                else next.set("analysis", a);
-                setSearchParams(next);
-              }}
-              className={`text-xs font-medium px-2.5 py-1.5 rounded-md transition-colors ${
-                analysisFilter === a
-                  ? "bg-blue-100 text-blue-700"
-                  : "text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              {a === "all" && <>All Types</>}
-              {a === "shotgun" && <>Shotgun</>}
-              {a === "amplicon" && <>Amplicon</>}
-            </button>
-          ))}
-        </div>
+        {(visibleAnalysis?.length ?? 2) !== 1 && (
+          <div className="flex items-center gap-2 border-l border-gray-200 pl-3">
+            {["all", "shotgun", "amplicon"].map((a) => (
+              <button
+                key={a}
+                onClick={() => {
+                  setPage(1);
+                  const next = new URLSearchParams(searchParams);
+                  if (a === "all") next.delete("analysis");
+                  else next.set("analysis", a);
+                  setSearchParams(next);
+                }}
+                className={`text-xs font-medium px-2.5 py-1.5 rounded-md transition-colors ${
+                  analysisFilter === a
+                    ? "bg-blue-100 text-blue-700"
+                    : "text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                {a === "all" && <>All Types</>}
+                {a === "shotgun" && <>Shotgun</>}
+                {a === "amplicon" && <>Amplicon</>}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="ml-auto pl-3 border-l border-gray-200 flex items-center gap-4">
           <span className="text-xs text-gray-400">
             <span className="text-amber-500 font-medium">{stats.pending}</span> pending
