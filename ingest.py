@@ -129,6 +129,7 @@ def ingest_taxprofiler(args):
 
     payload = {
         "case_id": args.case_id,
+        "ticket_id": args.ticket_id,
         "order_date": args.order_date,
         "multiqc_path": args.multiqc,
         "multiqc_report_path": args.multiqc_report,
@@ -152,6 +153,11 @@ def ingest_taxprofiler(args):
 
 def _add_taxprofiler_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--case-id", required=True)
+    parser.add_argument(
+        "--ticket-id",
+        default=None,
+        help="Freshdesk ticket ID associated with this case (optional)",
+    )
     parser.add_argument(
         "--order-date", default=None, help="Case order date (YYYY-MM-DD)"
     )
@@ -248,6 +254,7 @@ def ingest_trana(args):
 
     payload = {
         "case_id": args.case_id,
+        "ticket_id": args.ticket_id,
         "order_date": args.order_date,
         "multiqc_report_path": args.multiqc_report,
         "pipeline_info_path": args.pipeline_info,
@@ -268,6 +275,11 @@ def ingest_trana(args):
 
 def _add_trana_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--case-id", required=True)
+    parser.add_argument(
+        "--ticket-id",
+        default=None,
+        help="Freshdesk ticket ID associated with this case (optional)",
+    )
     parser.add_argument(
         "--order-date", default=None, help="Case order date (YYYY-MM-DD)"
     )
