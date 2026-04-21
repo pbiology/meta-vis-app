@@ -8,7 +8,12 @@ import { useAuth } from "../context/AuthContext";
 import { singleAnalysisFilter } from "../lib/analysisPreference";
 
 export default function CaseList() {
-  const [data, setData] = useState({ items: [], total: 0, pages: 1 });
+  const [data, setData] = useState({
+    items: [],
+    total: 0,
+    pages: 1,
+    ticket_links_enabled: false,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(1);
@@ -108,6 +113,7 @@ export default function CaseList() {
   }
 
   const cases = data.items ?? [];
+  const ticketLinksEnabled = data.ticket_links_enabled ?? false;
 
   return (
     <div className="flex flex-col h-full">
@@ -201,7 +207,7 @@ export default function CaseList() {
               <tr>
                 {[
                   "Case name",
-                  "Ticket",
+                  ...(ticketLinksEnabled ? ["Ticket"] : []),
                   "Date",
                   "Analysis",
                   "Platform",
@@ -285,12 +291,12 @@ export default function CaseList() {
                       )}
                     </div>
                   </td>
-                  <td
-                    className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {c.ticket_id ? (
-                      c.ticket_url ? (
+                  {ticketLinksEnabled && (
+                    <td
+                      className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {c.ticket_url ? (
                         <a
                           href={c.ticket_url}
                           target="_blank"
@@ -300,12 +306,10 @@ export default function CaseList() {
                           {c.ticket_id}
                         </a>
                       ) : (
-                        c.ticket_id
-                      )
-                    ) : (
-                      "—"
-                    )}
-                  </td>
+                        "—"
+                      )}
+                    </td>
+                  )}
                   <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
                     {c.order_date ?? "—"}
                   </td>
