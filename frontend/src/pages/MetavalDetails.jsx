@@ -2,24 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { getMetavalResult, submitBlast, getIgvUrl } from "../api/metaval";
 
-function BlastModal({ onClose }) {
-  const [status, setStatus] = useState("blasting");
-  const [error, setError] = useState(null);
-  const { metavalId } = useParams();
-
-  useEffect(() => {
-    submitBlast(metavalId)
-      .then((data) => {
-        window.open(data.results_url, "_blank");
-        onClose();
-      })
-      .catch((err) => {
-        const msg = err?.response?.data?.detail ?? "BLAST submission failed. Please try again.";
-        setError(msg);
-        setStatus("error");
-      });
-  }, []);
-
+function BlastModal({ status, error, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
       <div className="bg-white rounded-2xl shadow-xl px-8 py-7 max-w-sm w-full mx-4 flex flex-col gap-4">
@@ -81,13 +64,31 @@ const TYPE_LABEL = {
 };
 
 function VerificationDataSection({ result }) {
-  const [showBlast, setShowBlast] = useState(false);
+  const { metavalId } = useParams();
+  const [blastState, setBlastState] = useState({ open: false, status: "blasting", error: null });
 
   const vd = result?.verification_data ?? {};
 
+  const closeBlast = () => setBlastState((s) => ({ ...s, open: false }));
+
+  const handleBlastClick = () => {
+    setBlastState({ open: true, status: "blasting", error: null });
+    submitBlast(metavalId)
+      .then((data) => {
+        window.open(data.results_url, "_blank");
+        closeBlast();
+      })
+      .catch((err) => {
+        const msg = err?.response?.data?.detail ?? "BLAST submission failed. Please try again.";
+        setBlastState({ open: true, status: "error", error: msg });
+      });
+  };
+
   return (
     <>
-      {showBlast && <BlastModal onClose={() => setShowBlast(false)} />}
+      {blastState.open && (
+        <BlastModal status={blastState.status} error={blastState.error} onClose={closeBlast} />
+      )}
 
       <section className="bg-white border border-gray-100 rounded-xl">
         <div className="px-5 py-3.5 border-b border-gray-100">
@@ -135,7 +136,7 @@ function VerificationDataSection({ result }) {
                 <td className="px-5 py-2.5 text-right">
                   {vd.available && (
                     <button
-                      onClick={() => setShowBlast(true)}
+                      onClick={handleBlastClick}
                       className="text-xs px-3 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
                     >
                       BLAST
