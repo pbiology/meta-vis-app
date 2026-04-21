@@ -244,7 +244,23 @@ export default function CaseDetail() {
           Cases
         </button>
         <span className="text-gray-200">/</span>
-        <h1 className="text-sm font-medium text-gray-900 font-mono flex-1">{caseId}</h1>
+        <h1 className="text-sm font-medium text-gray-900 font-mono flex-1 flex items-center gap-2">
+          {caseId}
+          {caseData?.ticket_id &&
+            (caseData.ticket_url ? (
+              <a
+                href={caseData.ticket_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-normal text-blue-600 hover:text-blue-800 hover:underline"
+                title="Open Freshdesk ticket"
+              >
+                #{caseData.ticket_id}
+              </a>
+            ) : (
+              <span className="text-xs font-normal text-gray-400">#{caseData.ticket_id}</span>
+            ))}
+        </h1>
         <Badge type={reviewed ? "reviewed" : "pending"} />
         <button
           onClick={() => setNotesOpen((o) => !o)}
