@@ -18,6 +18,11 @@ export default function SampleDetail() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(null);
+  const [metavalDisplayCount, setMetavalDisplayCount] = useState(10);
+
+  useEffect(() => {
+    setMetavalDisplayCount(10);
+  }, [activeTab]);
 
   // Primary data — must succeed for the page to render
   const {
@@ -277,33 +282,50 @@ export default function SampleDetail() {
             {metavalResults.length === 0 ? (
               <p className="px-4 py-6 text-xs text-gray-300 text-center">No viral taxon found</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr>
-                      <th className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100">
-                        Viral taxon
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {metavalResults
-                      .filter((r) => r.classifier === activeTab)
-                      .map((r) => (
-                        <tr key={r._id} className="border-t border-gray-50 hover:bg-gray-50">
-                          <td className="px-4 py-2.5">
-                            <Link
-                              to={`/samples/${sampleId}/metaval/${r._id}`}
-                              className="text-xs italic text-gray-700 hover:text-blue-600 underline transition-colors"
-                            >
-                              {r.taxon_name.replace(/^taxid_\d+_/, "").replace(/-/g, " ")}
-                            </Link>
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
+              (() => {
+                const filtered = metavalResults.filter((r) => r.classifier === activeTab);
+                const displayed = filtered.slice(0, metavalDisplayCount);
+                const hasMore = filtered.length > metavalDisplayCount;
+                return (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr>
+                            <th className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100">
+                              Viral taxon
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {displayed.map((r) => (
+                            <tr key={r._id} className="border-t border-gray-50 hover:bg-gray-50">
+                              <td className="px-4 py-2.5">
+                                <Link
+                                  to={`/samples/${sampleId}/metaval/${r._id}`}
+                                  className="text-xs italic text-gray-700 hover:text-blue-600 underline transition-colors"
+                                >
+                                  {r.taxon_name.replace(/^taxid_\d+_/, "").replace(/-/g, " ")}
+                                </Link>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {hasMore && (
+                      <div className="px-4 py-3 border-t border-gray-50">
+                        <button
+                          onClick={() => setMetavalDisplayCount((n) => n + 10)}
+                          className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                          Load more ({filtered.length - metavalDisplayCount} remaining)
+                        </button>
+                      </div>
+                    )}
+                  </>
+                );
+              })()
             )}
           </section>
         )}
