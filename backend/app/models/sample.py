@@ -194,6 +194,8 @@ class CaseResponse(_Base):
     """Validated response model for case documents read from MongoDB."""
 
     case_id: str
+    ticket_id: Optional[str] = None
+    ticket_url: Optional[str] = None
     order_date: Optional[str] = None
     ingested_at: Optional[datetime] = None
     classifiers: List[CaseClassifier] = []
@@ -237,6 +239,7 @@ class SampleIngestRequest(BaseModel):
 
 class IngestRequest(BaseModel):
     case_id: str
+    ticket_id: Optional[str] = None
     order_date: Optional[date] = None
     multiqc_path: str
     multiqc_report_path: Optional[str] = None  # path to multiqc_report.html
@@ -271,6 +274,7 @@ class TranaIngestRequest(BaseModel):
     """Top-level ingest request for a Trana pipeline run."""
 
     case_id: str
+    ticket_id: Optional[str] = None
     order_date: Optional[date] = None
     multiqc_report_path: Optional[str] = None  # path to multiqc_report.html
     pipeline_info_path: str
