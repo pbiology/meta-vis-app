@@ -28,9 +28,7 @@ class Settings(BaseSettings):
 
     # Freshdesk — base URL for case ticket links. `{ticket_id}` is substituted
     # at serialisation time. Leave unset to disable the ticket link in the UI.
-    freshdesk_base_url: Optional[str] = (
-        "https://scilifelab.freshdesk.com/a/tickets/{ticket_id}"
-    )
+    freshdesk_base_url: Optional[str] = None
 
     # Object storage — optional, falls back to MongoDB if not set
     object_storage_endpoint: Optional[str] = None
