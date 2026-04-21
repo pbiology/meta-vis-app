@@ -281,6 +281,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
 
     case_doc = {
         "case_id": request.case_id,
+        "ticket_id": request.ticket_id,
         "order_date": request.order_date.isoformat() if request.order_date else None,
         "ingested_at": now,
         "sample_ids": [],
@@ -481,6 +482,7 @@ async def ingest_trana_case(
 
     case_doc: dict[str, Any] = {
         "case_id": request.case_id,
+        "ticket_id": request.ticket_id,
         "order_date": request.order_date.isoformat() if request.order_date else None,
         "ingested_at": now,
         "sample_ids": [],
