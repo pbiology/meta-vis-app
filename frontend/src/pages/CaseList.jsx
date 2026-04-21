@@ -201,6 +201,7 @@ export default function CaseList() {
               <tr>
                 {[
                   "Case name",
+                  "Ticket",
                   "Date",
                   "Analysis",
                   "Platform",
@@ -283,6 +284,27 @@ export default function CaseList() {
                         </svg>
                       )}
                     </div>
+                  </td>
+                  <td
+                    className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {c.ticket_id ? (
+                      c.ticket_url ? (
+                        <a
+                          href={c.ticket_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {c.ticket_id}
+                        </a>
+                      ) : (
+                        c.ticket_id
+                      )
+                    ) : (
+                      "—"
+                    )}
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
                     {c.order_date ?? "—"}
