@@ -5,7 +5,7 @@ export function fmt(n, decimals = 0) {
     : n;
 }
 
-export function fmtPct(n) {
+export function fmtPct(n, decimals = 1) {
   if (n === undefined || n === null) return "—";
-  return `${n.toFixed(1)}%`;
+  return `${n.toFixed(decimals)}%`;
 }

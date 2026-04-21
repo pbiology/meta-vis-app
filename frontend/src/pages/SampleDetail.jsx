@@ -8,6 +8,7 @@ import TaxonomyTable from "../components/TaxonomyTable";
 import { getMetavalForSample } from "../api/metaval";
 import { getOutbreaks, getPathogens } from "../api/alerts";
 import { fmt, fmtPct } from "../utils/format";
+import { TAXON_ID_HUMAN } from "../utils/taxonomy";
 
 function DataWarning({ message }) {
   return <p className="text-xs text-amber-600 bg-amber-50 rounded px-3 py-1.5 mb-2">{message}</p>;
@@ -199,6 +200,11 @@ export default function SampleDetail() {
                   sub: "bowtie2",
                 },
                 {
+                  label: "Non-host reads",
+                  value: bt ? fmt(bt.aligned_none) : "—",
+                  sub: "bowtie2",
+                },
+                {
                   label: "Q20 rate",
                   value: fmtPct(fp?.q20_rate ? fp.q20_rate * 100 : null),
                   sub: "fastp",
@@ -222,22 +228,81 @@ export default function SampleDetail() {
             <div className="flex flex-col gap-2">
               {classifiers.map((clf) => {
                 const clfQc = qc?.classifiers?.[clf.classifier];
+                // Profile entries hold reads assigned directly to each node, so sum
+                // across all entries by superkingdom to get clade totals.
+                const sumBySuperkingdom = { Bacteria: 0, Eukaryota: 0, Viruses: 0, Archaea: 0 };
+                let humanReads = 0;
+                for (const e of clf.profile ?? []) {
+                  if (e.taxon_id === TAXON_ID_HUMAN) humanReads += e.abundance ?? 0;
+                  if (e.superkingdom && e.superkingdom in sumBySuperkingdom) {
+                    sumBySuperkingdom[e.superkingdom] += e.abundance ?? 0;
+                  }
+                }
+                const eukReads = Math.max(0, sumBySuperkingdom.Eukaryota - humanReads);
+                const bacReads = sumBySuperkingdom.Bacteria;
+                const virReads = sumBySuperkingdom.Viruses;
+                const archReads = sumBySuperkingdom.Archaea;
+                const unclassReads = clfQc?.unclassified_reads ?? 0;
+                const accountedReads =
+                  humanReads + eukReads + bacReads + archReads + virReads + unclassReads;
+                // Prefer the classifier's own reported total; diamond doesn't
+                // report total_reads so fall back to queries_aligned (% of hits).
+                const totalReads = clfQc?.total_reads ?? clfQc?.queries_aligned ?? accountedReads;
+                const totalSub =
+                  clfQc?.total_reads != null
+                    ? `of ${fmt(clfQc.total_reads)} reads`
+                    : clfQc?.queries_aligned != null
+                      ? `of ${fmt(clfQc.queries_aligned)} aligned queries`
+                      : null;
+                const otherReads = Math.max(0, totalReads - accountedReads);
+                const pct = (n) => (totalReads > 0 ? (n / totalReads) * 100 : 0);
                 return (
                   <div key={clf.classifier}>
                     <p className="text-xs text-gray-400 mb-1.5">
                       {clf.classifier}
                       <span className="ml-1.5 text-gray-300">&middot; {clf.classifier_db}</span>
+                      {totalSub && (
+                        <span className="ml-1.5 text-gray-300">&middot; {totalSub}</span>
+                      )}
                     </p>
                     <MetricStrip
                       metrics={[
                         {
                           label: "Unclassified",
-                          value: fmtPct(clfQc?.pct_unclassified),
-                          sub: clfQc ? `${fmt(clfQc.unclassified_reads)} reads` : "",
-                          warn: (clfQc?.pct_unclassified ?? 0) > 20,
+                          value: fmtPct(pct(unclassReads), 2),
+                          sub: `${fmt(unclassReads)} reads`,
+                          warn: pct(unclassReads) > 20,
                         },
-                        { label: "Species", value: fmt(clfQc?.num_species), sub: clf.classifier },
-                        { label: "Genera", value: fmt(clfQc?.num_genera), sub: clf.classifier },
+                        {
+                          label: "Human",
+                          value: fmtPct(pct(humanReads), 2),
+                          sub: `${fmt(humanReads)} reads`,
+                        },
+                        {
+                          label: "Viruses",
+                          value: fmtPct(pct(virReads), 2),
+                          sub: `${fmt(virReads)} reads`,
+                        },
+                        {
+                          label: "Bacteria",
+                          value: fmtPct(pct(bacReads), 2),
+                          sub: `${fmt(bacReads)} reads`,
+                        },
+                        {
+                          label: "Eukaryotes",
+                          value: fmtPct(pct(eukReads), 2),
+                          sub: `${fmt(eukReads)} reads`,
+                        },
+                        {
+                          label: "Archaea",
+                          value: fmtPct(pct(archReads), 2),
+                          sub: `${fmt(archReads)} reads`,
+                        },
+                        {
+                          label: "Other",
+                          value: fmtPct(pct(otherReads), 2),
+                          sub: `${fmt(otherReads)} reads`,
+                        },
                       ]}
                     />
                   </div>
