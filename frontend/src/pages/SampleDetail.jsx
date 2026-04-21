@@ -247,8 +247,7 @@ export default function SampleDetail() {
                   humanReads + eukReads + bacReads + archReads + virReads + unclassReads;
                 // Prefer the classifier's own reported total; diamond doesn't
                 // report total_reads so fall back to queries_aligned (% of hits).
-                const totalReads =
-                  clfQc?.total_reads ?? clfQc?.queries_aligned ?? accountedReads;
+                const totalReads = clfQc?.total_reads ?? clfQc?.queries_aligned ?? accountedReads;
                 const totalSub =
                   clfQc?.total_reads != null
                     ? `of ${fmt(clfQc.total_reads)} reads`
