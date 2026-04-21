@@ -208,6 +208,7 @@ async def list_cases(
         "total": total,
         "page": page,
         "pages": max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE),
+        "ticket_links_enabled": bool(settings.freshdesk_base_url),
         "items": result,
     }
 
