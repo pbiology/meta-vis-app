@@ -70,6 +70,7 @@ class ClassifierQcStats(_Base):
     total_reads: Optional[int] = None
     num_species: Optional[int] = None
     num_genera: Optional[int] = None
+    queries_aligned: Optional[int] = None  # diamond only
 
 
 class Bowtie2Stats(_Base):
