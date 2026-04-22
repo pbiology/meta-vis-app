@@ -1,3 +1,4 @@
+import { ReactNode } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import Login from "./pages/Login";
@@ -16,9 +17,9 @@ import NtcTrends from "./pages/NtcTrends";
 import NtcListsPage from "./pages/NtcListsPage";
 import UserPreferences from "./pages/UserPreferences";
 
-function ProtectedRoute({ children }) {
+function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  return user ? children : <Navigate to="/login" replace />;
+  return user ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
 export default function App() {

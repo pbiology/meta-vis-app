@@ -47,3 +47,20 @@ export interface PaginatedResponse<T> {
   total: number;
   [key: string]: unknown;
 }
+
+export interface UserPreferences {
+  preferred_kingdoms: string[];
+  visible_analysis_types: string[];
+}
+
+export interface AuthContextValue {
+  user: string | null;
+  role: Role;
+  preferences: UserPreferences;
+  preferencesLoaded: boolean;
+  sessionKingdoms: string[];
+  setSessionKingdoms: (kingdoms: string[]) => void;
+  login: (username: string, role: Role) => Promise<void>;
+  logout: () => void;
+  setPreferences: (prefs: Partial<UserPreferences>) => Promise<void>;
+}

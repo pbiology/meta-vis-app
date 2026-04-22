@@ -1,5 +1,5 @@
 import client from "./client";
-import type { Role, User } from "./types";
+import type { Role, User, UserPreferences } from "./types";
 
 export async function getUsers(): Promise<User[]> {
   const res = await client.get<User[]>("/users");
@@ -31,12 +31,14 @@ export async function getMyStats(): Promise<unknown> {
   return res.data;
 }
 
-export async function getMyPreferences(): Promise<unknown> {
-  const res = await client.get("/users/me/preferences");
+export async function getMyPreferences(): Promise<UserPreferences> {
+  const res = await client.get<UserPreferences>("/users/me/preferences");
   return res.data;
 }
 
-export async function updateMyPreferences(prefs: Record<string, unknown>): Promise<unknown> {
-  const res = await client.patch("/users/me/preferences", prefs);
+export async function updateMyPreferences(
+  prefs: Partial<UserPreferences>
+): Promise<UserPreferences> {
+  const res = await client.patch<UserPreferences>("/users/me/preferences", prefs);
   return res.data;
 }
