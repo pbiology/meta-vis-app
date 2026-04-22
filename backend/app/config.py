@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     # NCBI E-utilities — optional API key, raises rate limit from 3 to 10 req/s
     ncbi_api_key: Optional[str] = None
 
+    # Freshdesk — base URL for case ticket links. `{ticket_id}` is substituted
+    # at serialisation time. Leave unset to disable the ticket link in the UI.
+    freshdesk_base_url: Optional[str] = None
+
     # Object storage — optional, falls back to MongoDB if not set
     object_storage_endpoint: Optional[str] = None
     object_storage_access_key: Optional[str] = None

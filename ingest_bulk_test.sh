@@ -100,6 +100,7 @@ if [ "$COUNT" -gt 0 ]; then
 
     if python "$INGEST_SCRIPT" taxprofiler \
       --case-id "$case_id" \
+      --ticket-id "1007645" \
       --order-date "$order_date" \
       --multiqc "$TD/taxprofiler/multiqc/multiqc_data/multiqc_data.json" \
       --multiqc-report "$TD/taxprofiler/multiqc/multiqc_report.html" \
@@ -150,6 +151,7 @@ if [ "$TRANA_COUNT" -gt 0 ]; then
 
     if python "$INGEST_SCRIPT" trana \
       --case-id "$case_id" \
+      --ticket-id "1007645" \
       --order-date "$order_date" \
       --multiqc-report "$TD_TRANA/multiqc/multiqc_report.html" \
       --pipeline-info "$TD_TRANA/pipeline_info/software_versions.yml" \

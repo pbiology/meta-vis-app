@@ -26,6 +26,9 @@ def _serialise_case(doc: dict) -> dict:
     doc["_id"] = str(doc["_id"])
     if "sample_ids" in doc:
         doc["sample_ids"] = [str(sid) for sid in doc["sample_ids"]]
+    ticket_id = doc.get("ticket_id")
+    if ticket_id and settings.freshdesk_base_url:
+        doc["ticket_url"] = settings.freshdesk_base_url.format(ticket_id=ticket_id)
     return doc
 
 
@@ -205,6 +208,7 @@ async def list_cases(
         "total": total,
         "page": page,
         "pages": max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE),
+        "ticket_links_enabled": bool(settings.freshdesk_base_url),
         "items": result,
     }
 
