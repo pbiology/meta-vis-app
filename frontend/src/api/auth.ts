@@ -1,6 +1,7 @@
 import client from "./client";
+import type { User } from "./types";
 
-export async function login(username, password) {
+export async function login(username: string, password: string): Promise<unknown> {
   // FastAPI OAuth2PasswordRequestForm expects form data, not JSON
   const formData = new URLSearchParams();
   formData.append("username", username);
@@ -12,7 +13,7 @@ export async function login(username, password) {
   return res.data;
 }
 
-export async function getMe() {
-  const res = await client.get("/auth/me");
+export async function getMe(): Promise<User> {
+  const res = await client.get<User>("/auth/me");
   return res.data;
 }

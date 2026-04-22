@@ -1,11 +1,27 @@
 import client from "./client";
+import type { Outbreak, OutbreaksResponse } from "./types";
 
-export async function getOutbreaks(windowDays = 14, analysisTypes = null) {
-  const params = { window_days: windowDays };
+interface RawConfigResult {
+  config_name?: string;
+  superkingdoms?: string[];
+  outbreaks?: Outbreak[];
+}
+
+interface RawOutbreaksResponse {
+  window_days: number;
+  results?: RawConfigResult[];
+  outbreaks?: Outbreak[];
+}
+
+export async function getOutbreaks(
+  windowDays = 14,
+  analysisTypes: string[] | null = null
+): Promise<OutbreaksResponse | RawOutbreaksResponse> {
+  const params: Record<string, unknown> = { window_days: windowDays };
   if (analysisTypes && analysisTypes.length > 0) {
     params.analysis_types = analysisTypes;
   }
-  const res = await client.get("/alerts/outbreaks", {
+  const res = await client.get<RawOutbreaksResponse>("/alerts/outbreaks", {
     params,
     // FastAPI list[str] expects repeated ?analysis_types=shotgun&analysis_types=amplicon
     paramsSerializer: { indexes: null },
@@ -16,7 +32,7 @@ export async function getOutbreaks(windowDays = 14, analysisTypes = null) {
   const data = res.data;
   if (data.results && Array.isArray(data.results)) {
     // Flatten all outbreaks from all configs into a single array
-    const allOutbreaks = [];
+    const allOutbreaks: Outbreak[] = [];
     for (const configResult of data.results) {
       for (const outbreak of configResult.outbreaks || []) {
         allOutbreaks.push({
@@ -35,13 +51,18 @@ export async function getOutbreaks(windowDays = 14, analysisTypes = null) {
   return data;
 }
 
-export async function getIgnorelist(superkingdom = null) {
+export async function getIgnorelist(superkingdom: string | null = null): Promise<unknown> {
   const params = superkingdom ? { superkingdom } : {};
   const res = await client.get("/alerts/ignorelist", { params });
   return res.data;
 }
 
-export async function addToIgnorelist(taxonId, taxonName, superkingdom = "Viruses", reason = null) {
+export async function addToIgnorelist(
+  taxonId: number,
+  taxonName: string,
+  superkingdom = "Viruses",
+  reason: string | null = null
+): Promise<unknown> {
   const res = await client.post("/alerts/ignorelist", {
     taxon_id: taxonId,
     taxon_name: taxonName,
@@ -51,22 +72,30 @@ export async function addToIgnorelist(taxonId, taxonName, superkingdom = "Viruse
   return res.data;
 }
 
-export async function removeFromIgnorelist(taxonId) {
+export async function removeFromIgnorelist(taxonId: number): Promise<unknown> {
   const res = await client.delete(`/alerts/ignorelist/${taxonId}`);
   return res.data;
 }
 
-export async function updateIgnorelistNote(taxonId, reason) {
+export async function updateIgnorelistNote(
+  taxonId: number,
+  reason: string | null
+): Promise<unknown> {
   const res = await client.patch(`/alerts/ignorelist/${taxonId}`, { reason });
   return res.data;
 }
 
-export async function getPathogens() {
+export async function getPathogens(): Promise<unknown> {
   const res = await client.get("/alerts/pathogens");
   return res.data;
 }
 
-export async function addToPathogens(taxonId, taxonName, superkingdom = "Viruses", notes = null) {
+export async function addToPathogens(
+  taxonId: number,
+  taxonName: string,
+  superkingdom = "Viruses",
+  notes: string | null = null
+): Promise<unknown> {
   const res = await client.post("/alerts/pathogens", {
     taxon_id: taxonId,
     taxon_name: taxonName,
@@ -76,7 +105,7 @@ export async function addToPathogens(taxonId, taxonName, superkingdom = "Viruses
   return res.data;
 }
 
-export async function removeFromPathogens(taxonId) {
+export async function removeFromPathogens(taxonId: number): Promise<unknown> {
   const res = await client.delete(`/alerts/pathogens/${taxonId}`);
   return res.data;
 }
