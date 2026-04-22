@@ -1,13 +1,13 @@
-import axios from "axios";
+import axios, { AxiosError, AxiosInstance } from "axios";
 
-const client = axios.create({
+const client: AxiosInstance = axios.create({
   baseURL: "/api/v1",
   withCredentials: true,
 });
 
 client.interceptors.response.use(
   (response) => response,
-  (error) => {
+  (error: AxiosError) => {
     if (error.response?.status === 401) {
       localStorage.removeItem("username");
       window.location.href = "/login";
