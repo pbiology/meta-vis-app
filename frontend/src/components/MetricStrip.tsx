@@ -1,9 +1,16 @@
-/**
- * A single horizontal strip where each metric is separated by hairline dividers.
- *
- * @param {{ label: string, value: string, sub?: string, warn?: boolean }[]} metrics
- */
-export function MetricStrip({ metrics }) {
+export interface Metric {
+  label: string;
+  value: string | number | null | undefined;
+  sub?: string;
+  warn?: boolean;
+}
+
+interface MetricStripProps {
+  metrics: Metric[];
+}
+
+// A single horizontal strip where each metric is separated by hairline dividers.
+export function MetricStrip({ metrics }: MetricStripProps) {
   return (
     <div className="flex bg-white border border-gray-200 rounded-lg overflow-hidden">
       {metrics.map((m, i) => (
