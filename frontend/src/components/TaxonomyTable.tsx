@@ -76,9 +76,7 @@ export default function TaxonomyTable({
   });
   const [taxSort, setTaxSort] = useState<SortState>({ col: "abundance", dir: -1 });
   const [taxPage, setTaxPage] = useState(0);
-  const [metavalOnly, setMetavalOnly] = useState(
-    () => searchParams.get("metavalOnly") === "true"
-  );
+  const [metavalOnly, setMetavalOnly] = useState(() => searchParams.get("metavalOnly") === "true");
   const [kingdomOpen, setKingdomOpen] = useState(false);
   const [concordanceMin, setConcordanceMin] = useState(() => {
     const v = parseInt(searchParams.get("concordance") ?? "", 10);
