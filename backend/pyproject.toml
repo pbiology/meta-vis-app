@@ -31,8 +31,7 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
-
-    "ruff>=0.4.0",
+    "ruff>=0.15.0",
     "mongomock-motor>=0.0.21",
     "bandit[toml]>=1.9.0",
     "mypy>=1.8.0",
@@ -76,4 +75,3 @@ warn_redundant_casts = true
 warn_no_return = false
 strict_equality = true
 ignore_missing_imports = true
-
