@@ -98,6 +98,21 @@ The services will be available at:
 - Backend: http://localhost:8000
 - MinIO console: http://localhost:9001
 
+### 1b. Install pre-commit hooks (recommended)
+
+Enforces formatting and linting before every commit so CI stays green.
+
+```bash
+pip install pre-commit   # or: conda install -c conda-forge pre-commit
+pre-commit install
+```
+
+After this, `ruff`, `ruff-format`, and `prettier` will run automatically on staged files at commit time. To run all hooks manually against the full repo:
+
+```bash
+pre-commit run --all-files
+```
+
 #### Notes
 
 - This Docker setup is intended for development and supports hot reload for both frontend and backend code.
