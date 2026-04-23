@@ -8,16 +8,25 @@ import { Group } from "@visx/group";
 import { curveMonotoneX } from "@visx/curve";
 import { getNtcTrends, getNtcContaminantAlerts } from "../api/ntc";
 import { useAuth } from "../context/AuthContext";
+import type {
+  NtcContaminantAlert,
+  NtcKingdomPoint,
+  NtcReadCountPoint,
+  NtcRecurringTaxon,
+  NtcTaxonOccurrence,
+  NtcTrendsResponse,
+} from "../api/types";
 
-// Map between NtcTrends' pipeline param and the user-preference analysis type.
-const PIPELINE_TO_ANALYSIS = { taxprofiler: "shotgun", trana: "amplicon" };
+const PIPELINE_TO_ANALYSIS: Record<string, string> = {
+  taxprofiler: "shotgun",
+  trana: "amplicon",
+};
 
-// Measures the pixel width of a DOM element, updating on resize.
-function useContainerWidth() {
+function useContainerWidth(): [(node: HTMLElement | null) => void, number] {
   const [width, setWidth] = useState(0);
-  const observerRef = useRef(null);
+  const observerRef = useRef<ResizeObserver | null>(null);
 
-  const ref = useCallback((node) => {
+  const ref = useCallback((node: HTMLElement | null) => {
     if (observerRef.current) {
       observerRef.current.disconnect();
       observerRef.current = null;
@@ -34,40 +43,35 @@ function useContainerWidth() {
   return [ref, width];
 }
 
-// Colour palette — drawn from Tailwind config accent colours, intentionally
-// distinct from the gray/amber/red used for status throughout the app.
 const TAXON_COLOURS = [
-  "#3b82f6", // blue-500
-  "#8b5cf6", // violet-500
-  "#10b981", // emerald-500
-  "#f59e0b", // amber-500
-  "#ef4444", // red-500
-  "#06b6d4", // cyan-500
-  "#f97316", // orange-500
-  "#84cc16", // lime-500
+  "#3b82f6",
+  "#8b5cf6",
+  "#10b981",
+  "#f59e0b",
+  "#ef4444",
+  "#06b6d4",
+  "#f97316",
+  "#84cc16",
 ];
 
 const MARGIN = { top: 16, right: 24, bottom: 48, left: 72 };
 
-function formatCount(n) {
+function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toPrecision(3)}M`;
   if (n >= 1_000) return `${(n / 1_000).toPrecision(3)}k`;
   return String(n);
 }
 
-/** Returns the ISO week number (1–53) for a given date. */
-function isoWeek(date) {
+function isoWeek(date: Date): number {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 }
 
-/** Generates one Date per week (Mondays) between two dates. */
-function weekTicks(minDate, maxDate) {
-  const ticks = [];
+function weekTicks(minDate: Date, maxDate: Date): Date[] {
+  const ticks: Date[] = [];
   const d = new Date(minDate);
-  // Advance to next Monday
   d.setDate(d.getDate() + ((1 - d.getDay() + 7) % 7 || 7));
   while (d <= maxDate) {
     ticks.push(new Date(d));
@@ -76,27 +80,33 @@ function weekTicks(minDate, maxDate) {
   return ticks;
 }
 
-// ---------------------------------------------------------------------------
-// Kingdom colours
-// ---------------------------------------------------------------------------
-
-const KINGDOM_COLOURS = {
-  Bacteria: "#3b82f6", // blue-500
-  Viruses: "#ef4444", // red-500
-  Eukaryota: "#10b981", // emerald-500
-  Archaea: "#f59e0b", // amber-500
-  Other: "#d1d1d6", // gray-300
+const KINGDOM_COLOURS: Record<string, string> = {
+  Bacteria: "#3b82f6",
+  Viruses: "#ef4444",
+  Eukaryota: "#10b981",
+  Archaea: "#f59e0b",
+  Other: "#d1d1d6",
 };
 
-const KINGDOMS = ["Bacteria", "Viruses", "Eukaryota", "Archaea", "Other"];
+const KINGDOMS = ["Bacteria", "Viruses", "Eukaryota", "Archaea", "Other"] as const;
 
-// ---------------------------------------------------------------------------
-// Stacked bar chart — kingdom breakdown per NTC
-// ---------------------------------------------------------------------------
+interface KingdomTooltip {
+  x: number;
+  y: number;
+  data: NtcKingdomPoint;
+}
 
-function KingdomBreakdownChart({ data, width = 600, height = 220 }) {
-  const [tooltip, setTooltip] = useState(null);
-  const svgRef = useRef(null);
+function KingdomBreakdownChart({
+  data,
+  width = 600,
+  height = 220,
+}: {
+  data: NtcKingdomPoint[];
+  width?: number;
+  height?: number;
+}) {
+  const [tooltip, setTooltip] = useState<KingdomTooltip | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
 
   const points = data.filter((d) => d.order_date);
   const innerWidth = width - MARGIN.left - MARGIN.right;
@@ -115,7 +125,11 @@ function KingdomBreakdownChart({ data, width = 600, height = 220 }) {
 
   const yScale = useMemo(() => {
     const maxTotal = points.length
-      ? Math.max(...points.map((d) => KINGDOMS.reduce((s, k) => s + (d[k] || 0), 0)))
+      ? Math.max(
+          ...points.map((d) =>
+            KINGDOMS.reduce((s, k) => s + ((d[k] as number | undefined) ?? 0), 0)
+          )
+        )
       : 10;
     return scaleLinear({
       domain: [0, maxTotal * 1.1 || 10],
@@ -124,7 +138,6 @@ function KingdomBreakdownChart({ data, width = 600, height = 220 }) {
     });
   }, [points, innerHeight]);
 
-  // Bar half-width in pixels — keeps bars narrow and centred on their date
   const BAR_HALF = Math.max(2, Math.min(8, innerWidth / (points.length * 4)));
 
   if (points.length === 0) {
@@ -133,12 +146,13 @@ function KingdomBreakdownChart({ data, width = 600, height = 220 }) {
     );
   }
 
-  function handleMouseMove(e, d, taxon_name, taxon_id, colour) {
+  function handleMouseMove(e: React.MouseEvent, d: NtcKingdomPoint) {
+    if (!svgRef.current) return;
     const rect = svgRef.current.getBoundingClientRect();
     setTooltip({
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
-      data: { ...d, taxon_name, taxon_id, colour },
+      data: d,
     });
   }
 
@@ -159,7 +173,7 @@ function KingdomBreakdownChart({ data, width = 600, height = 220 }) {
             return (
               <g key={i} onMouseMove={(e) => handleMouseMove(e, d)}>
                 {KINGDOMS.map((kingdom) => {
-                  const val = d[kingdom] || 0;
+                  const val = (d[kingdom] as number | undefined) ?? 0;
                   if (val === 0) return null;
                   const barHeight = innerHeight - yScale(val);
                   yOffset -= barHeight;
@@ -182,7 +196,7 @@ function KingdomBreakdownChart({ data, width = 600, height = 220 }) {
             top={innerHeight}
             scale={xScale}
             tickValues={weekTicks(xScale.domain()[0], xScale.domain()[1])}
-            tickFormat={(d) => `W${isoWeek(d)}`}
+            tickFormat={(d) => `W${isoWeek(d as Date)}`}
             tickStroke="#d1d1d6"
             stroke="#d1d1d6"
             tickLabelProps={{
@@ -195,7 +209,7 @@ function KingdomBreakdownChart({ data, width = 600, height = 220 }) {
           <AxisLeft
             scale={yScale}
             numTicks={4}
-            tickFormat={formatCount}
+            tickFormat={(d) => formatCount(d as number)}
             tickStroke="#d1d1d6"
             stroke="#d1d1d6"
             tickLabelProps={{
@@ -210,7 +224,6 @@ function KingdomBreakdownChart({ data, width = 600, height = 220 }) {
         </Group>
       </svg>
 
-      {/* Legend */}
       <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 pl-[60px]">
         {KINGDOMS.map((k) => (
           <div key={k} className="flex items-center gap-1.5">
@@ -230,33 +243,44 @@ function KingdomBreakdownChart({ data, width = 600, height = 220 }) {
         >
           <div className="font-medium">{tooltip.data.sample_id}</div>
           <div className="text-gray-400 mb-1">{tooltip.data.order_date}</div>
-          {KINGDOMS.map((k) =>
-            tooltip.data[k] > 0 ? (
+          {KINGDOMS.map((k) => {
+            const v = (tooltip.data[k] as number | undefined) ?? 0;
+            return v > 0 ? (
               <div key={k} className="flex items-center gap-1.5">
                 <span
                   className="inline-block w-2 h-2 rounded-sm flex-shrink-0"
                   style={{ backgroundColor: KINGDOM_COLOURS[k] }}
                 />
                 <span style={{ color: KINGDOM_COLOURS[k] }}>{k}</span>
-                <span className="text-gray-400 ml-auto pl-3">
-                  {tooltip.data[k].toLocaleString()}
-                </span>
+                <span className="text-gray-400 ml-auto pl-3">{v.toLocaleString()}</span>
               </div>
-            ) : null
-          )}
+            ) : null;
+          })}
         </div>
       )}
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Scatter chart — total classified reads per NTC
-// ---------------------------------------------------------------------------
+interface ReadTooltip {
+  x: number;
+  y: number;
+  data: NtcReadCountPoint;
+}
 
-function ReadCountChart({ data, width = 600, height = 200, isFraction = false }) {
-  const [tooltip, setTooltip] = useState(null);
-  const svgRef = useRef(null);
+function ReadCountChart({
+  data,
+  width = 600,
+  height = 200,
+  isFraction = false,
+}: {
+  data: NtcReadCountPoint[];
+  width?: number;
+  height?: number;
+  isFraction?: boolean;
+}) {
+  const [tooltip, setTooltip] = useState<ReadTooltip | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
 
   const points = data.filter((d) => d.order_date && d.classified_reads != null);
   const innerWidth = width - MARGIN.left - MARGIN.right;
@@ -288,7 +312,8 @@ function ReadCountChart({ data, width = 600, height = 200, isFraction = false })
     );
   }
 
-  function handleMouseMove(e, d) {
+  function handleMouseMove(e: React.MouseEvent, d: NtcReadCountPoint) {
+    if (!svgRef.current) return;
     const rect = svgRef.current.getBoundingClientRect();
     setTooltip({
       x: e.clientX - rect.left,
@@ -343,7 +368,7 @@ function ReadCountChart({ data, width = 600, height = 200, isFraction = false })
             top={innerHeight}
             scale={xScale}
             tickValues={weekTicks(xScale.domain()[0], xScale.domain()[1])}
-            tickFormat={(d) => `W${isoWeek(d)}`}
+            tickFormat={(d) => `W${isoWeek(d as Date)}`}
             tickStroke="#d1d1d6"
             stroke="#d1d1d6"
             tickLabelProps={{
@@ -356,7 +381,7 @@ function ReadCountChart({ data, width = 600, height = 200, isFraction = false })
           <AxisLeft
             scale={yScale}
             numTicks={4}
-            tickFormat={formatCount}
+            tickFormat={(d) => formatCount(d as number)}
             tickStroke="#d1d1d6"
             stroke="#d1d1d6"
             tickLabelProps={{
@@ -388,13 +413,25 @@ function ReadCountChart({ data, width = 600, height = 200, isFraction = false })
   );
 }
 
-// ---------------------------------------------------------------------------
-// Line chart — recurring taxa
-// ---------------------------------------------------------------------------
+interface RecurringTooltip {
+  x: number;
+  y: number;
+  data: NtcTaxonOccurrence & { taxon_name: string; taxon_id: number; colour: string };
+}
 
-function RecurringTaxaChart({ taxa, width = 600, height = 240, isFraction = false }) {
-  const [tooltip, setTooltip] = useState(null);
-  const svgRef = useRef(null);
+function RecurringTaxaChart({
+  taxa,
+  width = 600,
+  height = 240,
+  isFraction = false,
+}: {
+  taxa: NtcRecurringTaxon[];
+  width?: number;
+  height?: number;
+  isFraction?: boolean;
+}) {
+  const [tooltip, setTooltip] = useState<RecurringTooltip | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
 
   const allPoints = taxa.flatMap((t) => t.occurrences);
   const innerWidth = width - MARGIN.left - MARGIN.right;
@@ -420,7 +457,7 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240, isFraction = fals
     });
   }, [allPoints, innerHeight]);
 
-  const colourScale = scaleOrdinal({
+  const colourScale = scaleOrdinal<number, string>({
     domain: taxa.map((t) => t.taxon_id),
     range: TAXON_COLOURS,
   });
@@ -433,7 +470,14 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240, isFraction = fals
     );
   }
 
-  function handleMouseMove(e, d, taxon_name, taxon_id, colour) {
+  function handleMouseMove(
+    e: React.MouseEvent,
+    d: NtcTaxonOccurrence,
+    taxon_name: string,
+    taxon_id: number,
+    colour: string
+  ) {
+    if (!svgRef.current) return;
     const rect = svgRef.current.getBoundingClientRect();
     setTooltip({
       x: e.clientX - rect.left,
@@ -487,7 +531,7 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240, isFraction = fals
             top={innerHeight}
             scale={xScale}
             tickValues={weekTicks(xScale.domain()[0], xScale.domain()[1])}
-            tickFormat={(d) => `W${isoWeek(d)}`}
+            tickFormat={(d) => `W${isoWeek(d as Date)}`}
             tickStroke="#d1d1d6"
             stroke="#d1d1d6"
             tickLabelProps={{
@@ -500,7 +544,7 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240, isFraction = fals
           <AxisLeft
             scale={yScale}
             numTicks={4}
-            tickFormat={formatCount}
+            tickFormat={(d) => formatCount(d as number)}
             tickStroke="#d1d1d6"
             stroke="#d1d1d6"
             tickLabelProps={{
@@ -515,7 +559,6 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240, isFraction = fals
         </Group>
       </svg>
 
-      {/* Legend */}
       <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 pl-[60px]">
         {taxa.map((taxon) => (
           <div key={taxon.taxon_id} className="flex items-center gap-1.5">
@@ -553,10 +596,6 @@ function RecurringTaxaChart({ taxa, width = 600, height = 240, isFraction = fals
   );
 }
 
-// ---------------------------------------------------------------------------
-// Page shell
-// ---------------------------------------------------------------------------
-
 export default function NtcTrends() {
   const { preferences, preferencesLoaded } = useAuth();
   const visibleAnalysis = preferences?.visible_analysis_types ?? ["shotgun", "amplicon"];
@@ -572,8 +611,6 @@ export default function NtcTrends() {
   const [material, setMaterial] = useState("DNA");
   const [pipeline, setPipeline] = useState(availablePipelines[0]?.value ?? "taxprofiler");
 
-  // If the user's preferences change and the current pipeline is hidden,
-  // switch to the first available one.
   useEffect(() => {
     if (!availablePipelines.some((p) => p.value === pipeline)) {
       if (availablePipelines.length > 0) setPipeline(availablePipelines[0].value);
@@ -583,10 +620,10 @@ export default function NtcTrends() {
   const [minReads, setMinReads] = useState(3);
   const [minAbundance, setMinAbundance] = useState(0.001);
   const [minCasePct, setMinCasePct] = useState(10);
-  const [data, setData] = useState(null);
+  const [data, setData] = useState<NtcTrendsResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [contaminantAlerts, setContaminantAlerts] = useState([]);
+  const [error, setError] = useState<string | null>(null);
+  const [contaminantAlerts, setContaminantAlerts] = useState<NtcContaminantAlert[]>([]);
 
   const [readCountRef, readCountWidth] = useContainerWidth();
   const [kingdomRef, kingdomWidth] = useContainerWidth();
@@ -613,11 +650,9 @@ export default function NtcTrends() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <div className="flex items-center gap-3 px-6 py-4 bg-white border-b border-gray-100 flex-shrink-0">
         <h1 className="text-sm font-medium text-gray-900 flex-1">NTC trends</h1>
 
-        {/* Material tabs — hidden for Trana (always DNA) */}
         {pipeline !== "trana" && (
           <div className="flex items-center gap-1">
             {["DNA", "RNA"].map((m) => (
@@ -636,7 +671,6 @@ export default function NtcTrends() {
           </div>
         )}
 
-        {/* Pipeline tabs */}
         <div className="flex items-center gap-1 border-l border-gray-100 pl-3">
           {availablePipelines.map(({ value, label }) => (
             <button
@@ -653,7 +687,6 @@ export default function NtcTrends() {
           ))}
         </div>
 
-        {/* Filter controls */}
         {pipeline === "trana" ? (
           <div className="flex items-center gap-2 border-l border-gray-100 pl-3">
             <span className="text-xs text-gray-400">Min abundance</span>
@@ -714,7 +747,6 @@ export default function NtcTrends() {
           </svg>
           NTC lists
         </Link>
-        {/* Window selector */}
         <div className="flex items-center gap-2 border-l border-gray-100 pl-3">
           <span className="text-xs text-gray-400">Window</span>
           {[30, 90, 180].map((d) => (
@@ -733,7 +765,6 @@ export default function NtcTrends() {
         </div>
       </div>
 
-      {/* Body */}
       <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-6">
         {loading && (
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">
@@ -746,7 +777,6 @@ export default function NtcTrends() {
 
         {!loading && !error && data && (
           <>
-            {/* Contaminant alert banner */}
             {contaminantAlerts.length > 0 && (
               <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 flex flex-col gap-2">
                 <div className="flex items-center gap-2">
@@ -790,7 +820,6 @@ export default function NtcTrends() {
               </div>
             )}
 
-            {/* Summary line */}
             <p className="text-xs text-gray-400">
               {data.total_ntcs} {material} NTC
               {data.total_ntcs !== 1 ? "s" : ""} in the last {windowDays} days
@@ -804,7 +833,6 @@ export default function NtcTrends() {
               )}
             </p>
 
-            {/* Kingdom breakdown */}
             <section ref={kingdomRef} className="bg-white border border-gray-100 rounded-xl p-4">
               <h2 className="text-xs font-medium text-gray-600 mb-3">Kingdom breakdown</h2>
               <p className="text-xs text-gray-400 mb-3">
@@ -815,7 +843,6 @@ export default function NtcTrends() {
               )}
             </section>
 
-            {/* Total classified reads */}
             <section ref={readCountRef} className="bg-white border border-gray-100 rounded-xl p-4">
               <h2 className="text-xs font-medium text-gray-600 mb-3">Total classified reads</h2>
               <p className="text-xs text-gray-400 mb-3">
@@ -830,7 +857,6 @@ export default function NtcTrends() {
               )}
             </section>
 
-            {/* Recurring taxa */}
             <section ref={recurringRef} className="bg-white border border-gray-100 rounded-xl p-4">
               <div className="flex items-center justify-between mb-1">
                 <h2 className="text-xs font-medium text-gray-600">Recurring taxa</h2>

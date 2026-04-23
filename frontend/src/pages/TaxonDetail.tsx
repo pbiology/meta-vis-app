@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   getTaxon,
@@ -13,15 +13,119 @@ import {
 import { getPathogens } from "../api/alerts";
 import { useAuth } from "../context/AuthContext";
 import { fmt } from "../utils/format";
+import { useRequiredParam } from "../utils/routeParams";
 
-const KINGDOM_COLOURS = {
+const KINGDOM_COLOURS: Record<string, string> = {
   Viruses: "text-red-600",
   Bacteria: "text-blue-600",
   Eukaryota: "text-amber-600",
   Archaea: "text-purple-600",
 };
 
-function LineageRow({ label, value }) {
+interface TaxonDoc {
+  taxon_id: number;
+  name?: string;
+  rank?: string;
+  species?: string;
+  genus?: string;
+  family?: string;
+  order?: string;
+  class?: string;
+  phylum?: string;
+  kingdom?: string;
+  superkingdom?: string;
+  ncbi_url?: string;
+  clinical_notes?: string | null;
+  clinical_notes_author?: string | null;
+  clinical_notes_updated_at?: string | null;
+  needs_taxonomy_refresh?: boolean;
+  taxdump_version?: string;
+  [key: string]: unknown;
+}
+
+interface OccurrenceSample {
+  sample_id: string;
+  reads?: Record<string, number | null | undefined>;
+}
+
+interface OccurrenceCase {
+  case_id: string;
+  order_date?: string | null;
+  sample_count: number;
+  classifiers?: string[];
+  samples: OccurrenceSample[];
+}
+
+interface OccurrencesData {
+  total_cases: number;
+  all_classifiers?: string[];
+  cases: OccurrenceCase[];
+}
+
+interface ExternalLink {
+  name: string;
+  url: string;
+}
+
+interface LiteratureArticle {
+  pmid: string | number;
+  title: string;
+  journal?: string;
+  pub_date?: string;
+  link: string;
+}
+
+interface IsolationSource {
+  source: string;
+  count: number;
+}
+interface CountryCount {
+  country: string;
+  count: number;
+}
+interface AmrPhenotypeGenome {
+  antibiotic: string;
+  count: number;
+}
+interface GenomesData {
+  total_genomes: number;
+  bvbrc_url: string;
+  isolation_sources: IsolationSource[];
+  countries: CountryCount[];
+  amr_phenotypes: AmrPhenotypeGenome[];
+}
+
+interface AmrGene {
+  gene?: string;
+  antibiotics?: string[];
+  antibiotics_class?: string;
+  source?: string;
+  pmid?: (string | number)[];
+}
+interface VirulenceFactor {
+  gene?: string;
+  product?: string;
+  source?: string;
+  pmid?: (string | number)[];
+}
+interface AmrPhenotype {
+  antibiotic: string;
+  resistant: number;
+  susceptible: number;
+}
+interface SpecialtyData {
+  amr_genes: AmrGene[];
+  virulence_factors: VirulenceFactor[];
+  amr_phenotypes: AmrPhenotype[];
+  bvbrc_url?: string;
+}
+
+interface LineageRowProps {
+  label: string;
+  value?: string | null;
+}
+
+function LineageRow({ label, value }: LineageRowProps) {
   if (!value) return null;
   return (
     <div className="flex items-baseline gap-2 py-1 border-b border-gray-50 last:border-0">
@@ -52,15 +156,29 @@ function RefreshWarning() {
   );
 }
 
-function ClinicalNotesEditor({ taxonId, initialNotes, notesAuthor, notesUpdatedAt, canEdit }) {
+interface ClinicalNotesEditorProps {
+  taxonId: number;
+  initialNotes?: string | null;
+  notesAuthor?: string | null;
+  notesUpdatedAt?: string | null;
+  canEdit: boolean;
+}
+
+function ClinicalNotesEditor({
+  taxonId,
+  initialNotes,
+  notesAuthor,
+  notesUpdatedAt,
+  canEdit,
+}: ClinicalNotesEditorProps) {
   const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(initialNotes ?? "");
-  const [author, setAuthor] = useState(notesAuthor ?? null);
-  const [updatedAt, setUpdatedAt] = useState(notesUpdatedAt ?? null);
+  const [value, setValue] = useState<string>(initialNotes ?? "");
+  const [author, setAuthor] = useState<string | null>(notesAuthor ?? null);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(notesUpdatedAt ?? null);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const { user: currentUsername } = useAuth();
-  const textareaRef = useRef(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     if (editing && textareaRef.current) {
@@ -167,15 +285,15 @@ function ClinicalNotesEditor({ taxonId, initialNotes, notesAuthor, notesUpdatedA
   );
 }
 
-function OccurrencesSection({ taxonId }) {
+function OccurrencesSection({ taxonId }: { taxonId: number }) {
   const [windowDays, setWindowDays] = useState(90);
-  const [data, setData] = useState(null);
+  const [data, setData] = useState<OccurrencesData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
     getTaxonOccurrences(taxonId, windowDays)
-      .then(setData)
+      .then((d) => setData(d as unknown as OccurrencesData))
       .catch(() => setData(null))
       .finally(() => setLoading(false));
   }, [taxonId, windowDays]);
@@ -308,13 +426,15 @@ function OccurrencesSection({ taxonId }) {
   );
 }
 
-function ExternalLinksSection({ taxonId }) {
-  const [links, setLinks] = useState(null);
+function ExternalLinksSection({ taxonId }: { taxonId: number }) {
+  const [links, setLinks] = useState<ExternalLink[] | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     getTaxonExternalLinks(taxonId)
-      .then((data) => setLinks(data.links ?? []))
+      .then((data) =>
+        setLinks(((data as { links?: ExternalLink[] }).links ?? []) as ExternalLink[])
+      )
       .catch(() => setLinks([]))
       .finally(() => setLoading(false));
   }, [taxonId]);
@@ -366,9 +486,9 @@ function ExternalLinksSection({ taxonId }) {
   );
 }
 
-function LiteratureSection({ taxonId }) {
-  const [articles, setArticles] = useState([]);
-  const [pubmedQuery, setPubmedQuery] = useState(null);
+function LiteratureSection({ taxonId }: { taxonId: number }) {
+  const [articles, setArticles] = useState<LiteratureArticle[]>([]);
+  const [pubmedQuery, setPubmedQuery] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [maxResults, setMaxResults] = useState(5);
@@ -380,8 +500,9 @@ function LiteratureSection({ taxonId }) {
     setError(false);
     getTaxonLiterature(taxonId, maxResults)
       .then((data) => {
-        setArticles(data.articles ?? []);
-        setPubmedQuery(data.pubmed_query ?? null);
+        const d = data as { articles?: LiteratureArticle[]; pubmed_query?: string };
+        setArticles(d.articles ?? []);
+        setPubmedQuery(d.pubmed_query ?? null);
       })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
@@ -485,7 +606,7 @@ function LiteratureSection({ taxonId }) {
   );
 }
 
-function PubmedLinks({ pmids }) {
+function PubmedLinks({ pmids }: { pmids?: (string | number)[] }) {
   if (!pmids || pmids.length === 0) return <span className="text-gray-300">—</span>;
   return (
     <div className="flex flex-wrap gap-1">
@@ -504,7 +625,12 @@ function PubmedLinks({ pmids }) {
   );
 }
 
-function SpecialtyGenesSubsection({ specialty, loadingSpecialty }) {
+interface SpecialtyGenesSubsectionProps {
+  specialty: SpecialtyData | null;
+  loadingSpecialty: boolean;
+}
+
+function SpecialtyGenesSubsection({ specialty, loadingSpecialty }: SpecialtyGenesSubsectionProps) {
   const [sgCollapsed, setSgCollapsed] = useState(true);
 
   const hasSpecialtyData =
@@ -516,7 +642,6 @@ function SpecialtyGenesSubsection({ specialty, loadingSpecialty }) {
   const amrCount = specialty?.amr_genes?.length ?? 0;
   const vfCount = specialty?.virulence_factors?.length ?? 0;
 
-  // Summary badges shown in the header regardless of collapsed state
   function HeaderSummary() {
     if (loadingSpecialty) return null;
     if (!hasSpecialtyData)
@@ -525,7 +650,6 @@ function SpecialtyGenesSubsection({ specialty, loadingSpecialty }) {
       <div className="flex items-center gap-2">
         {amrCount > 0 && (
           <span className="inline-flex items-center gap-1 text-xs font-medium text-red-600">
-            {/* shield icon */}
             <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="none">
               <path
                 d="M8 1.5L2 4v4c0 3.3 2.5 5.8 6 7 3.5-1.2 6-3.7 6-7V4L8 1.5z"
@@ -546,7 +670,6 @@ function SpecialtyGenesSubsection({ specialty, loadingSpecialty }) {
         )}
         {vfCount > 0 && (
           <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600">
-            {/* biohazard-like warning icon */}
             <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="none">
               <circle cx="8" cy="8" r="1.5" stroke="currentColor" strokeWidth="1.4" />
               <path
@@ -588,7 +711,7 @@ function SpecialtyGenesSubsection({ specialty, loadingSpecialty }) {
         </svg>
       </button>
 
-      {!sgCollapsed && hasSpecialtyData && (
+      {!sgCollapsed && hasSpecialtyData && specialty && (
         <div className="px-4 pb-3">
           {loadingSpecialty ? (
             <p className="text-xs text-gray-400">Loading…</p>
@@ -620,7 +743,9 @@ function SpecialtyGenesSubsection({ specialty, loadingSpecialty }) {
                               {g.gene || "—"}
                             </td>
                             <td className="px-3 py-1.5 text-xs text-gray-500">
-                              {g.antibiotics?.length > 0 ? g.antibiotics.join(", ") : "—"}
+                              {g.antibiotics && g.antibiotics.length > 0
+                                ? g.antibiotics.join(", ")
+                                : "—"}
                             </td>
                             <td className="px-3 py-1.5 text-xs text-gray-500">
                               {g.antibiotics_class || "—"}
@@ -727,7 +852,12 @@ function SpecialtyGenesSubsection({ specialty, loadingSpecialty }) {
   );
 }
 
-function ExternalLinkButton({ href, children }) {
+interface ExternalLinkButtonProps {
+  href: string;
+  children: React.ReactNode;
+}
+
+function ExternalLinkButton({ href, children }: ExternalLinkButtonProps) {
   return (
     <a
       href={href}
@@ -749,21 +879,21 @@ function ExternalLinkButton({ href, children }) {
   );
 }
 
-function BvbrcSection({ taxonId }) {
-  const [genomes, setGenomes] = useState(null);
-  const [specialty, setSpecialty] = useState(null);
+function BvbrcSection({ taxonId }: { taxonId: number }) {
+  const [genomes, setGenomes] = useState<GenomesData | null>(null);
+  const [specialty, setSpecialty] = useState<SpecialtyData | null>(null);
   const [loadingGenomes, setLoadingGenomes] = useState(true);
   const [loadingSpecialty, setLoadingSpecialty] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     getBvbrcGenomes(taxonId)
-      .then(setGenomes)
+      .then((d) => setGenomes(d as unknown as GenomesData))
       .catch(() => setGenomes(null))
       .finally(() => setLoadingGenomes(false));
 
     getBvbrcSpecialtyGenes(taxonId)
-      .then(setSpecialty)
+      .then((d) => setSpecialty(d as unknown as SpecialtyData))
       .catch(() => setSpecialty(null))
       .finally(() => setLoadingSpecialty(false));
   }, [taxonId]);
@@ -796,12 +926,11 @@ function BvbrcSection({ taxonId }) {
 
       {!collapsed && (
         <div className="divide-y divide-gray-50">
-          {/* Genome summary */}
           <div className="px-4 py-3">
             <p className="text-xs font-medium text-gray-500 mb-2">Sequenced genomes</p>
             {loadingGenomes ? (
               <p className="text-xs text-gray-400">Loading…</p>
-            ) : !hasGenomeData ? (
+            ) : !hasGenomeData || !genomes ? (
               <p className="text-xs text-gray-300 italic">No genome data found in BV-BRC.</p>
             ) : (
               <div className="flex flex-col gap-3">
@@ -867,7 +996,6 @@ function BvbrcSection({ taxonId }) {
             )}
           </div>
 
-          {/* Specialty genes — bacteria only */}
           <SpecialtyGenesSubsection specialty={specialty} loadingSpecialty={loadingSpecialty} />
         </div>
       )}
@@ -876,13 +1004,13 @@ function BvbrcSection({ taxonId }) {
 }
 
 export default function TaxonDetail() {
-  const { taxonId } = useParams();
+  const taxonIdParam = useRequiredParam("taxonId");
   const navigate = useNavigate();
   const { role } = useAuth();
 
-  const [taxon, setTaxon] = useState(null);
+  const [taxon, setTaxon] = useState<TaxonDoc | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
   const canEdit = role === "writer" || role === "admin";
 
@@ -892,18 +1020,18 @@ export default function TaxonDetail() {
   });
 
   useEffect(() => {
-    getTaxon(Number(taxonId))
-      .then(setTaxon)
+    getTaxon(Number(taxonIdParam))
+      .then((t) => setTaxon(t as TaxonDoc))
       .catch(() => setError("Taxon not found. Run load_taxonomy.py to populate reference data."))
       .finally(() => setLoading(false));
-  }, [taxonId]);
+  }, [taxonIdParam]);
 
   if (loading)
     return (
       <div className="flex items-center justify-center h-full text-sm text-gray-400">Loading…</div>
     );
 
-  if (error)
+  if (error || !taxon)
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3">
         <p className="text-sm text-gray-500">{error}</p>
@@ -916,11 +1044,10 @@ export default function TaxonDetail() {
       </div>
     );
 
-  const nameColour = KINGDOM_COLOURS[taxon.superkingdom] ?? "text-gray-900";
+  const nameColour = (taxon.superkingdom && KINGDOM_COLOURS[taxon.superkingdom]) ?? "text-gray-900";
 
   return (
     <div className="flex flex-col h-full">
-      {/* Topbar */}
       <div className="flex items-center gap-3 px-6 py-4 bg-white border-b border-gray-100 flex-shrink-0">
         <button
           onClick={() => navigate(-1)}
@@ -954,7 +1081,9 @@ export default function TaxonDetail() {
         {taxon.needs_taxonomy_refresh && <RefreshWarning />}
 
         {(() => {
-          const pathogen = pathogenList.find((p) => p.taxon_id === Number(taxonId));
+          const pathogen = pathogenList.find((p) => p.taxon_id === Number(taxonIdParam)) as
+            | { taxon_id: number; notes?: string | null }
+            | undefined;
           if (!pathogen) return null;
           return (
             <div className="flex items-start gap-2.5 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">
@@ -976,7 +1105,6 @@ export default function TaxonDetail() {
           );
         })()}
 
-        {/* Identity */}
         <section className="bg-white border border-gray-100 rounded-xl p-4">
           <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">
             Taxonomy

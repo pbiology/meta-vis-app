@@ -1,29 +1,29 @@
 import { useState, useEffect } from "react";
 import { getUsers, createUser, updateUserRole, deleteUser } from "../api/users";
+import type { AdminUser, Role } from "../api/types";
+import { axiosErrorDetail } from "../utils/axiosError";
 
-const ROLES = ["reader", "writer", "admin"];
+const ROLES: Role[] = ["reader", "writer", "admin"];
 
-const ROLE_STYLES = {
+const ROLE_STYLES: Record<Role, string> = {
   admin: "bg-purple-50 text-purple-700",
   writer: "bg-blue-50 text-blue-700",
   reader: "bg-gray-100 text-gray-600",
 };
 
 export default function Admin() {
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Add user form
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState("");
   const [newPass, setNewPass] = useState("");
-  const [newRole, setNewRole] = useState("reader");
+  const [newRole, setNewRole] = useState<Role>("reader");
   const [adding, setAdding] = useState(false);
-  const [addError, setAddError] = useState(null);
+  const [addError, setAddError] = useState<string | null>(null);
 
-  // Delete confirm
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
@@ -33,7 +33,7 @@ export default function Admin() {
       .finally(() => setLoading(false));
   }, []);
 
-  async function handleRoleChange(username, role) {
+  async function handleRoleChange(username: string, role: Role) {
     try {
       await updateUserRole(username, role);
       setUsers((prev) => prev.map((u) => (u.username === username ? { ...u, role } : u)));
@@ -42,7 +42,7 @@ export default function Admin() {
     }
   }
 
-  async function handleAdd(e) {
+  async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setAdding(true);
     setAddError(null);
@@ -54,13 +54,14 @@ export default function Admin() {
       setNewRole("reader");
       setShowAdd(false);
     } catch (err) {
-      setAddError(err.response?.data?.detail || "Failed to create user.");
+      setAddError(axiosErrorDetail(err, "Failed to create user."));
     } finally {
       setAdding(false);
     }
   }
 
   async function handleDelete() {
+    if (!deleteTarget) return;
     setDeleting(true);
     try {
       await deleteUser(deleteTarget);
@@ -114,8 +115,8 @@ export default function Admin() {
                   <td className="px-4 py-3">
                     <select
                       value={u.role}
-                      onChange={(e) => handleRoleChange(u.username, e.target.value)}
-                      className={`text-xs px-2 py-1 rounded-full border-0 font-medium cursor-pointer outline-none ${ROLE_STYLES[u.role] || ROLE_STYLES.reader}`}
+                      onChange={(e) => handleRoleChange(u.username, e.target.value as Role)}
+                      className={`text-xs px-2 py-1 rounded-full border-0 font-medium cursor-pointer outline-none ${ROLE_STYLES[u.role] ?? ROLE_STYLES.reader}`}
                     >
                       {ROLES.map((r) => (
                         <option key={r} value={r}>
@@ -139,7 +140,6 @@ export default function Admin() {
         )}
       </div>
 
-      {/* Add user modal */}
       {showAdd && (
         <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl border border-gray-100 shadow-lg p-6 w-80 flex flex-col gap-4">
@@ -169,7 +169,7 @@ export default function Admin() {
                 <label className="block text-xs text-gray-500 mb-1">Role</label>
                 <select
                   value={newRole}
-                  onChange={(e) => setNewRole(e.target.value)}
+                  onChange={(e) => setNewRole(e.target.value as Role)}
                   className="w-full text-xs border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-blue-300 bg-white"
                 >
                   {ROLES.map((r) => (
@@ -200,7 +200,6 @@ export default function Admin() {
         </div>
       )}
 
-      {/* Delete confirm modal */}
       {deleteTarget && (
         <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl border border-gray-100 shadow-lg p-6 w-80 flex flex-col gap-4">

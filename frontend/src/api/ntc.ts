@@ -1,4 +1,10 @@
 import client from "./client";
+import type {
+  IgnorelistItem,
+  NtcContaminantAlertsResponse,
+  NtcContaminantItem,
+  NtcTrendsResponse,
+} from "./types";
 
 export interface GetNtcTrendsParams {
   material: string;
@@ -14,8 +20,8 @@ export async function getNtcTrends({
   minReads = 3,
   minCasePct = 0.1,
   pipeline = "taxprofiler",
-}: GetNtcTrendsParams): Promise<unknown> {
-  const res = await client.get("/ntc/trends", {
+}: GetNtcTrendsParams): Promise<NtcTrendsResponse> {
+  const res = await client.get<NtcTrendsResponse>("/ntc/trends", {
     params: {
       material,
       window_days: windowDays,
@@ -29,8 +35,8 @@ export async function getNtcTrends({
 
 // --- Ignorelist ---
 
-export async function getNtcIgnorelist(): Promise<unknown> {
-  const res = await client.get("/ntc/ignorelist");
+export async function getNtcIgnorelist(): Promise<IgnorelistItem[]> {
+  const res = await client.get<IgnorelistItem[]>("/ntc/ignorelist");
   return res.data;
 }
 
@@ -39,8 +45,8 @@ export async function addToNtcIgnorelist(
   taxonName: string,
   superkingdom: string,
   reason: string | null = null
-): Promise<unknown> {
-  const res = await client.post("/ntc/ignorelist", {
+): Promise<IgnorelistItem> {
+  const res = await client.post<IgnorelistItem>("/ntc/ignorelist", {
     taxon_id: taxonId,
     taxon_name: taxonName,
     superkingdom,
@@ -52,20 +58,19 @@ export async function addToNtcIgnorelist(
 export async function updateNtcIgnorelistNote(
   taxonId: number,
   reason: string | null
-): Promise<unknown> {
-  const res = await client.patch(`/ntc/ignorelist/${taxonId}`, { reason });
+): Promise<IgnorelistItem> {
+  const res = await client.patch<IgnorelistItem>(`/ntc/ignorelist/${taxonId}`, { reason });
   return res.data;
 }
 
-export async function removeFromNtcIgnorelist(taxonId: number): Promise<unknown> {
-  const res = await client.delete(`/ntc/ignorelist/${taxonId}`);
-  return res.data;
+export async function removeFromNtcIgnorelist(taxonId: number): Promise<void> {
+  await client.delete(`/ntc/ignorelist/${taxonId}`);
 }
 
 // --- Known contaminants ---
 
-export async function getNtcContaminants(): Promise<unknown> {
-  const res = await client.get("/ntc/contaminants");
+export async function getNtcContaminants(): Promise<NtcContaminantItem[]> {
+  const res = await client.get<NtcContaminantItem[]>("/ntc/contaminants");
   return res.data;
 }
 
@@ -75,8 +80,8 @@ export async function addNtcContaminant(
   superkingdom: string,
   minReads = 3,
   notes: string | null = null
-): Promise<unknown> {
-  const res = await client.post("/ntc/contaminants", {
+): Promise<NtcContaminantItem> {
+  const res = await client.post<NtcContaminantItem>("/ntc/contaminants", {
     taxon_id: taxonId,
     taxon_name: taxonName,
     superkingdom,
@@ -94,27 +99,26 @@ export interface UpdateNtcContaminantFields {
 export async function updateNtcContaminant(
   taxonId: number,
   { minReads, notes }: UpdateNtcContaminantFields
-): Promise<unknown> {
-  const res = await client.patch(`/ntc/contaminants/${taxonId}`, {
+): Promise<NtcContaminantItem> {
+  const res = await client.patch<NtcContaminantItem>(`/ntc/contaminants/${taxonId}`, {
     min_reads: minReads,
     notes,
   });
   return res.data;
 }
 
-export async function removeNtcContaminant(taxonId: number): Promise<unknown> {
-  const res = await client.delete(`/ntc/contaminants/${taxonId}`);
-  return res.data;
+export async function removeNtcContaminant(taxonId: number): Promise<void> {
+  await client.delete(`/ntc/contaminants/${taxonId}`);
 }
 
 // --- Contaminant alerts ---
 
-export async function getNtcContaminantAlerts(): Promise<unknown> {
-  const res = await client.get("/ntc/contaminant-alerts");
+export async function getNtcContaminantAlerts(): Promise<NtcContaminantAlertsResponse> {
+  const res = await client.get<NtcContaminantAlertsResponse>("/ntc/contaminant-alerts");
   return res.data;
 }
 
 export async function getNtcContaminantCaseIds(): Promise<{ case_ids: string[] }> {
-  const res = await client.get<{ contaminant_case_ids: string[] }>("/ntc/contaminant-alerts");
+  const res = await client.get<NtcContaminantAlertsResponse>("/ntc/contaminant-alerts");
   return { case_ids: res.data.contaminant_case_ids };
 }
