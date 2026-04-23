@@ -25,3 +25,23 @@ repos:
       - id: prettier
         files: ^frontend/src/
         types_or: [javascript, jsx, ts, tsx, css, json]
+      - id: prettier
+        name: prettier (markdown & config json)
+        files: \.(md|json)$
+        exclude: ^frontend/
+
+  - repo: https://github.com/sphinx-contrib/sphinx-lint
+    rev: v1.0.2
+    hooks:
+      - id: sphinx-lint
+        files: \.rst$
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: bash -c 'cd backend && mypy app'
+        language: system
+        types: [python]
+        files: ^backend/
+        pass_filenames: false
