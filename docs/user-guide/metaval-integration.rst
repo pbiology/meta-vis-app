@@ -142,12 +142,12 @@ Example: Multiple classifiers + metaval
 .. code-block:: text
 
    Organism: Influenza A virus
-   
+
    Kraken2:     Present, 5% abundance
    Centrifuge:  Present, 4.8% abundance
    DIAMOND:     Present, 5.2% abundance
    metaval:     Verified, 98% identity, even coverage
-   
+
    Confidence: Very high → Report as confirmed
 
 Versus:
@@ -155,12 +155,12 @@ Versus:
 .. code-block:: text
 
    Organism: Mystery bacterium (genus only)
-   
+
    Kraken2:     Present, 0.02% abundance
    Centrifuge:  Not detected
    DIAMOND:     Not detected
    metaval:     No IGV, poor BLAST match (87% identity)
-   
+
    Confidence: Very low → Likely artifact
 
 Reporting findings

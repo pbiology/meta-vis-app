@@ -153,13 +153,13 @@ Interpreting outbreak alerts
 .. code-block:: text
 
    Alert: Monkeypox virus in 5 cases (14-day window)
-   
+
    Case 1: 2% abundance, Kraken2+Centrifuge, metaval verified
    Case 2: 1.8% abundance, all classifiers, metaval verified
    Case 3: 0.5% abundance, Kraken2 only, no metaval
    Case 4: 3% abundance, all classifiers, metaval verified
    Case 5: 0.1% abundance, Kraken2 only, no metaval
-   
+
    Assessment:
    - 4 high-confidence cases (1, 2, 4) at consistent abundance
    - 1 low-confidence case (3, 5) at very low abundance
