@@ -7,6 +7,32 @@ import type { SampleProfile, SampleProfileEntry } from "../api/types";
 
 const HOST_IDS = new Set<number>([9606, 1, 0, 131567]);
 
+const SESSION_KEY = "taxonomy-filters";
+
+interface TaxFilters {
+  taxSearch: string;
+  kingdoms: string[];
+  concordanceMin: number;
+  metavalOnly: boolean;
+}
+
+function loadFilters(): Partial<TaxFilters> {
+  try {
+    return JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? "{}") as Partial<TaxFilters>;
+  } catch {
+    return {};
+  }
+}
+
+function saveFilters(patch: Partial<TaxFilters>) {
+  try {
+    const current = loadFilters();
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ ...current, ...patch }));
+  } catch {
+    // sessionStorage unavailable — silently skip
+  }
+}
+
 export interface MetavalResultRef {
   _id: string;
   taxon_id: number;
@@ -66,13 +92,15 @@ export default function TaxonomyTable({
   isNtc = false,
 }: TaxonomyTableProps) {
   const { sessionKingdoms, setSessionKingdoms } = useAuth();
-  const [taxSearch, setTaxSearch] = useState("");
-  const [taxKingdoms, setTaxKingdoms] = useState<string[]>(() => sessionKingdoms);
+
+  const saved = loadFilters();
+  const [taxSearch, setTaxSearch] = useState(() => saved.taxSearch ?? "");
+  const [taxKingdoms, setTaxKingdoms] = useState<string[]>(() => saved.kingdoms ?? sessionKingdoms);
   const [taxSort, setTaxSort] = useState<SortState>({ col: "abundance", dir: -1 });
   const [taxPage, setTaxPage] = useState(0);
-  const [metavalOnly, setMetavalOnly] = useState(false);
+  const [metavalOnly, setMetavalOnly] = useState(() => saved.metavalOnly ?? false);
   const [kingdomOpen, setKingdomOpen] = useState(false);
-  const [concordanceMin, setConcordanceMin] = useState(1);
+  const [concordanceMin, setConcordanceMin] = useState(() => saved.concordanceMin ?? 1);
   const TAX_PER_PAGE = 50;
 
   const allClassifierNames = (allProfiles ?? []).map((p) => p.classifier);
@@ -249,6 +277,7 @@ export default function TaxonomyTable({
           value={taxSearch}
           onChange={(e) => {
             setTaxSearch(e.target.value);
+            saveFilters({ taxSearch: e.target.value });
             setTaxPage(0);
           }}
           className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-blue-300"
@@ -291,6 +320,7 @@ export default function TaxonomyTable({
                       setTaxKingdoms((prev) => {
                         const next = e.target.checked ? [...prev, k] : prev.filter((x) => x !== k);
                         setSessionKingdoms(next);
+                        saveFilters({ kingdoms: next });
                         return next;
                       });
                       setTaxPage(0);
@@ -305,6 +335,7 @@ export default function TaxonomyTable({
                   onClick={() => {
                     setTaxKingdoms([]);
                     setSessionKingdoms([]);
+                    saveFilters({ kingdoms: [] });
                     setTaxPage(0);
                   }}
                   className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 border-t border-gray-50 mt-1"
@@ -323,7 +354,10 @@ export default function TaxonomyTable({
             value={concordanceMin}
             onChange={(e) => {
               const v = parseInt(e.target.value, 10);
-              if (!isNaN(v) && v >= 1) setConcordanceMin(v);
+              if (!isNaN(v) && v >= 1) {
+                setConcordanceMin(v);
+                saveFilters({ concordanceMin: v });
+              }
             }}
             className="w-12 text-xs text-gray-700 outline-none text-center bg-transparent"
           />
@@ -331,7 +365,10 @@ export default function TaxonomyTable({
         {metavalResults.length > 0 && (
           <button
             onClick={() => {
-              setMetavalOnly((o) => !o);
+              setMetavalOnly((o) => {
+                saveFilters({ metavalOnly: !o });
+                return !o;
+              });
               setTaxPage(0);
             }}
             className={`text-xs border rounded-lg px-3 py-1.5 transition-colors ${
