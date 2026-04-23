@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import KingdomBadge from "./KingdomBadge";
 import { fmt, fmtPct } from "../utils/format";
@@ -66,13 +66,36 @@ export default function TaxonomyTable({
   isNtc = false,
 }: TaxonomyTableProps) {
   const { sessionKingdoms, setSessionKingdoms } = useAuth();
-  const [taxSearch, setTaxSearch] = useState("");
-  const [taxKingdoms, setTaxKingdoms] = useState<string[]>(() => sessionKingdoms);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const [taxSearch, setTaxSearch] = useState(() => searchParams.get("taxSearch") ?? "");
+  const [taxKingdoms, setTaxKingdoms] = useState<string[]>(() => {
+    const param = searchParams.get("kingdoms");
+    if (param !== null) return param ? param.split(",") : [];
+    return sessionKingdoms;
+  });
   const [taxSort, setTaxSort] = useState<SortState>({ col: "abundance", dir: -1 });
   const [taxPage, setTaxPage] = useState(0);
-  const [metavalOnly, setMetavalOnly] = useState(false);
+  const [metavalOnly, setMetavalOnly] = useState(
+    () => searchParams.get("metavalOnly") === "true"
+  );
   const [kingdomOpen, setKingdomOpen] = useState(false);
-  const [concordanceMin, setConcordanceMin] = useState(1);
+  const [concordanceMin, setConcordanceMin] = useState(() => {
+    const v = parseInt(searchParams.get("concordance") ?? "", 10);
+    return isNaN(v) || v < 1 ? 1 : v;
+  });
+
+  function patchParam(key: string, value: string | null) {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value === null) next.delete(key);
+        else next.set(key, value);
+        return next;
+      },
+      { replace: true }
+    );
+  }
   const TAX_PER_PAGE = 50;
 
   const allClassifierNames = (allProfiles ?? []).map((p) => p.classifier);
@@ -249,6 +272,7 @@ export default function TaxonomyTable({
           value={taxSearch}
           onChange={(e) => {
             setTaxSearch(e.target.value);
+            patchParam("taxSearch", e.target.value || null);
             setTaxPage(0);
           }}
           className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-blue-300"
@@ -291,6 +315,7 @@ export default function TaxonomyTable({
                       setTaxKingdoms((prev) => {
                         const next = e.target.checked ? [...prev, k] : prev.filter((x) => x !== k);
                         setSessionKingdoms(next);
+                        patchParam("kingdoms", next.length ? next.join(",") : null);
                         return next;
                       });
                       setTaxPage(0);
@@ -305,6 +330,7 @@ export default function TaxonomyTable({
                   onClick={() => {
                     setTaxKingdoms([]);
                     setSessionKingdoms([]);
+                    patchParam("kingdoms", null);
                     setTaxPage(0);
                   }}
                   className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 border-t border-gray-50 mt-1"
@@ -323,7 +349,10 @@ export default function TaxonomyTable({
             value={concordanceMin}
             onChange={(e) => {
               const v = parseInt(e.target.value, 10);
-              if (!isNaN(v) && v >= 1) setConcordanceMin(v);
+              if (!isNaN(v) && v >= 1) {
+                setConcordanceMin(v);
+                patchParam("concordance", v === 1 ? null : String(v));
+              }
             }}
             className="w-12 text-xs text-gray-700 outline-none text-center bg-transparent"
           />
@@ -331,7 +360,10 @@ export default function TaxonomyTable({
         {metavalResults.length > 0 && (
           <button
             onClick={() => {
-              setMetavalOnly((o) => !o);
+              setMetavalOnly((o) => {
+                patchParam("metavalOnly", !o ? "true" : null);
+                return !o;
+              });
               setTaxPage(0);
             }}
             className={`text-xs border rounded-lg px-3 py-1.5 transition-colors ${
