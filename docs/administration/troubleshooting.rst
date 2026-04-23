@@ -284,13 +284,13 @@ Getting help
 
    # Backend logs
    docker logs -f meta-vis-app
-   
+
    # MongoDB logs
    docker logs -f mongodb
-   
+
    # journalctl (if using systemd)
    journalctl -u meta-vis-app -f
-   
+
    # Application logs in python
    tail -f /path/to/ingest.log
 
@@ -309,10 +309,10 @@ Set ``LOG_LEVEL=debug`` in ``.env`` for verbose output:
 
    # Python packages
    pip list | grep fastapi
-   
+
    # Node packages
    npm list react
-   
+
    # System services
    docker ps
    docker ps -a  # includes stopped containers

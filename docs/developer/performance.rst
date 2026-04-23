@@ -36,7 +36,7 @@ Backend performance
    # Monitor system resources
    top                    # CPU, memory
    iotop                  # Disk I/O
-   
+
    # MongoDB profiling
    mongosh
    > db.setProfilingLevel(1)  # Enable profiling
@@ -72,7 +72,7 @@ Ensure all I/O is async:
    # Good - async
    async def get_case(case_id: str):
        return await db.cases.find_one({"case_id": case_id})
-   
+
    # Bad - blocking
    def get_case(case_id: str):
        return db.cases.find_one({"case_id": case_id})
@@ -96,7 +96,7 @@ Add missing indexes:
    // For frequent queries
    db.samples.createIndex({ "case_id": 1 })
    db.samples.createIndex({ "order_date": -1 })
-   
+
    // For text search
    db.taxa.createIndex({ "name": "text" })
 
@@ -106,7 +106,7 @@ Add missing indexes:
 
    // Bad - scans full collection
    db.samples.find({ name: "Influenza" })
-   
+
    // Good - uses index
    db.samples.find({ case_id: "case-001" })
 
@@ -118,7 +118,7 @@ Fetch only needed fields:
 
    // Bad - returns entire document
    db.cases.findOne({ case_id: "case-001" })
-   
+
    // Good - returns only needed fields
    db.cases.findOne(
      { case_id: "case-001" },
@@ -133,7 +133,7 @@ If queries slow down over time:
 
    # Restart MongoDB
    docker compose restart mongodb
-   
+
    # Check database size
    mongosh
    > db.stats()
@@ -157,7 +157,7 @@ Check what's being bundled:
    cd frontend
    npm run build
    ls -lh dist/
-   
+
    # Analyze bundle
    npm install --save-dev rollup-plugin-visualizer
    # Then check build output
@@ -214,7 +214,7 @@ Ingestion can take 15–30 minutes. This is normal.
 
    # Watch progress
    tail -f ingest.log
-   
+
    # Monitor resources
    top
    iostat 1
@@ -349,7 +349,7 @@ Benchmarking
 
    # Before optimization
    time curl http://localhost:8000/api/cases
-   
+
    # After optimization
    time curl http://localhost:8000/api/cases
 
@@ -406,7 +406,7 @@ Troubleshooting slow performance
 
    # Check resource usage
    docker stats meta-vis-app
-   
+
    # View application logs
    docker logs -f meta-vis-app
 
@@ -424,7 +424,7 @@ Troubleshooting slow performance
 
    # Check latency
    ping backend-server
-   
+
    # Check bandwidth
    iperf3 -c backend-server
 

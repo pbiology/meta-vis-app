@@ -44,7 +44,7 @@ A: Yes. Docker is used for MongoDB and optional MinIO. You can:
 
 **Q: What are the minimum system requirements?**
 
-A: 
+A:
 - **Development:** 4 GB RAM, 2 CPU cores, 50 GB disk
 - **Production (small):** 8 GB RAM, 4 CPU cores, 500 GB disk
 - **Production (large):** 16+ GB RAM, 8+ CPU cores, 2+ TB disk
@@ -60,7 +60,7 @@ Or use managed services for MongoDB and S3, run app natively.
 
 **Q: How do I update meta-vis-app?**
 
-A: 
+A:
 1. Pull latest code: ``git pull origin main``
 2. Stop services: ``docker compose down``
 3. Update dependencies:
@@ -302,7 +302,7 @@ A: Yes:
 
    # MongoDB
    mongodump --uri="..." --out=/backups/$(date +%Y%m%d)
-   
+
    # S3 (if using)
    aws s3 sync s3://bucket-name /backups/$(date +%Y%m%d)
 
@@ -375,7 +375,7 @@ A: Check:
 Next steps
 ==========
 
-Still have questions? 
+Still have questions?
 
 - Check :doc:`../administration/troubleshooting` for more issues
 - Review relevant guide section (user guide, admin, developer)

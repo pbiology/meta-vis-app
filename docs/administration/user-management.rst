@@ -187,7 +187,7 @@ Best practice recommendations
    - 1–2 admins (IT staff)
    - 5–10 writers (senior clinicians/reviewers)
    - Rest as readers (junior clinicians)
-   
+
    Consider:
    - Department-level grouping
    - Training program for writers

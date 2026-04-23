@@ -30,7 +30,7 @@ The simplest ingest command:
 
    cd backend
    conda activate meta-vis-app
-   
+
    python ingest.py \
      --case-id my-case-001 \
      --order-date 2026-02-20 \
@@ -123,7 +123,7 @@ taxprofiler appends suffixes to column names based on classifier and database:
 .. code-block:: text
 
    <sample_id>_<db>.kraken2.kraken2.report
-   
+
    Example: patient-001_k2_pluspf.kraken2.kraken2.report
 
 **Centrifuge:**
@@ -131,7 +131,7 @@ taxprofiler appends suffixes to column names based on classifier and database:
 .. code-block:: text
 
    <sample_id>_<db>.centrifuge
-   
+
    Example: patient-001_p_compressed+h+v.centrifuge
 
 **DIAMOND:**
@@ -139,7 +139,7 @@ taxprofiler appends suffixes to column names based on classifier and database:
 .. code-block:: text
 
    <sample_id>_<db>.diamond
-   
+
    Example: patient-001_diamond.diamond
 
 Check the taxpasta TSV header to confirm exact names.
@@ -189,23 +189,23 @@ To ingest multiple cases, create a shell script:
 .. code-block:: bash
 
    #!/bin/bash
-   
+
    cases=(
      "case-001:2026-02-01"
      "case-002:2026-02-05"
      "case-003:2026-02-10"
    )
-   
+
    for case_info in "${cases[@]}"; do
        IFS=':' read -r case_id order_date <<< "$case_info"
-       
+
        python ingest.py \
          --case-id "$case_id" \
          --order-date "$order_date" \
          --multiqc "/data/$case_id/multiqc_data.json" \
          --pipeline-info "/data/$case_id/pipeline_info/software_versions.yml" \
          ... other arguments ...
-       
+
        if [ $? -eq 0 ]; then
            echo "✓ Ingested $case_id"
        else

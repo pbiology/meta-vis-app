@@ -76,9 +76,9 @@ Examples:
 .. code-block:: text
 
    --classifier "kraken2 db=k2_pluspf taxpasta=/data/kraken2.tsv krona=/data/kraken2.html"
-   
+
    --classifier "centrifuge db=p_compressed+h+v taxpasta=/data/centrifuge.tsv krona=/data/centrifuge.html"
-   
+
    --classifier "diamond db=diamond taxpasta=/data/diamond.tsv"
 
 **--sample ID [--sample ...]**
@@ -102,9 +102,9 @@ Examples:
 .. code-block:: text
 
    --sample "sample_id=SRR001 type=sample material=DNA subject_id=PT-001 column_kraken2=SRR001_k2_pluspf.kraken2.kraken2.report column_centrifuge=SRR001_p_compressed+h+v.centrifuge"
-   
+
    --sample "sample_id=ctrl-pos type=positive_ctrl material=DNA column_kraken2=ctrl-pos_k2_pluspf.kraken2.kraken2.report"
-   
+
    --sample "sample_id=ctrl-neg type=negative_ctrl material=DNA column_kraken2=ctrl-neg_k2_pluspf.kraken2.kraken2.report"
 
 **--password PASS**
@@ -151,7 +151,7 @@ taxprofiler creates merged TSV files with standardized column naming.
 .. code-block:: text
 
    Format: <sample_id>_<db>.kraken2.kraken2.report
-   
+
    Example: SRR001_k2_pluspf.kraken2.kraken2.report
 
 **Centrifuge:**
@@ -159,7 +159,7 @@ taxprofiler creates merged TSV files with standardized column naming.
 .. code-block:: text
 
    Format: <sample_id>_<db>.centrifuge
-   
+
    Example: SRR001_p_compressed+h+v.centrifuge
 
 **DIAMOND:**
@@ -167,7 +167,7 @@ taxprofiler creates merged TSV files with standardized column naming.
 .. code-block:: text
 
    Format: <sample_id>_<db>.diamond
-   
+
    Example: SRR001_diamond.diamond
 
 To find exact column names:
@@ -176,7 +176,7 @@ To find exact column names:
 
    # View header
    head -1 taxpasta_merged.tsv
-   
+
    # Count columns
    head -1 taxpasta_merged.tsv | tr '\t' '\n' | nl
 
@@ -274,19 +274,19 @@ Complete working examples
 
    #!/bin/bash
    set -e
-   
+
    # Array of cases: (case_id:order_date:data_path)
    cases=(
      "case-001:2026-02-01:/data/case-001"
      "case-002:2026-02-05:/data/case-002"
      "case-003:2026-02-10:/data/case-003"
    )
-   
+
    for case_spec in "${cases[@]}"; do
        IFS=':' read -r case_id order_date data_path <<< "$case_spec"
-       
+
        echo "Ingesting $case_id..."
-       
+
        python ingest.py \
          --case-id "$case_id" \
          --order-date "$order_date" \
@@ -296,7 +296,7 @@ Complete working examples
          --sample "sample_id=sample1 type=sample material=DNA column_kraken2=sample1_k2_pluspf.kraken2.kraken2.report" \
          --password mypassword \
          --quiet
-       
+
        echo "✓ $case_id ingested"
    done
 
