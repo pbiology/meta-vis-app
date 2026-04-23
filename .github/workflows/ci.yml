@@ -195,7 +195,7 @@ jobs:
         if: matrix.component == 'backend'
         working-directory: backend
         run: |
-          pip install ruff>=0.4.0
+          pip install ruff>=0.15.0
           ruff format --check app/
 
       - name: Set up Node (frontend)
