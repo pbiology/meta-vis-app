@@ -32,6 +32,12 @@ Development setup
    cd frontend
    npm install
 
+**Install pre-commit hooks** (mandatory — runs ruff, prettier and sphinx-lint):
+
+.. code-block:: bash
+
+   pre-commit install
+
 **Start development servers:**
 
 Backend:
@@ -59,10 +65,10 @@ Uses ruff and mypy for linting and type checking.
 
    # Format code
    ruff format .
-   
+
    # Check linting
    ruff check .
-   
+
    # Type checking
    mypy app/
 
@@ -83,7 +89,7 @@ Uses Prettier and ESLint.
 
    # Format code
    npm run format
-   
+
    # Check linting
    npm run lint
 
@@ -105,7 +111,7 @@ All Python functions must be properly type-hinted:
    async def get_case(case_id: str) -> CaseDetail:
        """Get case details by ID."""
        ...
-   
+
    # Bad - missing return type
    async def get_case(case_id: str):
        ...
@@ -196,9 +202,9 @@ Format:
 .. code-block:: text
 
    <type>(<scope>): <subject>
-   
+
    <body>
-   
+
    <footer>
 
 **Types:**
@@ -276,7 +282,7 @@ API development
    .. code-block:: python
 
       from pydantic import BaseModel
-      
+
       class MyResponse(BaseModel):
           """Response model."""
           id: str
@@ -288,9 +294,9 @@ API development
 
       from fastapi import APIRouter, HTTPException
       from typing import List
-      
+
       router = APIRouter(prefix="/api/my", tags=["my"])
-      
+
       @router.get("/endpoint", response_model=List[MyResponse])
       async def get_endpoint(param: str) -> List[MyResponse]:
           """Get endpoint description."""
@@ -303,7 +309,7 @@ API development
    .. code-block:: python
 
       from app.routers import my
-      
+
       app.include_router(my.router)
 
 4. Test the endpoint:
@@ -438,7 +444,7 @@ Write comments for "why", not "what":
    # Bad - explains what the code does
    # Add the values
    total = sum(values)
-   
+
    # Good - explains why
    # Use sum() to efficiently compute total abundance for sorting
    total = sum(values)
@@ -452,14 +458,14 @@ All public functions need docstrings:
    async def ingest_case(case_id: str, data: dict) -> CaseDetail:
        """
        Ingest a new case into the database.
-       
+
        Args:
            case_id: Unique case identifier
            data: Case data including samples and classifiers
-       
+
        Returns:
            CaseDetail with created case information
-       
+
        Raises:
            ValueError: If case_id is already in use
            ValidationError: If data doesn't match expected schema
@@ -472,15 +478,15 @@ Each major component should have a README:
 .. code-block:: markdown
 
    # Outbreak Detection Module
-   
+
    Monitors viral taxa across cases for early outbreak detection.
-   
+
    ## How it works
    ...
-   
+
    ## API
    ...
-   
+
    ## Performance
    ...
 
@@ -514,7 +520,7 @@ Debugging tips
    # Add debugging to code
    import logging
    logger = logging.getLogger(__name__)
-   
+
    logger.debug(f"Processing case: {case_id}")
    logger.warning(f"Unexpected result: {result}")
 
