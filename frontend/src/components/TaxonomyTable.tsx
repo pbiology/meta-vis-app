@@ -1,11 +1,37 @@
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import KingdomBadge from "./KingdomBadge";
 import { fmt, fmtPct } from "../utils/format";
 import type { SampleProfile, SampleProfileEntry } from "../api/types";
 
 const HOST_IDS = new Set<number>([9606, 1, 0, 131567]);
+
+const SESSION_KEY = "taxonomy-filters";
+
+interface TaxFilters {
+  taxSearch: string;
+  kingdoms: string[];
+  concordanceMin: number;
+  metavalOnly: boolean;
+}
+
+function loadFilters(): Partial<TaxFilters> {
+  try {
+    return JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? "{}") as Partial<TaxFilters>;
+  } catch {
+    return {};
+  }
+}
+
+function saveFilters(patch: Partial<TaxFilters>) {
+  try {
+    const current = loadFilters();
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ ...current, ...patch }));
+  } catch {
+    // sessionStorage unavailable — silently skip
+  }
+}
 
 export interface MetavalResultRef {
   _id: string;
@@ -66,34 +92,15 @@ export default function TaxonomyTable({
   isNtc = false,
 }: TaxonomyTableProps) {
   const { sessionKingdoms, setSessionKingdoms } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [taxSearch, setTaxSearch] = useState(() => searchParams.get("taxSearch") ?? "");
-  const [taxKingdoms, setTaxKingdoms] = useState<string[]>(() => {
-    const param = searchParams.get("kingdoms");
-    if (param !== null) return param ? param.split(",") : [];
-    return sessionKingdoms;
-  });
+  const saved = loadFilters();
+  const [taxSearch, setTaxSearch] = useState(() => saved.taxSearch ?? "");
+  const [taxKingdoms, setTaxKingdoms] = useState<string[]>(() => saved.kingdoms ?? sessionKingdoms);
   const [taxSort, setTaxSort] = useState<SortState>({ col: "abundance", dir: -1 });
   const [taxPage, setTaxPage] = useState(0);
-  const [metavalOnly, setMetavalOnly] = useState(() => searchParams.get("metavalOnly") === "true");
+  const [metavalOnly, setMetavalOnly] = useState(() => saved.metavalOnly ?? false);
   const [kingdomOpen, setKingdomOpen] = useState(false);
-  const [concordanceMin, setConcordanceMin] = useState(() => {
-    const v = parseInt(searchParams.get("concordance") ?? "", 10);
-    return isNaN(v) || v < 1 ? 1 : v;
-  });
-
-  function patchParam(key: string, value: string | null) {
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        if (value === null) next.delete(key);
-        else next.set(key, value);
-        return next;
-      },
-      { replace: true }
-    );
-  }
+  const [concordanceMin, setConcordanceMin] = useState(() => saved.concordanceMin ?? 1);
   const TAX_PER_PAGE = 50;
 
   const allClassifierNames = (allProfiles ?? []).map((p) => p.classifier);
@@ -270,7 +277,7 @@ export default function TaxonomyTable({
           value={taxSearch}
           onChange={(e) => {
             setTaxSearch(e.target.value);
-            patchParam("taxSearch", e.target.value || null);
+            saveFilters({ taxSearch: e.target.value });
             setTaxPage(0);
           }}
           className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-blue-300"
@@ -313,7 +320,7 @@ export default function TaxonomyTable({
                       setTaxKingdoms((prev) => {
                         const next = e.target.checked ? [...prev, k] : prev.filter((x) => x !== k);
                         setSessionKingdoms(next);
-                        patchParam("kingdoms", next.length ? next.join(",") : null);
+                        saveFilters({ kingdoms: next });
                         return next;
                       });
                       setTaxPage(0);
@@ -328,7 +335,7 @@ export default function TaxonomyTable({
                   onClick={() => {
                     setTaxKingdoms([]);
                     setSessionKingdoms([]);
-                    patchParam("kingdoms", null);
+                    saveFilters({ kingdoms: [] });
                     setTaxPage(0);
                   }}
                   className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 border-t border-gray-50 mt-1"
@@ -349,7 +356,7 @@ export default function TaxonomyTable({
               const v = parseInt(e.target.value, 10);
               if (!isNaN(v) && v >= 1) {
                 setConcordanceMin(v);
-                patchParam("concordance", v === 1 ? null : String(v));
+                saveFilters({ concordanceMin: v });
               }
             }}
             className="w-12 text-xs text-gray-700 outline-none text-center bg-transparent"
@@ -359,7 +366,7 @@ export default function TaxonomyTable({
           <button
             onClick={() => {
               setMetavalOnly((o) => {
-                patchParam("metavalOnly", !o ? "true" : null);
+                saveFilters({ metavalOnly: !o });
                 return !o;
               });
               setTaxPage(0);
