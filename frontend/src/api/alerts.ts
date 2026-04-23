@@ -1,5 +1,5 @@
 import client from "./client";
-import type { Outbreak, OutbreaksResponse } from "./types";
+import type { IgnorelistItem, Outbreak, OutbreaksResponse, PathogenItem } from "./types";
 
 interface RawConfigResult {
   config_name?: string;
@@ -16,7 +16,7 @@ interface RawOutbreaksResponse {
 export async function getOutbreaks(
   windowDays = 14,
   analysisTypes: string[] | null = null
-): Promise<OutbreaksResponse | RawOutbreaksResponse> {
+): Promise<OutbreaksResponse> {
   const params: Record<string, unknown> = { window_days: windowDays };
   if (analysisTypes && analysisTypes.length > 0) {
     params.analysis_types = analysisTypes;
@@ -31,7 +31,6 @@ export async function getOutbreaks(
   // Frontend expects: { outbreaks: [...] } for backward compatibility
   const data = res.data;
   if (data.results && Array.isArray(data.results)) {
-    // Flatten all outbreaks from all configs into a single array
     const allOutbreaks: Outbreak[] = [];
     for (const configResult of data.results) {
       for (const outbreak of configResult.outbreaks || []) {
@@ -47,13 +46,15 @@ export async function getOutbreaks(
       outbreaks: allOutbreaks,
     };
   }
-  // Fallback if response format is different
-  return data;
+  return {
+    window_days: data.window_days,
+    outbreaks: data.outbreaks ?? [],
+  };
 }
 
-export async function getIgnorelist(superkingdom: string | null = null): Promise<unknown> {
+export async function getIgnorelist(superkingdom: string | null = null): Promise<IgnorelistItem[]> {
   const params = superkingdom ? { superkingdom } : {};
-  const res = await client.get("/alerts/ignorelist", { params });
+  const res = await client.get<IgnorelistItem[]>("/alerts/ignorelist", { params });
   return res.data;
 }
 
@@ -62,8 +63,8 @@ export async function addToIgnorelist(
   taxonName: string,
   superkingdom = "Viruses",
   reason: string | null = null
-): Promise<unknown> {
-  const res = await client.post("/alerts/ignorelist", {
+): Promise<IgnorelistItem> {
+  const res = await client.post<IgnorelistItem>("/alerts/ignorelist", {
     taxon_id: taxonId,
     taxon_name: taxonName,
     superkingdom,
@@ -72,21 +73,20 @@ export async function addToIgnorelist(
   return res.data;
 }
 
-export async function removeFromIgnorelist(taxonId: number): Promise<unknown> {
-  const res = await client.delete(`/alerts/ignorelist/${taxonId}`);
-  return res.data;
+export async function removeFromIgnorelist(taxonId: number): Promise<void> {
+  await client.delete(`/alerts/ignorelist/${taxonId}`);
 }
 
 export async function updateIgnorelistNote(
   taxonId: number,
   reason: string | null
-): Promise<unknown> {
-  const res = await client.patch(`/alerts/ignorelist/${taxonId}`, { reason });
+): Promise<IgnorelistItem> {
+  const res = await client.patch<IgnorelistItem>(`/alerts/ignorelist/${taxonId}`, { reason });
   return res.data;
 }
 
-export async function getPathogens(): Promise<unknown> {
-  const res = await client.get("/alerts/pathogens");
+export async function getPathogens(): Promise<PathogenItem[]> {
+  const res = await client.get<PathogenItem[]>("/alerts/pathogens");
   return res.data;
 }
 
@@ -95,8 +95,8 @@ export async function addToPathogens(
   taxonName: string,
   superkingdom = "Viruses",
   notes: string | null = null
-): Promise<unknown> {
-  const res = await client.post("/alerts/pathogens", {
+): Promise<PathogenItem> {
+  const res = await client.post<PathogenItem>("/alerts/pathogens", {
     taxon_id: taxonId,
     taxon_name: taxonName,
     superkingdom,
@@ -105,7 +105,6 @@ export async function addToPathogens(
   return res.data;
 }
 
-export async function removeFromPathogens(taxonId: number): Promise<unknown> {
-  const res = await client.delete(`/alerts/pathogens/${taxonId}`);
-  return res.data;
+export async function removeFromPathogens(taxonId: number): Promise<void> {
+  await client.delete(`/alerts/pathogens/${taxonId}`);
 }

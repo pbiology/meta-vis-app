@@ -3,8 +3,54 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import KingdomBadge from "./KingdomBadge";
 import { fmt, fmtPct } from "../utils/format";
+import type { SampleProfile, SampleProfileEntry } from "../api/types";
 
-const HOST_IDS = new Set([9606, 1, 0, 131567]);
+const HOST_IDS = new Set<number>([9606, 1, 0, 131567]);
+
+export interface MetavalResultRef {
+  _id: string;
+  taxon_id: number;
+  classifier: string;
+}
+
+export interface NtcProfileForClassifier {
+  sample_id: string;
+  classifiers?: Record<string, Record<number, number>>;
+}
+
+export interface ContaminantConfig {
+  threshold?: number;
+  eligible_ranks?: string[];
+}
+
+export interface ClfQc {
+  classified_reads?: number;
+  unclassified_reads?: number;
+  total_reads?: number;
+  queries_aligned?: number;
+  [key: string]: unknown;
+}
+
+interface TaxonomyTableProps {
+  profile: SampleProfile;
+  allProfiles?: SampleProfile[];
+  clfQc?: ClfQc | null;
+  metavalResults: MetavalResultRef[];
+  sampleId: string;
+  outbreakTaxonIds: Set<number>;
+  ntcProfiles: NtcProfileForClassifier[];
+  contaminantConfig?: ContaminantConfig | null;
+  pathogenIds?: Set<number>;
+  abundanceIsFraction?: boolean;
+  isNtc?: boolean;
+}
+
+type SortCol = "name" | "rank" | "superkingdom" | "abundance" | "ntc" | "concordance";
+
+interface SortState {
+  col: SortCol;
+  dir: 1 | -1;
+}
 
 export default function TaxonomyTable({
   profile,
@@ -18,21 +64,19 @@ export default function TaxonomyTable({
   pathogenIds,
   abundanceIsFraction = false,
   isNtc = false,
-}) {
+}: TaxonomyTableProps) {
   const { sessionKingdoms, setSessionKingdoms } = useAuth();
   const [taxSearch, setTaxSearch] = useState("");
-  const [taxKingdoms, setTaxKingdoms] = useState(() => sessionKingdoms);
-  const [taxSort, setTaxSort] = useState({ col: "abundance", dir: -1 });
+  const [taxKingdoms, setTaxKingdoms] = useState<string[]>(() => sessionKingdoms);
+  const [taxSort, setTaxSort] = useState<SortState>({ col: "abundance", dir: -1 });
   const [taxPage, setTaxPage] = useState(0);
   const [metavalOnly, setMetavalOnly] = useState(false);
   const [kingdomOpen, setKingdomOpen] = useState(false);
   const [concordanceMin, setConcordanceMin] = useState(1);
   const TAX_PER_PAGE = 50;
 
-  // Build a map of taxon_id -> Set of classifier names that detected it
-  // at or above the concordanceMin threshold, across all classifiers for this sample.
   const allClassifierNames = (allProfiles ?? []).map((p) => p.classifier);
-  const concordanceMap = {};
+  const concordanceMap: Record<number, Set<string>> = {};
   for (const p of allProfiles ?? []) {
     for (const entry of p.profile ?? []) {
       if (entry.abundance >= concordanceMin) {
@@ -60,7 +104,6 @@ export default function TaxonomyTable({
           )
           .reduce((sum, t) => sum + t.abundance, 0);
 
-  // NTC profiles for this classifier — list of {sample_id, abundanceMap}
   const ntcForClassifier = ntcProfiles.map((ntc) => ({
     sample_id: ntc.sample_id,
     abundanceMap: ntc.classifiers?.[profile.classifier] ?? {},
@@ -75,7 +118,7 @@ export default function TaxonomyTable({
 
   const filtered = tableEntries.filter((t) => {
     if (taxSearch && !t.name?.toLowerCase().includes(taxSearch.toLowerCase())) return false;
-    if (taxKingdoms.length > 0 && !taxKingdoms.includes(t.superkingdom)) return false;
+    if (taxKingdoms.length > 0 && !taxKingdoms.includes(t.superkingdom ?? "")) return false;
     if (
       metavalOnly &&
       !metavalResults.find((r) => r.taxon_id === t.taxon_id && r.classifier === profile.classifier)
@@ -84,18 +127,14 @@ export default function TaxonomyTable({
     return true;
   });
 
-  const ntcSum = (taxon_id) =>
+  const ntcSum = (taxon_id: number) =>
     ntcForClassifier.reduce((sum, ntc) => sum + (ntc.abundanceMap[taxon_id] ?? 0), 0);
 
-  // Contaminant flag: NTC read sum (already scoped to this sample's material
-  // by the backend query, and to the current classifier by `ntcForClassifier`
-  // above) exceeds the configured threshold, and the taxon's rank is one
-  // the clinicians consider actionable.
   const contaminantThreshold = contaminantConfig?.threshold ?? null;
   const eligibleRanks = contaminantConfig?.eligible_ranks
     ? new Set(contaminantConfig.eligible_ranks)
     : null;
-  const isContaminant = (t) => {
+  const isContaminant = (t: SampleProfileEntry) => {
     if (!hasNtc || contaminantThreshold == null || !eligibleRanks) return false;
     if (!eligibleRanks.has(t.rank ?? "no rank")) return false;
     return ntcSum(t.taxon_id) > contaminantThreshold;
@@ -111,7 +150,6 @@ export default function TaxonomyTable({
       const aCount = concordanceMap[a.taxon_id]?.size ?? 0;
       const bCount = concordanceMap[b.taxon_id]?.size ?? 0;
       if (aCount !== bCount) return taxSort.dir * (aCount - bCount);
-      // Secondary sort: total reads across all classifiers
       const aReads = (allProfiles ?? []).reduce((sum, p) => {
         const entry = p.profile?.find((e) => e.taxon_id === a.taxon_id);
         return sum + (entry?.abundance ?? 0);
@@ -130,16 +168,16 @@ export default function TaxonomyTable({
   const maxAbundance =
     tableEntries.length > 0 ? Math.max(...tableEntries.map((t) => t.abundance)) : 1;
 
-  function toggleSort(col) {
+  function toggleSort(col: SortCol) {
     setTaxSort((prev) =>
       prev.col === col
-        ? { col, dir: prev.dir * -1 }
+        ? { col, dir: (prev.dir * -1) as 1 | -1 }
         : { col, dir: col === "name" || col === "superkingdom" ? 1 : -1 }
     );
     setTaxPage(0);
   }
 
-  function sortArrow(col) {
+  function sortArrow(col: SortCol) {
     if (taxSort.col !== col) return null;
     return taxSort.dir === 1 ? " ↑" : " ↓";
   }
@@ -149,9 +187,36 @@ export default function TaxonomyTable({
     kingdoms.map((k) => [k, tableEntries.filter((t) => t.superkingdom === k).length])
   );
 
+  interface ColDef {
+    label: string;
+    col: SortCol | null;
+  }
+  const columns: ColDef[] = [
+    { label: "Organism", col: "name" },
+    { label: "Rank", col: "rank" },
+    { label: "Kingdom", col: "superkingdom" },
+    { label: abundanceIsFraction ? "Abundance" : "Reads", col: "abundance" },
+    ...(!abundanceIsFraction
+      ? [
+          {
+            label: "Classifiers",
+            col: allClassifierNames.length > 1 ? "concordance" : null,
+          } as ColDef,
+        ]
+      : []),
+    ...(showNtcColumn
+      ? [
+          {
+            label: abundanceIsFraction ? "Abundance in NTC" : "Reads in NTC",
+            col: hasNtc ? "ntc" : null,
+          } as ColDef,
+        ]
+      : []),
+    { label: "% of non-host", col: null },
+  ];
+
   return (
     <div className="flex flex-col gap-3">
-      {/* Kingdom badges + stats */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="flex-1" />
         {kingdoms.map((k) => kingdomCounts[k] > 0 && <KingdomBadge key={k} kingdom={k} />)}
@@ -177,7 +242,6 @@ export default function TaxonomyTable({
         </div>
       </div>
 
-      {/* Filters */}
       <div className="flex gap-2 items-center">
         <input
           type="text"
@@ -281,7 +345,6 @@ export default function TaxonomyTable({
         )}
       </div>
 
-      {/* Table */}
       {pageEntries.length === 0 ? (
         <p className="text-xs text-gray-400 py-4 text-center">No organisms match your filters.</p>
       ) : (
@@ -289,29 +352,7 @@ export default function TaxonomyTable({
           <table className="w-full text-left">
             <thead>
               <tr>
-                {[
-                  { label: "Organism", col: "name" },
-                  { label: "Rank", col: "rank" },
-                  { label: "Kingdom", col: "superkingdom" },
-                  { label: abundanceIsFraction ? "Abundance" : "Reads", col: "abundance" },
-                  ...(!abundanceIsFraction
-                    ? [
-                        {
-                          label: "Classifiers",
-                          col: allClassifierNames.length > 1 ? "concordance" : null,
-                        },
-                      ]
-                    : []),
-                  ...(showNtcColumn
-                    ? [
-                        {
-                          label: abundanceIsFraction ? "Abundance in NTC" : "Reads in NTC",
-                          col: hasNtc ? "ntc" : null,
-                        },
-                      ]
-                    : []),
-                  { label: "% of non-host", col: null },
-                ].map(({ label, col }) => (
+                {columns.map(({ label, col }) => (
                   <th
                     key={label}
                     onClick={col ? () => toggleSort(col) : undefined}
@@ -444,7 +485,7 @@ export default function TaxonomyTable({
                               count: ntc.abundanceMap[t.taxon_id] ?? 0,
                             }));
                             const allZero = vals.every((v) => v.count === 0);
-                            const fmtVal = (v) =>
+                            const fmtVal = (v: number) =>
                               abundanceIsFraction ? fmtPct(v * 100) : v.toLocaleString();
                             return (
                               <span

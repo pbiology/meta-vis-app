@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   getCase,
   getCaseSamples,
@@ -14,31 +14,47 @@ import { getKronaUrl } from "../api/samples";
 import Badge from "../components/Badge";
 import { useAuth } from "../context/AuthContext";
 import { fmt, fmtPct } from "../utils/format";
+import { useRequiredParam } from "../utils/routeParams";
+import type { Case, Sample } from "../api/types";
 
-const FILTERS = ["All", "Sample", "Controls"];
+const FILTERS = ["All", "Sample", "Controls"] as const;
+type Filter = (typeof FILTERS)[number];
+
+interface Classifier {
+  name: string;
+  db?: string;
+  krona_id?: string;
+}
+
+interface TopTaxon {
+  name: string;
+  superkingdom?: string;
+  pct?: number;
+  abundance?: number;
+}
 
 export default function CaseDetail() {
-  const { caseId } = useParams();
+  const caseId = useRequiredParam("caseId");
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { role, user } = useAuth();
 
-  const [caseData, setCaseData] = useState(null);
-  const [samples, setSamples] = useState([]);
+  const [caseData, setCaseData] = useState<Case | null>(null);
+  const [samples, setSamples] = useState<Sample[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [filter, setFilter] = useState("All");
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>("All");
   const [reviewing, setReviewing] = useState(false);
   const [unreviewConfirm, setUnreviewConfirm] = useState(false);
-  const [kronaUrls, setKronaUrls] = useState({});
-  const [kronaErrors, setKronaErrors] = useState({});
-  const [kronaSelectedSample, setKronaSelectedSample] = useState(null);
-  const [kronaTab, setKronaTab] = useState(searchParams.get("classifier"));
+  const [kronaUrls, setKronaUrls] = useState<Record<string, string>>({});
+  const [kronaErrors, setKronaErrors] = useState<Record<string, boolean>>({});
+  const [kronaSelectedSample, setKronaSelectedSample] = useState<string | null>(null);
+  const [kronaTab, setKronaTab] = useState<string | null>(searchParams.get("classifier"));
   const [provenanceOpen, setProvenanceOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
-  const [multiqcUrl, setMultiqcUrl] = useState(null);
+  const [multiqcUrl, setMultiqcUrl] = useState<string | null>(null);
   const [multiqcLoading, setMultiqcLoading] = useState(false);
   const [multiqcError, setMultiqcError] = useState(false);
 
@@ -52,38 +68,37 @@ export default function CaseDetail() {
         setCaseData(fetchedCase);
         setSamples(samplesData);
 
-        if (fetchedCase.has_krona && fetchedCase.classifiers?.length) {
+        const classifiers = (fetchedCase.classifiers as Classifier[] | undefined) ?? [];
+        if (fetchedCase.has_krona && classifiers.length) {
           const requestedClassifier = searchParams.get("classifier");
-          const match = fetchedCase.classifiers.find((c) => c.name === requestedClassifier);
-          setKronaTab(match ? requestedClassifier : fetchedCase.classifiers[0].name);
+          const match = classifiers.find((c) => c.name === requestedClassifier);
+          setKronaTab(match ? requestedClassifier : classifiers[0].name);
 
           const isTrana = samplesData.some((s) => s.trana);
           if (isTrana) {
-            // Trana: Krona is per-sample, fetch via the sample endpoint
             const kronasamples = samplesData.filter((s) => s.has_krona);
-            setKronaSelectedSample(kronasamples[0]?._id ?? null);
+            setKronaSelectedSample((kronasamples[0]?._id as string | undefined) ?? null);
             const urlEntries = await Promise.all(
               kronasamples.map(async (s) => {
                 try {
-                  const url = await getKronaUrl(s._id);
-                  return { id: s._id, url, error: false };
+                  const url = await getKronaUrl(s._id as string);
+                  return { id: s._id as string, url, error: false };
                 } catch {
-                  return { id: s._id, url: null, error: true };
+                  return { id: s._id as string, url: null, error: true };
                 }
               })
             );
-            const urls = {};
-            const errors = {};
+            const urls: Record<string, string> = {};
+            const errors: Record<string, boolean> = {};
             urlEntries.forEach(({ id, url, error }) => {
               if (error) errors[id] = true;
-              else urls[id] = url;
+              else if (url) urls[id] = url;
             });
             setKronaUrls(urls);
             setKronaErrors(errors);
           } else {
-            // Taxprofiler: Krona is per-classifier
             const urlEntries = await Promise.all(
-              fetchedCase.classifiers
+              classifiers
                 .filter((clf) => clf.krona_id)
                 .map(async (clf) => {
                   try {
@@ -94,11 +109,11 @@ export default function CaseDetail() {
                   }
                 })
             );
-            const urls = {};
-            const errors = {};
+            const urls: Record<string, string> = {};
+            const errors: Record<string, boolean> = {};
             urlEntries.forEach(({ name, url, error }) => {
               if (error) errors[name] = true;
-              else urls[name] = url;
+              else if (url) urls[name] = url;
             });
             setKronaUrls(urls);
             setKronaErrors(errors);
@@ -116,11 +131,15 @@ export default function CaseDetail() {
   async function handleReview() {
     setReviewing(true);
     try {
-      const result = await reviewCase(caseId);
-      setCaseData((prev) => ({
-        ...prev,
-        review: { ...prev.review, reviewed: true, reviewed_by: result.reviewed_by },
-      }));
+      const result = (await reviewCase(caseId)) as Case & { reviewed_by?: string };
+      setCaseData((prev) => {
+        if (!prev) return prev;
+        const prevReview = (prev.review as Record<string, unknown>) ?? {};
+        return {
+          ...prev,
+          review: { ...prevReview, reviewed: true, reviewed_by: result.reviewed_by },
+        } as Case;
+      });
     } catch {
       alert("Failed to mark as reviewed.");
     } finally {
@@ -133,10 +152,13 @@ export default function CaseDetail() {
     setReviewing(true);
     try {
       await unreviewCase(caseId);
-      setCaseData((prev) => ({
-        ...prev,
-        review: { reviewed: false, reviewed_by: null, reviewed_at: null, notes: null },
-      }));
+      setCaseData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          review: { reviewed: false, reviewed_by: null, reviewed_at: null, notes: null },
+        } as Case;
+      });
     } catch {
       alert("Failed to remove review.");
     } finally {
@@ -149,10 +171,11 @@ export default function CaseDetail() {
     setNoteSaving(true);
     try {
       const note = await addNote(caseId, noteText);
-      setCaseData((prev) => ({
-        ...prev,
-        notes: [...(prev.notes ?? []), note],
-      }));
+      setCaseData((prev) => {
+        if (!prev) return prev;
+        const prevNotes = (prev.notes as unknown[] | undefined) ?? [];
+        return { ...prev, notes: [...prevNotes, note] } as Case;
+      });
       setNoteText("");
     } catch {
       alert("Failed to save note.");
@@ -161,19 +184,20 @@ export default function CaseDetail() {
     }
   }
 
-  async function handleDeleteNote(index) {
+  async function handleDeleteNote(index: number) {
     try {
       await deleteNote(caseId, index);
-      setCaseData((prev) => ({
-        ...prev,
-        notes: prev.notes.filter((_, i) => i !== index),
-      }));
+      setCaseData((prev) => {
+        if (!prev) return prev;
+        const prevNotes = (prev.notes as unknown[] | undefined) ?? [];
+        return { ...prev, notes: prevNotes.filter((_, i) => i !== index) } as Case;
+      });
     } catch {
       alert("Failed to delete note.");
     }
   }
 
-  async function loadMultiqc() {
+  async function loadMultiqc(): Promise<string | null> {
     if (multiqcUrl) return multiqcUrl;
     setMultiqcLoading(true);
     setMultiqcError(false);
@@ -212,8 +236,14 @@ export default function CaseDetail() {
     return samples;
   }, [samples, filter]);
 
-  const reviewed = caseData?.review?.reviewed;
-  const classifiers = caseData?.classifiers ?? [];
+  const review = caseData?.review as { reviewed?: boolean; reviewed_by?: string } | undefined;
+  const reviewed = review?.reviewed;
+  const classifiers = (caseData?.classifiers as Classifier[] | undefined) ?? [];
+  const notes =
+    (caseData?.notes as { author?: string; text?: string; created_at?: string }[] | undefined) ??
+    [];
+  const ticketId = caseData?.ticket_id as string | undefined;
+  const ticketUrl = caseData?.ticket_url as string | undefined;
 
   if (loading)
     return (
@@ -226,7 +256,6 @@ export default function CaseDetail() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Topbar */}
       <div className="flex items-center gap-3 px-6 py-4 bg-white border-b border-gray-100 flex-shrink-0">
         <button
           onClick={() => navigate("/cases")}
@@ -246,19 +275,19 @@ export default function CaseDetail() {
         <span className="text-gray-200">/</span>
         <h1 className="text-sm font-medium text-gray-900 font-mono flex-1 flex items-center gap-2">
           {caseId}
-          {caseData?.ticket_id &&
-            (caseData.ticket_url ? (
+          {ticketId &&
+            (ticketUrl ? (
               <a
-                href={caseData.ticket_url}
+                href={ticketUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-xs font-normal text-blue-600 hover:text-blue-800 hover:underline"
                 title="Open Freshdesk ticket"
               >
-                #{caseData.ticket_id}
+                #{ticketId}
               </a>
             ) : (
-              <span className="text-xs font-normal text-gray-400">#{caseData.ticket_id}</span>
+              <span className="text-xs font-normal text-gray-400">#{ticketId}</span>
             ))}
         </h1>
         <Badge type={reviewed ? "reviewed" : "pending"} />
@@ -279,9 +308,9 @@ export default function CaseDetail() {
             />
           </svg>
           Notes
-          {(caseData?.notes?.length ?? 0) > 0 && (
+          {notes.length > 0 && (
             <span className="bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full font-medium">
-              {caseData.notes.length}
+              {notes.length}
             </span>
           )}
         </button>
@@ -300,7 +329,7 @@ export default function CaseDetail() {
               onClick={() => setUnreviewConfirm(true)}
               className="text-xs text-green-600 hover:text-green-800 transition-colors"
             >
-              ● Reviewed by {caseData.review.reviewed_by}
+              ● Reviewed by {review?.reviewed_by}
             </button>
             {unreviewConfirm && (
               <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
@@ -308,8 +337,8 @@ export default function CaseDetail() {
                   <p className="text-sm font-medium text-gray-900">Remove review?</p>
                   <p className="text-xs text-gray-500">
                     This will remove the review by{" "}
-                    <span className="font-medium">{caseData.review.reviewed_by}</span> and reset the
-                    case to pending.
+                    <span className="font-medium">{review?.reviewed_by}</span> and reset the case to
+                    pending.
                   </p>
                   <div className="flex gap-2 justify-end">
                     <button onClick={() => setUnreviewConfirm(false)} className="btn-secondary">
@@ -328,14 +357,13 @@ export default function CaseDetail() {
 
       <div className="flex-1 flex min-h-0">
         <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-6">
-          {/* Samples table — classifier-agnostic */}
           <section className="bg-white border border-gray-100 rounded-xl">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-100">
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wider flex-1">
                 Samples
               </p>
               <div className="flex items-center gap-2">
-                {caseData?.has_multiqc && (
+                {(caseData?.has_multiqc as boolean | undefined) && (
                   <div className="flex items-center gap-1 mr-1">
                     {multiqcError && <span className="text-xs text-red-400">Failed to load.</span>}
                     <button
@@ -403,29 +431,41 @@ export default function CaseDetail() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((s) => (
-                  <tr
-                    key={s._id}
-                    onClick={() => navigate(`/samples/${s._id}`)}
-                    className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
-                  >
-                    <td className="px-4 py-3 font-mono text-xs text-gray-700">
-                      {s.sample_id ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{s.material ?? "—"}</td>
-                    <td className="px-4 py-3">
-                      <Badge type={s.sample_type} />
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{s.sample_source ?? "—"}</td>
-                    <td className="px-4 py-3 text-xs text-gray-700">
-                      {fmt(
-                        s.trana
-                          ? s.trana?.nanoplot_unprocessed?.number_of_reads
-                          : s.taxprofiler?.fastp?.total_reads_before_filtering
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map((s) => {
+                  const trana = s.trana as
+                    | { nanoplot_unprocessed?: { number_of_reads?: number } }
+                    | undefined;
+                  const tp = s.taxprofiler as
+                    | { fastp?: { total_reads_before_filtering?: number } }
+                    | undefined;
+                  return (
+                    <tr
+                      key={s._id as string}
+                      onClick={() => navigate(`/samples/${s._id}`)}
+                      className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                    >
+                      <td className="px-4 py-3 font-mono text-xs text-gray-700">
+                        {s.sample_id ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-500">
+                        {(s.material as string | undefined) ?? "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge type={(s.sample_type as string | undefined) ?? "sample"} />
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-500">
+                        {(s.sample_source as string | undefined) ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-700">
+                        {fmt(
+                          trana
+                            ? trana.nanoplot_unprocessed?.number_of_reads
+                            : tp?.fastp?.total_reads_before_filtering
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
                 {filtered.length === 0 && (
                   <tr>
                     <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">
@@ -437,7 +477,6 @@ export default function CaseDetail() {
             </table>
           </section>
 
-          {/* Classifier tabs — QC + Krona per classifier */}
           {classifiers.length > 0 &&
             (() => {
               const isTrana = samples.some((s) => s.trana);
@@ -471,7 +510,6 @@ export default function CaseDetail() {
                     (clf) =>
                       kronaTab === clf.name && (
                         <div key={clf.name}>
-                          {/* QC table for this classifier */}
                           <div className="px-4 pt-3 pb-1">
                             <p className="text-xs text-gray-300 font-mono">{clf.db}</p>
                           </div>
@@ -501,7 +539,10 @@ export default function CaseDetail() {
                             </thead>
                             <tbody>
                               {samples.map((s) => {
-                                const topTaxa = s.top_taxa?.[clf.name] ?? [];
+                                const topTaxaMap = s.top_taxa as
+                                  | Record<string, TopTaxon[]>
+                                  | undefined;
+                                const topTaxa: TopTaxon[] = topTaxaMap?.[clf.name] ?? [];
                                 const topTaxaCell = (
                                   <td className="px-4 py-1.5">
                                     <div className="flex flex-col gap-0">
@@ -537,9 +578,28 @@ export default function CaseDetail() {
                                     </div>
                                   </td>
                                 );
+                                const trana = s.trana as
+                                  | { nanoplot_unprocessed?: { number_of_reads?: number } }
+                                  | undefined;
+                                const tp = s.taxprofiler as
+                                  | {
+                                      classifiers?: Record<
+                                        string,
+                                        {
+                                          pct_unclassified?: number;
+                                          num_species?: number;
+                                          num_genera?: number;
+                                        }
+                                      >;
+                                    }
+                                  | undefined;
+                                const hostPct = s.host_pct as Record<string, number> | undefined;
+                                const spikeInMap = s.spike_in_taxa as
+                                  | Record<string, TopTaxon[]>
+                                  | undefined;
                                 return (
                                   <tr
-                                    key={s._id}
+                                    key={s._id as string}
                                     onClick={() =>
                                       navigate(`/samples/${s._id}?classifier=${kronaTab ?? ""}`)
                                     }
@@ -551,22 +611,22 @@ export default function CaseDetail() {
                                     {isTrana ? (
                                       <>
                                         <td className="px-4 py-1.5 text-xs text-gray-700">
-                                          {fmt(s.trana?.nanoplot_unprocessed?.number_of_reads)}
+                                          {fmt(trana?.nanoplot_unprocessed?.number_of_reads)}
                                         </td>
                                         {topTaxaCell}
                                       </>
                                     ) : (
                                       (() => {
-                                        const clfQc = s.taxprofiler?.classifiers?.[clf.name];
-                                        const spikeIn = s.spike_in_taxa?.[clf.name] ?? [];
+                                        const clfQc = tp?.classifiers?.[clf.name];
+                                        const spikeIn: TopTaxon[] = spikeInMap?.[clf.name] ?? [];
                                         return (
                                           <>
                                             <td className="px-4 py-1.5 text-xs text-gray-700">
                                               {fmtPct(clfQc?.pct_unclassified)}
                                             </td>
                                             <td className="px-4 py-1.5 text-xs text-gray-700">
-                                              {s.host_pct?.[clf.name] != null
-                                                ? `${s.host_pct[clf.name]}%`
+                                              {hostPct?.[clf.name] != null
+                                                ? `${hostPct[clf.name]}%`
                                                 : "—"}
                                             </td>
                                             <td className="px-4 py-1.5 text-xs text-gray-700">
@@ -583,7 +643,7 @@ export default function CaseDetail() {
                                                       {t.name}
                                                       {t.pct != null && (
                                                         <span className="not-italic text-gray-400 ml-1">
-                                                          {t.pct}% ({t.abundance.toLocaleString()})
+                                                          {t.pct}% ({t.abundance?.toLocaleString()})
                                                         </span>
                                                       )}
                                                     </span>
@@ -604,7 +664,6 @@ export default function CaseDetail() {
                             </tbody>
                           </table>
 
-                          {/* Krona for this classifier */}
                           {isTrana
                             ? kronaSelectedSample && (
                                 <div className="p-4 border-t border-gray-50">
@@ -613,8 +672,8 @@ export default function CaseDetail() {
                                       .filter((s) => s.has_krona)
                                       .map((s) => (
                                         <button
-                                          key={s._id}
-                                          onClick={() => setKronaSelectedSample(s._id)}
+                                          key={s._id as string}
+                                          onClick={() => setKronaSelectedSample(s._id as string)}
                                           className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
                                             kronaSelectedSample === s._id
                                               ? "bg-gray-900 text-white font-medium"
@@ -673,7 +732,6 @@ export default function CaseDetail() {
               );
             })()}
 
-          {/* Provenance */}
           {caseData && caseData.pipeline_info ? (
             <section className="bg-white border border-gray-100 rounded-xl">
               <button
@@ -699,21 +757,28 @@ export default function CaseDetail() {
               </button>
               {provenanceOpen &&
                 (() => {
-                  const pipelineConfig = caseData.pipeline_info.pipeline_configuration || {};
-                  const toolMap = {};
-                  Object.values(caseData.pipeline_info.software_used || {}).forEach(
-                    (processTools) => {
-                      Object.entries(processTools).forEach(([name, ver]) => {
-                        toolMap[String(name)] = String(ver);
-                      });
-                    }
-                  );
+                  const pipelineInfo = caseData.pipeline_info as {
+                    pipeline_configuration?: Record<string, unknown>;
+                    software_used?: Record<string, Record<string, unknown>>;
+                  };
+                  const pipelineConfig = pipelineInfo.pipeline_configuration ?? {};
+                  const toolMap: Record<string, string> = {};
+                  Object.values(pipelineInfo.software_used ?? {}).forEach((processTools) => {
+                    Object.entries(processTools).forEach(([name, ver]) => {
+                      toolMap[String(name)] = String(ver);
+                    });
+                  });
                   const toolRows = Object.entries(toolMap).sort();
 
-                  const mvInfo = caseData.metaval_pipeline_info;
-                  const mvConfig = mvInfo?.pipeline_configuration || {};
-                  const mvToolMap = {};
-                  Object.values(mvInfo?.software_used || {}).forEach((processTools) => {
+                  const mvInfo = caseData.metaval_pipeline_info as
+                    | {
+                        pipeline_configuration?: Record<string, unknown>;
+                        software_used?: Record<string, Record<string, unknown>>;
+                      }
+                    | undefined;
+                  const mvConfig = mvInfo?.pipeline_configuration ?? {};
+                  const mvToolMap: Record<string, string> = {};
+                  Object.values(mvInfo?.software_used ?? {}).forEach((processTools) => {
                     Object.entries(processTools).forEach(([name, ver]) => {
                       mvToolMap[String(name)] = String(ver);
                     });
@@ -722,25 +787,26 @@ export default function CaseDetail() {
 
                   return (
                     <div className="border-t border-gray-100 px-4 py-3 flex flex-col gap-4">
-                      {/* taxprofiler */}
                       <div className="flex flex-col gap-3">
                         <div className="flex gap-6">
-                          {pipelineConfig.pipeline_name && (
+                          {pipelineConfig.pipeline_name ? (
                             <span className="text-xs text-gray-500">
-                              <span className="text-gray-400">{pipelineConfig.pipeline_name}</span>
+                              <span className="text-gray-400">
+                                {String(pipelineConfig.pipeline_name)}
+                              </span>
                               <span className="font-mono ml-2 text-gray-700">
                                 {String(pipelineConfig.pipeline_version)}
                               </span>
                             </span>
-                          )}
-                          {pipelineConfig.nextflow && (
+                          ) : null}
+                          {pipelineConfig.nextflow ? (
                             <span className="text-xs text-gray-500">
                               <span className="text-gray-400">Nextflow</span>
                               <span className="font-mono ml-2 text-gray-700">
                                 {String(pipelineConfig.nextflow)}
                               </span>
                             </span>
-                          )}
+                          ) : null}
                         </div>
                         <table className="w-full">
                           <thead>
@@ -764,26 +830,27 @@ export default function CaseDetail() {
                         </table>
                       </div>
 
-                      {/* metaval — only shown if ingested */}
                       {mvInfo && mvToolRows.length > 0 && (
                         <div className="flex flex-col gap-3 border-t border-gray-50 pt-3">
                           <div className="flex gap-6">
-                            {mvConfig.pipeline_name && (
+                            {mvConfig.pipeline_name ? (
                               <span className="text-xs text-gray-500">
-                                <span className="text-gray-400">{mvConfig.pipeline_name}</span>
+                                <span className="text-gray-400">
+                                  {String(mvConfig.pipeline_name)}
+                                </span>
                                 <span className="font-mono ml-2 text-gray-700">
                                   {String(mvConfig.pipeline_version)}
                                 </span>
                               </span>
-                            )}
-                            {mvConfig.nextflow && (
+                            ) : null}
+                            {mvConfig.nextflow ? (
                               <span className="text-xs text-gray-500">
                                 <span className="text-gray-400">Nextflow</span>
                                 <span className="font-mono ml-2 text-gray-700">
                                   {String(mvConfig.nextflow)}
                                 </span>
                               </span>
-                            )}
+                            ) : null}
                           </div>
                           <table className="w-full">
                             <thead>
@@ -814,7 +881,6 @@ export default function CaseDetail() {
           ) : null}
         </div>
 
-        {/* Notes panel */}
         {notesOpen && (
           <div className="w-80 flex-shrink-0 border-l border-gray-100 flex flex-col bg-white">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
@@ -836,46 +902,50 @@ export default function CaseDetail() {
               </button>
             </div>
 
-            {/* Existing notes */}
             <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3">
-              {(caseData?.notes?.length ?? 0) === 0 && (
+              {notes.length === 0 && (
                 <p className="text-xs text-gray-300 text-center py-6">No notes yet.</p>
               )}
-              {(caseData?.notes ?? []).map((note, i) => (
-                <div key={i} className="bg-gray-50 rounded-lg px-3 py-2.5 flex flex-col gap-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-medium text-gray-600">{note.author}</span>
-                    <span className="text-gray-200">·</span>
-                    <span className="text-xs text-gray-400">
-                      {new Date(note.created_at).toLocaleDateString("sv-SE", {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                    {(role === "admin" || note.author === user?.username) && (
-                      <button
-                        onClick={() => handleDeleteNote(i)}
-                        className="ml-auto text-gray-300 hover:text-red-400 transition-colors"
-                      >
-                        <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">
-                          <path
-                            d="M3 3l10 10M13 3L3 13"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
-                            strokeLinecap="round"
-                          />
-                        </svg>
-                      </button>
-                    )}
+              {notes.map((note, i) => {
+                // Preserves legacy access pattern: `user` is a username string.
+                const currentUsername = (user as unknown as { username?: string } | null)?.username;
+                return (
+                  <div key={i} className="bg-gray-50 rounded-lg px-3 py-2.5 flex flex-col gap-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-medium text-gray-600">{note.author}</span>
+                      <span className="text-gray-200">·</span>
+                      <span className="text-xs text-gray-400">
+                        {note.created_at
+                          ? new Date(note.created_at).toLocaleDateString("sv-SE", {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : ""}
+                      </span>
+                      {(role === "admin" || note.author === currentUsername) && (
+                        <button
+                          onClick={() => handleDeleteNote(i)}
+                          className="ml-auto text-gray-300 hover:text-red-400 transition-colors"
+                        >
+                          <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">
+                            <path
+                              d="M3 3l10 10M13 3L3 13"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-600 whitespace-pre-wrap">{note.text}</p>
                   </div>
-                  <p className="text-xs text-gray-600 whitespace-pre-wrap">{note.text}</p>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
-            {/* New note input — writers and admins only */}
             {role !== "reader" && (
               <div className="px-4 py-3 border-t border-gray-100 flex flex-col gap-2">
                 <textarea

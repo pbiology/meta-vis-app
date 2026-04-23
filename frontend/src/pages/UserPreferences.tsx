@@ -3,30 +3,22 @@ import { useAuth } from "../context/AuthContext";
 
 const KINGDOMS = ["Bacteria", "Viruses", "Eukaryota", "Archaea"];
 
-const ANALYSIS_TYPES = [
-  {
-    key: "shotgun",
-    label: "Shotgun metagenomics",
-    hint: "Taxprofiler (incl. Metaval)",
-  },
-  {
-    key: "amplicon",
-    label: "Amplicon metagenomics",
-    hint: "TRANA",
-  },
+const ANALYSIS_TYPES: { key: string; label: string; hint: string }[] = [
+  { key: "shotgun", label: "Shotgun metagenomics", hint: "Taxprofiler (incl. Metaval)" },
+  { key: "amplicon", label: "Amplicon metagenomics", hint: "TRANA" },
 ];
 
 export default function UserPreferences() {
   const { preferences, setPreferences } = useAuth();
-  const [selectedKingdoms, setSelectedKingdoms] = useState(
+  const [selectedKingdoms, setSelectedKingdoms] = useState<string[]>(
     preferences?.preferred_kingdoms ?? ["Viruses"]
   );
-  const [selectedAnalysis, setSelectedAnalysis] = useState(
+  const [selectedAnalysis, setSelectedAnalysis] = useState<string[]>(
     preferences?.visible_analysis_types ?? ["shotgun", "amplicon"]
   );
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
   const analysisEmpty = selectedAnalysis.length === 0;
 
@@ -48,14 +40,14 @@ export default function UserPreferences() {
     }
   }
 
-  function toggleKingdom(kingdom) {
+  function toggleKingdom(kingdom: string) {
     setSelectedKingdoms((prev) =>
       prev.includes(kingdom) ? prev.filter((k) => k !== kingdom) : [...prev, kingdom]
     );
     setSaved(false);
   }
 
-  function toggleAnalysis(key) {
+  function toggleAnalysis(key: string) {
     setSelectedAnalysis((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
     );

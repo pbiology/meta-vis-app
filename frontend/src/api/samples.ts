@@ -1,5 +1,10 @@
 import client from "./client";
-import type { Sample } from "./types";
+import type {
+  NtcProfilesResponse,
+  PaginatedResponse,
+  Sample,
+  SampleProfileResponse,
+} from "./types";
 
 export interface GetSamplesParams {
   page?: number;
@@ -13,10 +18,10 @@ export async function getSamples({
   search = "",
   filter = "",
   analysisType,
-}: GetSamplesParams = {}): Promise<unknown> {
+}: GetSamplesParams = {}): Promise<PaginatedResponse<Sample>> {
   const params: Record<string, unknown> = { page, search, filter };
   if (analysisType) params.analysis_type = analysisType;
-  const res = await client.get("/samples", { params });
+  const res = await client.get<PaginatedResponse<Sample>>("/samples", { params });
   return res.data;
 }
 
@@ -25,8 +30,8 @@ export async function getSample(sampleId: string): Promise<Sample> {
   return res.data;
 }
 
-export async function getProfile(sampleId: string): Promise<unknown> {
-  const res = await client.get(`/samples/${sampleId}/profile`);
+export async function getProfile(sampleId: string): Promise<SampleProfileResponse> {
+  const res = await client.get<SampleProfileResponse>(`/samples/${sampleId}/profile`);
   return res.data;
 }
 
@@ -38,7 +43,7 @@ export async function getKronaUrl(sampleId: string, classifier = "kraken2"): Pro
   return URL.createObjectURL(resp.data);
 }
 
-export async function getNtcProfiles(sampleId: string): Promise<unknown> {
-  const res = await client.get(`/samples/${sampleId}/ntc_profiles`);
+export async function getNtcProfiles(sampleId: string): Promise<NtcProfilesResponse> {
+  const res = await client.get<NtcProfilesResponse>(`/samples/${sampleId}/ntc_profiles`);
   return res.data;
 }

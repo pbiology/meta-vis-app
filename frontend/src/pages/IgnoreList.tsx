@@ -2,17 +2,18 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { getIgnorelist, removeFromIgnorelist, updateIgnorelistNote } from "../api/alerts";
 import { useAuth } from "../context/AuthContext";
+import type { IgnorelistItem } from "../api/types";
 
 export default function IgnoreList() {
   const navigate = useNavigate();
   const { role } = useAuth();
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState<IgnorelistItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [editingId, setEditingId] = useState(null);
+  const [error, setError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
   const [saving, setSaving] = useState(false);
-  const [filter, setFilter] = useState(null); // null, 'Viruses', 'Bacteria', etc.
+  const [filter, setFilter] = useState<string | null>(null);
 
   useEffect(() => {
     getIgnorelist(filter)
@@ -21,7 +22,7 @@ export default function IgnoreList() {
       .finally(() => setLoading(false));
   }, [filter]);
 
-  async function handleRemove(taxonId) {
+  async function handleRemove(taxonId: number) {
     try {
       await removeFromIgnorelist(taxonId);
       setItems((prev) => prev.filter((i) => i.taxon_id !== taxonId));
@@ -30,12 +31,12 @@ export default function IgnoreList() {
     }
   }
 
-  function startEdit(item) {
+  function startEdit(item: IgnorelistItem) {
     setEditingId(item.taxon_id);
     setEditText(item.reason ?? "");
   }
 
-  async function saveEdit(taxonId) {
+  async function saveEdit(taxonId: number) {
     setSaving(true);
     try {
       await updateIgnorelistNote(taxonId, editText.trim() || null);
@@ -50,8 +51,9 @@ export default function IgnoreList() {
     }
   }
 
-  // Get unique superkingdoms from items
-  const superkingdoms = [...new Set(items.map((i) => i.superkingdom))].filter(Boolean).sort();
+  const superkingdoms = [...new Set(items.map((i) => i.superkingdom))]
+    .filter((s): s is string => Boolean(s))
+    .sort();
 
   return (
     <div className="flex flex-col h-full">

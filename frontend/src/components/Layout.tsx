@@ -2,8 +2,15 @@ import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { getMyStats } from "../api/users";
+import type { MyStats } from "../api/types";
 
-function NavItem({ to, icon, label }) {
+interface NavItemProps {
+  to: string;
+  icon: React.ReactNode;
+  label: string;
+}
+
+function NavItem({ to, icon, label }: NavItemProps) {
   return (
     <NavLink
       to={to}
@@ -24,7 +31,7 @@ function NavItem({ to, icon, label }) {
 export default function Layout() {
   const { user, role, logout } = useAuth();
   const navigate = useNavigate();
-  const [stats, setStats] = useState(null);
+  const [stats, setStats] = useState<MyStats | null>(null);
 
   useEffect(() => {
     getMyStats()
@@ -39,7 +46,6 @@ export default function Layout() {
 
   return (
     <div className="flex h-full bg-gray-50">
-      {/* Sidebar */}
       <div className="w-52 bg-white border-r border-gray-100 flex flex-col flex-shrink-0">
         <div className="px-4 pt-5 pb-5 flex items-center gap-2.5">
           <svg
@@ -282,7 +288,6 @@ export default function Layout() {
         </div>
       </div>
 
-      {/* Main content */}
       <div className="flex-1 overflow-hidden flex flex-col">
         <Outlet />
       </div>

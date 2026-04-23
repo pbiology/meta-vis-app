@@ -11,238 +11,32 @@ import {
   updateNtcContaminant,
   removeNtcContaminant,
 } from "../api/ntc";
+import type { IgnorelistItem, NtcContaminantItem } from "../api/types";
+import AddTaxonModal from "../components/AddTaxonModal";
 
-// ---------------------------------------------------------------------------
-// NCBI taxon lookup (shared with KnownPathogens)
-// ---------------------------------------------------------------------------
-
-function superkingdomFromLineage(lineage = "") {
-  for (const sk of ["Viruses", "Bacteria", "Eukaryota", "Archaea"]) {
-    if (lineage.includes(sk)) return sk;
-  }
-  return null;
-}
-
-// Cellular organisms (Bacteria, Archaea, Eukaryota) have a populated lineage
-// string in NCBI esummary, which includes the kingdom name directly.
-// Viruses have an empty lineage because they sit outside the cellular organism
-// hierarchy — instead, NCBI always populates genbankdivision for them.
-const GENBANK_DIVISION_TO_KINGDOM = {
-  Viruses: "Viruses",
-  Phages: "Viruses",
-  Bacteria: "Bacteria",
-  Archaea: "Archaea",
-  Mammals: "Eukaryota",
-  Primates: "Eukaryota",
-  Rodents: "Eukaryota",
-  Vertebrates: "Eukaryota",
-  Invertebrates: "Eukaryota",
-  Plants: "Eukaryota",
-  Fungi: "Eukaryota",
-};
-
-async function lookupTaxon(taxonId) {
-  const url = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=taxonomy&id=${taxonId}&retmode=json`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("NCBI request failed");
-  const data = await res.json();
-  const result = data?.result?.[String(taxonId)];
-  if (!result || result.status === "error") throw new Error("Taxon not found");
-  // For cellular organisms the lineage string contains the kingdom name.
-  // For viruses the lineage is empty — use genbankdivision as fallback.
-  const superkingdom =
-    superkingdomFromLineage(result.lineage ?? "") ??
-    GENBANK_DIVISION_TO_KINGDOM[result.genbankdivision] ??
-    null;
-  return {
-    name: result.scientificname,
-    superkingdom,
-  };
-}
-
-const EMPTY_FORM = { taxon_id: "", taxon_name: "", superkingdom: null, notes: "", min_reads: 3 };
-
-// ---------------------------------------------------------------------------
-// Shared add-taxon modal
-// ---------------------------------------------------------------------------
-
-function AddTaxonModal({ title, showMinReads, onAdd, onClose }) {
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [lookingUp, setLookingUp] = useState(false);
-  const [lookupError, setLookupError] = useState(null);
-  const [adding, setAdding] = useState(false);
-  const [addError, setAddError] = useState(null);
-
-  async function handleLookup() {
-    const id = parseInt(form.taxon_id, 10);
-    if (isNaN(id)) {
-      setLookupError("Enter a valid taxon ID first.");
-      return;
-    }
-    setLookingUp(true);
-    setLookupError(null);
-    setForm((f) => ({ ...f, taxon_name: "", superkingdom: null }));
-    try {
-      const { name, superkingdom } = await lookupTaxon(id);
-      setForm((f) => ({ ...f, taxon_name: name, superkingdom }));
-    } catch {
-      setLookupError("Could not find taxon in NCBI. Check the ID and try again.");
-    } finally {
-      setLookingUp(false);
-    }
-  }
-
-  async function handleSubmit() {
-    const id = parseInt(form.taxon_id, 10);
-    if (isNaN(id) || !form.taxon_name.trim()) {
-      setAddError("Look up a taxon ID before adding.");
-      return;
-    }
-    setAdding(true);
-    setAddError(null);
-    try {
-      await onAdd(
-        id,
-        form.taxon_name.trim(),
-        form.superkingdom,
-        form.notes.trim() || null,
-        form.min_reads
-      );
-      onClose();
-    } catch (e) {
-      setAddError(e?.response?.data?.detail ?? "Failed to add taxon.");
-    } finally {
-      setAdding(false);
-    }
-  }
-
-  const lookedUp = !!form.taxon_name;
-
-  return (
-    <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl border border-gray-100 shadow-lg p-6 w-96 flex flex-col gap-4">
-        <p className="text-sm font-medium text-gray-900">{title}</p>
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">NCBI Taxon ID</label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                inputMode="numeric"
-                value={form.taxon_id}
-                onChange={(e) => {
-                  if (!/^\d*$/.test(e.target.value)) return;
-                  setForm((f) => ({
-                    ...EMPTY_FORM,
-                    taxon_id: e.target.value,
-                    notes: f.notes,
-                    min_reads: f.min_reads,
-                  }));
-                  setLookupError(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleLookup();
-                }}
-                placeholder="e.g. 1743"
-                className="flex-1 text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-300"
-              />
-              <button
-                onClick={handleLookup}
-                disabled={lookingUp || !form.taxon_id}
-                className="text-xs px-3 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40 whitespace-nowrap"
-              >
-                {lookingUp ? "Looking up…" : "Look up"}
-              </button>
-            </div>
-            {lookupError && <p className="text-xs text-red-500 mt-0.5">{lookupError}</p>}
-          </div>
-          {lookedUp && (
-            <>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-500">Taxon name</label>
-                <div className="text-xs border border-gray-100 bg-gray-50 rounded-lg px-3 py-2 text-gray-700 italic">
-                  {form.taxon_name}
-                </div>
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs text-gray-500">Kingdom</label>
-                <div className="text-xs border border-gray-100 bg-gray-50 rounded-lg px-3 py-2 text-gray-700">
-                  {form.superkingdom ?? "Unknown"}
-                </div>
-              </div>
-            </>
-          )}
-          {showMinReads && (
-            <div className="flex flex-col gap-1">
-              <label className="text-xs text-gray-500">Alert threshold (min reads)</label>
-              <input
-                type="number"
-                min={1}
-                value={form.min_reads}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, min_reads: parseInt(e.target.value) || 1 }))
-                }
-                className="text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-300 w-24"
-              />
-              <p className="text-xs text-gray-400">
-                Alert fires when abundance exceeds this value in any NTC.
-              </p>
-            </div>
-          )}
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-500">Notes (optional)</label>
-            <input
-              type="text"
-              value={form.notes}
-              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-              placeholder="e.g. Common reagent contaminant"
-              className="text-xs border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-300"
-            />
-          </div>
-        </div>
-        {addError && <p className="text-xs text-red-500">{addError}</p>}
-        <div className="flex gap-2 justify-end">
-          <button onClick={onClose} className="btn-secondary">
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={adding || !lookedUp}
-            className="btn-primary disabled:opacity-50"
-          >
-            {adding ? "Adding…" : "Add"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
+type RemoveTarget =
+  | { type: "ignore"; item: IgnorelistItem }
+  | { type: "contaminant"; item: NtcContaminantItem };
 
 export default function NtcListsPage() {
   const navigate = useNavigate();
   const { role } = useAuth();
 
-  const [ignoreItems, setIgnoreItems] = useState([]);
-  const [contaminants, setContaminants] = useState([]);
+  const [ignoreItems, setIgnoreItems] = useState<IgnorelistItem[]>([]);
+  const [contaminants, setContaminants] = useState<NtcContaminantItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
   const [addIgnoreOpen, setAddIgnoreOpen] = useState(false);
   const [addContaminantOpen, setAddContaminantOpen] = useState(false);
-  const [removeTarget, setRemoveTarget] = useState(null); // { type, item }
+  const [removeTarget, setRemoveTarget] = useState<RemoveTarget | null>(null);
   const [removing, setRemoving] = useState(false);
 
-  // Inline editing for ignorelist reason
-  const [editingIgnoreId, setEditingIgnoreId] = useState(null);
+  const [editingIgnoreId, setEditingIgnoreId] = useState<number | null>(null);
   const [editIgnoreText, setEditIgnoreText] = useState("");
   const [savingIgnore, setSavingIgnore] = useState(false);
 
-  // Inline editing for contaminant min_reads
-  const [editingContaminantId, setEditingContaminantId] = useState(null);
+  const [editingContaminantId, setEditingContaminantId] = useState<number | null>(null);
   const [editMinReads, setEditMinReads] = useState(3);
   const [savingContaminant, setSavingContaminant] = useState(false);
 
@@ -256,17 +50,29 @@ export default function NtcListsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  async function handleAddIgnore(id, name, sk, notes) {
-    const doc = await addToNtcIgnorelist(id, name, sk, notes);
+  async function handleAddIgnore(
+    id: number,
+    name: string,
+    sk: string | null,
+    notes: string | null
+  ) {
+    const doc = await addToNtcIgnorelist(id, name, sk ?? "", notes);
     setIgnoreItems((prev) => [doc, ...prev]);
   }
 
-  async function handleAddContaminant(id, name, sk, notes, minReads) {
-    const doc = await addNtcContaminant(id, name, sk, minReads, notes);
+  async function handleAddContaminant(
+    id: number,
+    name: string,
+    sk: string | null,
+    notes: string | null,
+    minReads: number
+  ) {
+    const doc = await addNtcContaminant(id, name, sk ?? "", minReads, notes);
     setContaminants((prev) => [doc, ...prev]);
   }
 
   async function handleRemove() {
+    if (!removeTarget) return;
     setRemoving(true);
     try {
       if (removeTarget.type === "ignore") {
@@ -284,7 +90,7 @@ export default function NtcListsPage() {
     }
   }
 
-  async function saveIgnoreNote(taxonId) {
+  async function saveIgnoreNote(taxonId: number) {
     setSavingIgnore(true);
     try {
       await updateNtcIgnorelistNote(taxonId, editIgnoreText.trim() || null);
@@ -301,7 +107,7 @@ export default function NtcListsPage() {
     }
   }
 
-  async function saveContaminantMinReads(taxonId) {
+  async function saveContaminantMinReads(taxonId: number) {
     setSavingContaminant(true);
     try {
       await updateNtcContaminant(taxonId, { minReads: editMinReads });
@@ -350,9 +156,6 @@ export default function NtcListsPage() {
 
         {!loading && !error && (
           <>
-            {/* ----------------------------------------------------------------
-                Ignorelist
-            ---------------------------------------------------------------- */}
             <section className="bg-white border border-gray-100 rounded-xl">
               <div className="flex items-center px-4 py-3 border-b border-gray-50">
                 <div className="flex-1">
@@ -485,9 +288,6 @@ export default function NtcListsPage() {
               )}
             </section>
 
-            {/* ----------------------------------------------------------------
-                Known contaminants
-            ---------------------------------------------------------------- */}
             <section className="bg-white border border-gray-100 rounded-xl">
               <div className="flex items-center px-4 py-3 border-b border-gray-50">
                 <div className="flex-1">
@@ -626,12 +426,13 @@ export default function NtcListsPage() {
         )}
       </div>
 
-      {/* Modals */}
       {addIgnoreOpen && (
         <AddTaxonModal
           title="Add to NTC ignorelist"
           showMinReads={false}
-          onAdd={handleAddIgnore}
+          onAdd={async (id, name, sk, notes) => {
+            await handleAddIgnore(id, name, sk, notes);
+          }}
           onClose={() => setAddIgnoreOpen(false)}
         />
       )}
@@ -639,7 +440,9 @@ export default function NtcListsPage() {
         <AddTaxonModal
           title="Add known contaminant"
           showMinReads={true}
-          onAdd={handleAddContaminant}
+          onAdd={async (id, name, sk, notes, minReads) => {
+            await handleAddContaminant(id, name, sk, notes, minReads);
+          }}
           onClose={() => setAddContaminantOpen(false)}
         />
       )}

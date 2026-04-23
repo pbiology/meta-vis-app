@@ -2,26 +2,27 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { login as loginApi } from "../api/auth";
+import { axiosErrorStatus } from "../utils/axiosError";
 
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
       const data = await loginApi(username, password);
-      login(data.username, data.role || "reader");
+      await login(data.username, data.role);
       navigate("/");
     } catch (err) {
       setError(
-        err.response?.status === 401
+        axiosErrorStatus(err) === 401
           ? "Incorrect username or password."
           : "Could not connect to the server."
       );

@@ -1,30 +1,34 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getCases, deleteCase, getCaseStats, getPathogenCases } from "../api/cases";
+import type { ReviewedFilter } from "../api/cases";
 import Badge from "../components/Badge";
 import { getOutbreaks } from "../api/alerts";
 import { getNtcContaminantCaseIds } from "../api/ntc";
 import { useAuth } from "../context/AuthContext";
 import { singleAnalysisFilter } from "../lib/analysisPreference";
+import type { CaseStats, CasesResponse } from "../api/types";
+
+const EMPTY: CasesResponse = {
+  items: [],
+  total: 0,
+  pages: 1,
+  ticket_links_enabled: false,
+};
 
 export default function CaseList() {
-  const [data, setData] = useState({
-    items: [],
-    total: 0,
-    pages: 1,
-    ticket_links_enabled: false,
-  });
+  const [data, setData] = useState<CasesResponse>(EMPTY);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [outbreakCaseIds, setOutbreakCaseIds] = useState(new Set());
-  const [pathogenCaseIds, setPathogenCaseIds] = useState(new Set());
-  const [ntcContaminantCaseIds, setNtcContaminantCaseIds] = useState(new Set());
-  const [stats, setStats] = useState({ total: 0, pending: 0, reviewed: 0 });
+  const [outbreakCaseIds, setOutbreakCaseIds] = useState<Set<string>>(new Set());
+  const [pathogenCaseIds, setPathogenCaseIds] = useState<Set<string>>(new Set());
+  const [ntcContaminantCaseIds, setNtcContaminantCaseIds] = useState<Set<string>>(new Set());
+  const [stats, setStats] = useState<CaseStats>({ total: 0, pending: 0, reviewed: 0 });
   const navigate = useNavigate();
   const { role, preferences, preferencesLoaded } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -42,7 +46,7 @@ export default function CaseList() {
         const result = await getCases({
           page,
           search,
-          reviewed: filter,
+          reviewed: filter as ReviewedFilter,
           analysisType: effective ?? "all",
         });
         setData(result);
@@ -90,13 +94,14 @@ export default function CaseList() {
     return () => clearInterval(interval);
   }, [load]);
 
-  function handleSearch(e) {
+  function handleSearch(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setPage(1);
     setSearch(searchInput);
   }
 
   async function handleDelete() {
+    if (!deleteTarget) return;
     setDeleting(true);
     try {
       await deleteCase(deleteTarget);
@@ -183,12 +188,13 @@ export default function CaseList() {
         )}
         <div className="ml-auto pl-3 border-l border-gray-200 flex items-center gap-4">
           <span className="text-xs text-gray-400">
-            <span className="text-amber-500 font-medium">{stats.pending}</span> pending
+            <span className="text-amber-500 font-medium">{String(stats.pending ?? 0)}</span> pending
           </span>
           <span className="text-xs text-gray-400">
-            <span className="text-green-600 font-medium">{stats.reviewed}</span> reviewed
+            <span className="text-green-600 font-medium">{String(stats.reviewed ?? 0)}</span>{" "}
+            reviewed
           </span>
-          <span className="text-xs text-gray-300">{stats.total} total</span>
+          <span className="text-xs text-gray-300">{String(stats.total ?? 0)} total</span>
         </div>
       </div>
 
@@ -236,7 +242,7 @@ export default function CaseList() {
                   <td className="px-4 py-3 font-mono text-xs text-gray-700">
                     <div className="flex items-center gap-1.5">
                       {c.case_id}
-                      {outbreakCaseIds.has(c._id) && (
+                      {c._id && outbreakCaseIds.has(c._id) && (
                         <svg
                           className="w-3 h-3 text-amber-500 flex-shrink-0"
                           viewBox="0 0 16 16"
@@ -256,12 +262,11 @@ export default function CaseList() {
                           />
                         </svg>
                       )}
-                      {pathogenCaseIds.has(c._id) && (
+                      {c._id && pathogenCaseIds.has(c._id) && (
                         <svg
                           className="w-3 h-3 text-red-500 flex-shrink-0"
                           viewBox="0 0 16 16"
                           fill="none"
-                          title="Contains known pathogen"
                         >
                           <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.3" />
                           <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.3" />
@@ -273,12 +278,11 @@ export default function CaseList() {
                           />
                         </svg>
                       )}
-                      {ntcContaminantCaseIds.has(c._id) && (
+                      {c._id && ntcContaminantCaseIds.has(c._id) && (
                         <svg
                           className="w-3 h-3 text-orange-500 flex-shrink-0"
                           viewBox="0 0 16 16"
                           fill="none"
-                          title="NTC contains known contaminant"
                         >
                           <path
                             d="M8 3a3 3 0 0 1 3 3v1.5h.5a1 1 0 0 1 1 1V13a1 1 0 0 1-1 1H4.5a1 1 0 0 1-1-1V8.5a1 1 0 0 1 1-1H5V6a3 3 0 0 1 3-3z"
@@ -337,7 +341,7 @@ export default function CaseList() {
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-400">
                     {(c.notes?.length ?? 0) > 0 ? (
-                      <span className="text-amber-600 font-medium">{c.notes.length}</span>
+                      <span className="text-amber-600 font-medium">{c.notes?.length}</span>
                     ) : (
                       "—"
                     )}

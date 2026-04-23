@@ -1,7 +1,7 @@
 import client from "./client";
-import type { Case } from "./types";
+import type { Case, CaseStats, CasesResponse, Sample } from "./types";
 
-export type ReviewedFilter = "reviewed" | "unreviewed" | "all" | null;
+export type ReviewedFilter = "reviewed" | "unreviewed" | "pending" | "all" | null;
 
 export interface GetCasesParams {
   page?: number;
@@ -15,7 +15,7 @@ export async function getCases({
   search = "",
   reviewed = null,
   analysisType = null,
-}: GetCasesParams = {}): Promise<unknown> {
+}: GetCasesParams = {}): Promise<CasesResponse> {
   const params: Record<string, unknown> = { page, search };
   if (reviewed && reviewed !== "all") {
     params.reviewed = reviewed;
@@ -23,7 +23,7 @@ export async function getCases({
   if (analysisType && analysisType !== "all") {
     params.analysis_type = analysisType;
   }
-  const res = await client.get("/cases", { params });
+  const res = await client.get<CasesResponse>("/cases", { params });
   return res.data;
 }
 
@@ -32,19 +32,22 @@ export async function getCase(caseId: string): Promise<Case> {
   return res.data;
 }
 
-export async function getCaseSamples(caseId: string, type: string | null = null): Promise<unknown> {
+export async function getCaseSamples(
+  caseId: string,
+  type: string | null = null
+): Promise<Sample[]> {
   const params = type ? { type } : {};
-  const res = await client.get(`/cases/${caseId}/samples`, { params });
+  const res = await client.get<Sample[]>(`/cases/${caseId}/samples`, { params });
   return res.data;
 }
 
-export async function reviewCase(caseId: string, notes: string | null = null): Promise<unknown> {
-  const res = await client.patch(`/cases/${caseId}/review`, { notes });
+export async function reviewCase(caseId: string, notes: string | null = null): Promise<Case> {
+  const res = await client.patch<Case>(`/cases/${caseId}/review`, { notes });
   return res.data;
 }
 
-export async function unreviewCase(caseId: string): Promise<unknown> {
-  const res = await client.delete(`/cases/${caseId}/review`);
+export async function unreviewCase(caseId: string): Promise<Case> {
+  const res = await client.delete<Case>(`/cases/${caseId}/review`);
   return res.data;
 }
 
@@ -63,27 +66,26 @@ export async function getCaseMultiQCUrl(caseId: string): Promise<string> {
   return URL.createObjectURL(resp.data);
 }
 
-export async function addNote(caseId: string, text: string): Promise<unknown> {
-  const res = await client.post(`/cases/${caseId}/notes`, { text });
+export async function addNote(caseId: string, text: string): Promise<Case> {
+  const res = await client.post<Case>(`/cases/${caseId}/notes`, { text });
   return res.data;
 }
 
-export async function deleteNote(caseId: string, noteIndex: number): Promise<unknown> {
-  const res = await client.delete(`/cases/${caseId}/notes/${noteIndex}`);
+export async function deleteNote(caseId: string, noteIndex: number): Promise<Case> {
+  const res = await client.delete<Case>(`/cases/${caseId}/notes/${noteIndex}`);
   return res.data;
 }
 
-export async function deleteCase(caseId: string): Promise<unknown> {
-  const res = await client.delete(`/cases/${caseId}`);
+export async function deleteCase(caseId: string): Promise<void> {
+  await client.delete(`/cases/${caseId}`);
+}
+
+export async function getCaseStats(): Promise<CaseStats> {
+  const res = await client.get<CaseStats>("/cases/stats");
   return res.data;
 }
 
-export async function getCaseStats(): Promise<unknown> {
-  const res = await client.get("/cases/stats");
-  return res.data;
-}
-
-export async function getPathogenCases(): Promise<unknown> {
-  const res = await client.get("/cases/pathogen_cases");
+export async function getPathogenCases(): Promise<{ case_ids: string[] }> {
+  const res = await client.get<{ case_ids: string[] }>("/cases/pathogen_cases");
   return res.data;
 }

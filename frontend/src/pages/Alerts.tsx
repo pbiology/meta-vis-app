@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Link } from "react-router-dom";
 import { getOutbreaks, getIgnorelist, addToIgnorelist } from "../api/alerts";
 import { useAuth } from "../context/AuthContext";
 import { multiAnalysisFilter } from "../lib/analysisPreference";
+import type { IgnorelistItem, Outbreak, OutbreaksResponse } from "../api/types";
 
 export default function Alerts() {
   const navigate = useNavigate();
@@ -10,14 +11,14 @@ export default function Alerts() {
   const location = useLocation();
   const visibleAnalysis = preferences?.visible_analysis_types;
 
-  const [data, setData] = useState(null);
+  const [data, setData] = useState<OutbreaksResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [windowDays, setWindowDays] = useState(14);
-  const [ignorelist, setIgnorelist] = useState([]);
-  const [ignoring, setIgnoring] = useState(null); // taxon_id currently being ignored
-  const [highlightedId, setHighlightedId] = useState(null);
-  const sectionRefs = useRef({});
+  const [ignorelist, setIgnorelist] = useState<IgnorelistItem[]>([]);
+  const [ignoring, setIgnoring] = useState<number | null>(null);
+  const [highlightedId, setHighlightedId] = useState<number | null>(null);
+  const sectionRefs = useRef<Record<number, HTMLElement | null>>({});
 
   function load() {
     if (!preferencesLoaded) return;
@@ -47,10 +48,9 @@ export default function Alerts() {
     }, 100);
   }, [data, location.hash]);
 
-  async function handleIgnore(outbreak) {
+  async function handleIgnore(outbreak: Outbreak) {
     setIgnoring(outbreak.taxon_id);
     try {
-      // Determine superkingdom from outbreak data
       const superkingdom = outbreak.superkingdoms?.[0] || "Viruses";
       await addToIgnorelist(outbreak.taxon_id, outbreak.taxon_name, superkingdom);
       load();
@@ -134,7 +134,9 @@ export default function Alerts() {
             <section
               key={`${outbreak.taxon_id}-${outbreak.config_name}`}
               id={`taxon-${outbreak.taxon_id}`}
-              ref={(el) => (sectionRefs.current[outbreak.taxon_id] = el)}
+              ref={(el) => {
+                sectionRefs.current[outbreak.taxon_id] = el;
+              }}
               className={`bg-white border rounded-xl transition-colors duration-500 ${
                 highlightedId === outbreak.taxon_id
                   ? "border-amber-400 ring-2 ring-amber-200"
@@ -197,7 +199,7 @@ export default function Alerts() {
                   </tr>
                 </thead>
                 <tbody>
-                  {outbreak.cases
+                  {[...outbreak.cases]
                     .sort((a, b) => (a.order_date ?? "").localeCompare(b.order_date ?? ""))
                     .map((c) => (
                       <tr

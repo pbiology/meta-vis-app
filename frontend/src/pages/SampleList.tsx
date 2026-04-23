@@ -5,17 +5,21 @@ import Badge from "../components/Badge";
 import { fmt, fmtPct } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
 import { singleAnalysisFilter } from "../lib/analysisPreference";
+import type { PaginatedResponse, Sample } from "../api/types";
 
-const FILTERS = ["All", "Samples", "Controls"];
+const FILTERS = ["All", "Samples", "Controls"] as const;
+type Filter = (typeof FILTERS)[number];
+
+const EMPTY: PaginatedResponse<Sample> = { items: [], total: 0, pages: 1, page: 1 };
 
 export default function SampleList() {
   const { preferences, preferencesLoaded } = useAuth();
   const visibleAnalysis = preferences?.visible_analysis_types;
-  const [data, setData] = useState({ items: [], total: 0, pages: 1 });
+  const [data, setData] = useState<PaginatedResponse<Sample>>(EMPTY);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [filter, setFilter] = useState("All");
+  const [filter, setFilter] = useState<Filter>("All");
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const navigate = useNavigate();
@@ -46,18 +50,19 @@ export default function SampleList() {
     load();
   }, [load]);
 
-  function handleSearch(e) {
+  function handleSearch(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setPage(1);
     setSearch(searchInput);
   }
 
-  function handleFilter(f) {
+  function handleFilter(f: Filter) {
     setFilter(f);
     setPage(1);
   }
 
   const samples = data.items ?? [];
+  const pages = data.pages ?? 1;
 
   return (
     <div className="flex flex-col h-full">
@@ -132,35 +137,52 @@ export default function SampleList() {
               </tr>
             </thead>
             <tbody>
-              {samples.map((s) => (
-                <tr
-                  key={s._id}
-                  onClick={() => navigate(`/samples/${s._id}`)}
-                  className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
-                >
-                  <td className="px-4 py-3 font-mono text-xs text-gray-700">
-                    {s.sample_id ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-500">{s.order_date ?? "—"}</td>
-                  <td className="px-4 py-3 text-xs text-gray-400 font-mono">
-                    {s.case_id_str ?? "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge type={s.sample_type} />
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-700">
-                    {s.trana
-                      ? fmt(s.trana?.nanoplot_processed?.number_of_reads)
-                      : fmtPct(s.taxprofiler?.classifiers?.kraken2?.pct_unclassified)}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-700">
-                    {s.trana ? "—" : fmt(s.taxprofiler?.classifiers?.kraken2?.num_species)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge type={s.review?.reviewed ? "reviewed" : "pending"} />
-                  </td>
-                </tr>
-              ))}
+              {samples.map((s) => {
+                const trana = s.trana as
+                  | { nanoplot_processed?: { number_of_reads?: number } }
+                  | undefined;
+                const kraken2 = (
+                  s.taxprofiler as
+                    | {
+                        classifiers?: {
+                          kraken2?: { pct_unclassified?: number; num_species?: number };
+                        };
+                      }
+                    | undefined
+                )?.classifiers?.kraken2;
+                const review = s.review as { reviewed?: boolean } | undefined;
+                return (
+                  <tr
+                    key={s._id}
+                    onClick={() => s._id && navigate(`/samples/${s._id}`)}
+                    className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                  >
+                    <td className="px-4 py-3 font-mono text-xs text-gray-700">
+                      {s.sample_id ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-500">
+                      {(s.order_date as string | undefined) ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-400 font-mono">
+                      {(s.case_id_str as string | undefined) ?? "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge type={(s.sample_type as string | undefined) ?? "sample"} />
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-700">
+                      {trana
+                        ? fmt(trana.nanoplot_processed?.number_of_reads)
+                        : fmtPct(kraken2?.pct_unclassified)}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-700">
+                      {trana ? "—" : fmt(kraken2?.num_species)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge type={review?.reviewed ? "reviewed" : "pending"} />
+                    </td>
+                  </tr>
+                );
+              })}
               {samples.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-400">
@@ -173,7 +195,7 @@ export default function SampleList() {
         )}
       </div>
 
-      {data.pages > 1 && (
+      {pages > 1 && (
         <div className="flex items-center justify-center gap-3 px-6 py-3 border-t border-gray-100 bg-white flex-shrink-0">
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -183,11 +205,11 @@ export default function SampleList() {
             ← Prev
           </button>
           <span className="text-xs text-gray-400">
-            Page {page} of {data.pages} · {data.total} samples
+            Page {page} of {pages} · {data.total} samples
           </span>
           <button
-            onClick={() => setPage((p) => Math.min(data.pages, p + 1))}
-            disabled={page === data.pages}
+            onClick={() => setPage((p) => Math.min(pages, p + 1))}
+            disabled={page === pages}
             className="text-xs px-3 py-1.5 border border-gray-200 rounded-lg disabled:opacity-40 hover:bg-gray-50 transition-colors"
           >
             Next →
