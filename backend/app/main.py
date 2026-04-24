@@ -1,9 +1,10 @@
 # app/main.py
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.auth.csrf import verify_csrf
 from app.config import settings, validate_jwt_secret
 from app.logging_config import setup_logging
 
@@ -30,6 +31,7 @@ app = FastAPI(
     title="meta-vis-app",
     version="0.1.0",
     lifespan=lifespan,
+    dependencies=[Depends(verify_csrf)],
 )
 
 # Parse CORS origins from comma-separated config string
