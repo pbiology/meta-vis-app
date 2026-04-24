@@ -8,8 +8,33 @@
 #   bash ingest_bulk_test.sh 50               # 50 taxprofiler + 3 trana
 #   bash ingest_bulk_test.sh 50 10            # 50 taxprofiler + 10 trana
 #   bash ingest_bulk_test.sh 0 5              # skip taxprofiler, ingest 5 trana
+#   RESET=1 bash ingest_bulk_test.sh          # drop cases/samples/metaval/blobs first
 
 set -uo pipefail
+
+# ---------------------------------------------------------------------------
+# Optional reset: drop case-owned collections before ingesting.
+# Matches the "full re-ingest" workflow required after the case_id harmonisation
+# (samples now store human-readable case_id as FK — mixing old and new docs
+# would break cross-references).
+# ---------------------------------------------------------------------------
+if [ "${RESET:-0}" = "1" ]; then
+  MONGO_DB="${MONGO_DB:-meta_vis}"
+  MONGO_URI="${MONGO_URI:-mongodb://localhost:27017/$MONGO_DB}"
+  echo "RESET=1 — dropping cases, samples, metaval_results, blobs in $MONGO_DB..."
+  if ! command -v mongosh >/dev/null 2>&1; then
+    echo "Error: mongosh not found on PATH — cannot reset collections" >&2
+    exit 1
+  fi
+  mongosh --quiet "$MONGO_URI" --eval '
+    db.cases.drop();
+    db.samples.drop();
+    db.metaval_results.drop();
+    db.blobs.drop();
+    print("dropped cases/samples/metaval_results/blobs");
+  '
+  echo ""
+fi
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 

@@ -47,7 +47,7 @@ def make_app(fake_db):
 
 def make_ntc_doc(
     sample_id: str,
-    case_id_str: str,
+    case_id: str,
     material: str,
     order_date: str,
     profile: list[dict] | None = None,
@@ -56,7 +56,7 @@ def make_ntc_doc(
     """Build a minimal sample document as stored in MongoDB."""
     doc: dict = {
         "sample_id": sample_id,
-        "case_id_str": case_id_str,
+        "case_id": case_id,
         "sample_type": "negative_ctrl",
         "material": material,
         "order_date": order_date,
@@ -403,7 +403,7 @@ class TestRecurringTaxa:
         docs = [
             {
                 "sample_id": "NTC-1",
-                "case_id_str": "case-1",
+                "case_id": "case-1",
                 "sample_type": "negative_ctrl",
                 "material": "DNA",
                 "order_date": "2026-04-01",
@@ -412,7 +412,7 @@ class TestRecurringTaxa:
             },
             {
                 "sample_id": "NTC-2",
-                "case_id_str": "case-2",
+                "case_id": "case-2",
                 "sample_type": "negative_ctrl",
                 "material": "DNA",
                 "order_date": "2026-04-02",
@@ -558,7 +558,7 @@ class TestKingdomBreakdown:
     async def test_non_kraken2_profiles_excluded_from_breakdown(self, fake_db):
         doc = {
             "sample_id": "NTC-1",
-            "case_id_str": "case-1",
+            "case_id": "case-1",
             "sample_type": "negative_ctrl",
             "material": "DNA",
             "order_date": "2026-04-01",
