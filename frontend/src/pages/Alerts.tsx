@@ -204,12 +204,10 @@ export default function Alerts() {
                     .map((c) => (
                       <tr
                         key={c.case_id}
-                        onClick={() => navigate(`/cases/${c.case_name}`)}
+                        onClick={() => navigate(`/cases/${c.case_id}`)}
                         className="cursor-pointer border-b border-gray-50 hover:bg-amber-50 transition-colors"
                       >
-                        <td className="px-4 py-2.5 font-mono text-xs text-gray-700">
-                          {c.case_name}
-                        </td>
+                        <td className="px-4 py-2.5 font-mono text-xs text-gray-700">{c.case_id}</td>
                         <td className="px-4 py-2.5 text-xs text-gray-500">{c.order_date ?? "—"}</td>
                       </tr>
                     ))}

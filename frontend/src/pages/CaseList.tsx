@@ -235,14 +235,14 @@ export default function CaseList() {
             <tbody>
               {cases.map((c) => (
                 <tr
-                  key={c._id}
+                  key={c.case_id}
                   onClick={() => navigate(`/cases/${c.case_id}`)}
                   className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
                 >
                   <td className="px-4 py-3 font-mono text-xs text-gray-700">
                     <div className="flex items-center gap-1.5">
                       {c.case_id}
-                      {c._id && outbreakCaseIds.has(c._id) && (
+                      {outbreakCaseIds.has(c.case_id) && (
                         <svg
                           className="w-3 h-3 text-amber-500 flex-shrink-0"
                           viewBox="0 0 16 16"
@@ -262,7 +262,7 @@ export default function CaseList() {
                           />
                         </svg>
                       )}
-                      {c._id && pathogenCaseIds.has(c._id) && (
+                      {pathogenCaseIds.has(c.case_id) && (
                         <svg
                           className="w-3 h-3 text-red-500 flex-shrink-0"
                           viewBox="0 0 16 16"
@@ -278,7 +278,7 @@ export default function CaseList() {
                           />
                         </svg>
                       )}
-                      {c._id && ntcContaminantCaseIds.has(c._id) && (
+                      {ntcContaminantCaseIds.has(c.case_id) && (
                         <svg
                           className="w-3 h-3 text-orange-500 flex-shrink-0"
                           viewBox="0 0 16 16"
