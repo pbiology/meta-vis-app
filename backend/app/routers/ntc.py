@@ -347,7 +347,6 @@ async def get_contaminant_alerts(
             {
                 "sample_id": 1,
                 "case_id": 1,
-                "case_id_str": 1,
                 "order_date": 1,
                 "profiles": 1,
             },
@@ -374,8 +373,7 @@ async def get_contaminant_alerts(
                 if entry.get("abundance", 0) > min_r:
                     hits[tid].append(
                         {
-                            "case_id": doc["case_id_str"],
-                            "case_oid": str(doc["case_id"]),
+                            "case_id": doc["case_id"],
                             "sample_id": doc["sample_id"],
                             "order_date": doc.get("order_date"),
                             "abundance": entry["abundance"],
@@ -390,9 +388,7 @@ async def get_contaminant_alerts(
         if not occurrences:
             continue
         case_ids = list({o["case_id"] for o in occurrences})
-        # Use MongoDB ObjectIds for cross-referencing with the case list
-        case_oids = list({o["case_oid"] for o in occurrences})
-        all_case_ids.update(case_oids)
+        all_case_ids.update(case_ids)
         alerts.append(
             {
                 "taxon_id": tid,
@@ -407,8 +403,6 @@ async def get_contaminant_alerts(
     alerts.sort(key=lambda a: a["case_count"], reverse=True)
 
     result = {"alerts": alerts, "contaminant_case_ids": list(all_case_ids)}
-    # Note: contaminant_case_ids contains MongoDB ObjectId strings, consistent
-    # with the pathogen_cases endpoint, so the case list can use .has(c._id).
     _contaminant_alert_cache[window_days] = result
     return result
 
@@ -496,7 +490,7 @@ async def get_ntc_trends(
             "$group": {
                 "_id": {
                     "sample_id": "$sample_id",
-                    "case_id": "$case_id_str",
+                    "case_id": "$case_id",
                     "order_date": "$order_date",
                     "sk": "$profiles.profile.superkingdom",
                 },
@@ -526,7 +520,7 @@ async def get_ntc_trends(
                 "_id": {
                     "taxon_id": "$profiles.profile.taxon_id",
                     "sample_id": "$sample_id",
-                    "case_id": "$case_id_str",
+                    "case_id": "$case_id",
                 },
                 "taxon_name": {"$first": "$profiles.profile.name"},
                 "superkingdom": {"$first": "$profiles.profile.superkingdom"},
@@ -560,7 +554,7 @@ async def get_ntc_trends(
     # For taxprofiler, a root-node aggregation (taxon_id == 1) provides a fallback
     # for samples whose QC data doesn't carry classified_reads directly.
     # For trana, reads come from nanoplot_processed; no root fallback needed.
-    rc_projection: dict = {"sample_id": 1, "case_id_str": 1, "order_date": 1}
+    rc_projection: dict = {"sample_id": 1, "case_id": 1, "order_date": 1}
     if pipeline == "trana":
         rc_projection["trana.nanoplot_processed.number_of_reads"] = 1
     else:
@@ -618,7 +612,7 @@ async def get_ntc_trends(
         read_counts.append(
             {
                 "sample_id": doc["sample_id"],
-                "case_id": doc["case_id_str"],
+                "case_id": doc["case_id"],
                 "order_date": doc.get("order_date"),
                 "classified_reads": classified,
             }
@@ -651,7 +645,7 @@ async def get_ntc_trends(
             kingdom_breakdown.append(
                 {
                     "sample_id": doc["sample_id"],
-                    "case_id": doc["case_id_str"],
+                    "case_id": doc["case_id"],
                     "order_date": doc.get("order_date"),
                     **dict.fromkeys(_kingdom_keys, 0),
                 }
