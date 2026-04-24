@@ -164,7 +164,7 @@ export default function SampleList() {
                       {(s.order_date as string | undefined) ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-400 font-mono">
-                      {(s.case_id_str as string | undefined) ?? "—"}
+                      {(s.case_id as string | undefined) ?? "—"}
                     </td>
                     <td className="px-4 py-3">
                       <Badge type={(s.sample_type as string | undefined) ?? "sample"} />
