@@ -7,6 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.audit import log_audit_event
 from app.database import get_db
 from app.auth.utils import verify_password, create_access_token, get_current_user
+from app.auth.csrf import CSRF_COOKIE_NAME, generate_csrf_token
 from app.config import settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -43,6 +44,15 @@ async def login(
         samesite="lax",
         max_age=60 * 60 * 8,
     )
+    csrf_token = generate_csrf_token()
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=csrf_token,
+        httponly=False,
+        secure=settings.app_env != "development",
+        samesite="lax",
+        max_age=60 * 60 * 8,
+    )
     return {
         "username": user["username"],
         "role": (user.get("role") or "reader").lower(),
@@ -52,6 +62,7 @@ async def login(
 @router.post("/logout")
 async def logout(response: Response):
     response.delete_cookie("access_token")
+    response.delete_cookie(CSRF_COOKIE_NAME)
     return {"logged_out": True}
 
 
