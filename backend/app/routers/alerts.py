@@ -260,13 +260,13 @@ async def _compute_outbreaks_for_config(
             "outbreaks": [],
         }
 
-    case_map = {str(c["_id"]): c for c in cases}
-    case_oids = [c["_id"] for c in cases]
+    case_map = {c["case_id"]: c for c in cases}
+    case_id_strs = [c["case_id"] for c in cases]
 
     # Fast aggregation on pre-computed outbreak_taxa
     pipeline: list[dict] = [
         # Only samples from windowed cases
-        {"$match": {"case_id": {"$in": case_oids}}},
+        {"$match": {"case_id": {"$in": case_id_strs}}},
         # Unwind the small outbreak_taxa array
         {"$unwind": "$outbreak_taxa"},
         # Filter to this config's superkingdom and criteria
@@ -309,14 +309,12 @@ async def _compute_outbreaks_for_config(
         key = (taxon_id, taxon_name)
 
         case_entries = []
-        for oid in doc["case_ids"]:
-            case_id_str = str(oid)
-            case_info = case_map.get(case_id_str)
+        for cid in doc["case_ids"]:
+            case_info = case_map.get(cid)
             if case_info:
                 case_entries.append(
                     {
-                        "case_id": case_id_str,
-                        "case_name": case_info["case_id"],
+                        "case_id": cid,
                         "order_date": case_info["order_date"],
                     }
                 )
