@@ -15,6 +15,14 @@ class Settings(BaseSettings):
     mongodb_username: Optional[str] = None
     mongodb_password: Optional[str] = None
     mongodb_auth_source: str = "admin"
+    # When True (default), append `directConnection=true` to the Mongo URL.
+    # Works for single-node replica sets behind a port mapping (the standard
+    # dev setup) — the driver talks directly to the one host we pass without
+    # trying to resolve other members advertised by `rs.conf()`. Multi-document
+    # transactions still work because the server reports itself as a replica
+    # set primary in its hello response. Set to False if using a real mongodb+srv
+    # URL or a multi-host cluster URL in production.
+    mongodb_direct_connection: bool = True
     app_env: str = "development"
     log_level: str = "info"
     jwt_secret: str = ""
