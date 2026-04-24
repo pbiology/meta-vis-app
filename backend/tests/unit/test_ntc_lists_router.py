@@ -46,16 +46,13 @@ def make_app(fake_db, role: str = "admin"):
 
 def make_ntc_doc(
     sample_id: str,
-    case_id_str: str,
+    case_id: str,
     order_date: str,
     profile: list[dict] | None = None,
 ) -> dict:
-    from bson import ObjectId
-
     doc: dict = {
         "sample_id": sample_id,
-        "case_id": ObjectId(),
-        "case_id_str": case_id_str,
+        "case_id": case_id,
         "sample_type": "negative_ctrl",
         "material": "DNA",
         "order_date": order_date,
@@ -518,18 +515,16 @@ class TestContaminantAlerts:
                 profile=[make_taxon(329, "Ralstonia pickettii", 10)],
             )
         )
-        # make_ntc_doc stores a random ObjectId in case_id — retrieve it so we
-        # can assert that contaminant_case_ids contains the ObjectId string,
-        # which is what the case list uses for icon matching.
+        # case_id is now the human-readable string used for icon matching.
         doc = await fake_db["samples"].find_one({"_id": result.inserted_id})
-        expected_case_oid = str(doc["case_id"])
+        expected_case_id = doc["case_id"]
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/contaminant-alerts")
         data = resp.json()
         assert len(data["alerts"]) == 1
         assert data["alerts"][0]["taxon_id"] == 329
         assert data["alerts"][0]["case_count"] == 1
-        assert expected_case_oid in data["contaminant_case_ids"]
+        assert expected_case_id in data["contaminant_case_ids"]
 
     async def test_contaminant_at_or_below_min_reads_not_detected(self, fake_db):
         await fake_db["ntc_known_contaminants"].insert_one(
@@ -638,7 +633,7 @@ class TestContaminantAlerts:
         # Contaminant only in centrifuge profile — must not trigger
         doc = {
             "sample_id": "NTC-1",
-            "case_id_str": "case-1",
+            "case_id": "case-1",
             "sample_type": "negative_ctrl",
             "material": "DNA",
             "order_date": "2026-04-01",

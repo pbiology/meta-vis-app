@@ -39,7 +39,7 @@ async def _upsert_subject(db: AsyncIOMotorDatabase, subject_id: str) -> ObjectId
 
 
 async def _store_krona(
-    case_object_id: ObjectId,
+    case_id: str,
     classifier_name: str,
     krona_path: str,
 ) -> None:
@@ -49,18 +49,18 @@ async def _store_krona(
     if not path.exists():
         raise FileNotFoundError(f"Krona file not found: {krona_path}")
     html = path.read_text(encoding="utf-8")
-    key = f"krona/{case_object_id}/{classifier_name}.html"
+    key = f"krona/{case_id}/{classifier_name}.html"
     await get_blob_store().put(key, html)
 
 
-async def _store_multiqc(case_object_id: ObjectId, multiqc_html_path: str) -> None:
+async def _store_multiqc(case_id: str, multiqc_html_path: str) -> None:
     from app.database import get_blob_store
 
     path = Path(multiqc_html_path)
     if not path.exists():
         raise FileNotFoundError(f"MultiQC HTML not found: {multiqc_html_path}")
     html = path.read_text(encoding="utf-8")
-    key = f"multiqc/{case_object_id}/report.html"
+    key = f"multiqc/{case_id}/report.html"
     await get_blob_store().put(key, html)
 
 
@@ -180,7 +180,7 @@ async def _upsert_taxa_from_profiles(profiles: list, db: AsyncIOMotorDatabase) -
 
 async def _process_one_metaval_result(
     r: MetavalResult,
-    case_object_id: ObjectId,
+    case_id: str,
     db: AsyncIOMotorDatabase,
     now: datetime,
 ) -> None:
@@ -191,7 +191,7 @@ async def _process_one_metaval_result(
 
     existing_sample: dict | None = await db["samples"].find_one(
         {
-            "case_id": case_object_id,
+            "case_id": case_id,
             "sample_id": r.sample_name,
         }
     )
@@ -201,8 +201,7 @@ async def _process_one_metaval_result(
         igv_key = None
         if not org.igv_too_large and org.igv_file_path:
             igv_key = (
-                f"igv/{case_object_id}/{r.sample_name}/"
-                f"{r.classifier}/{org.organism_name}.html"
+                f"igv/{case_id}/{r.sample_name}/{r.classifier}/{org.organism_name}.html"
             )
             html = Path(org.igv_file_path).read_text(encoding="utf-8")
             await blob_store.put(igv_key, html)
@@ -226,7 +225,7 @@ async def _process_one_metaval_result(
     if vd.type in ("scaffolds", "contigs"):
         if vd.path and Path(vd.path).exists():
             blob_key = (
-                f"verification_data/{case_object_id}/{r.sample_name}/"
+                f"verification_data/{case_id}/{r.sample_name}/"
                 f"{r.classifier}/{r.taxon_name}_{vd.type}.fa"
             )
             content = Path(vd.path).read_text(encoding="utf-8")
@@ -239,7 +238,7 @@ async def _process_one_metaval_result(
         ]:
             if path_val and Path(path_val).exists():
                 blob_key = (
-                    f"verification_data/{case_object_id}/{r.sample_name}/"
+                    f"verification_data/{case_id}/{r.sample_name}/"
                     f"{r.classifier}/{r.taxon_name}_read_{read_num}.fa"
                 )
                 content = Path(path_val).read_text(encoding="utf-8")
@@ -248,7 +247,7 @@ async def _process_one_metaval_result(
 
     await db["metaval_results"].insert_one(
         {
-            "case_id": case_object_id,
+            "case_id": case_id,
             "sample_id": sample_object_id,
             "sample_name": r.sample_name,
             "classifier": r.classifier,
@@ -305,7 +304,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
 
     async def _upload_krona(clf: Any) -> dict:
         if clf.krona:
-            await _store_krona(case_object_id, clf.name, clf.krona)
+            await _store_krona(request.case_id, clf.name, clf.krona)
             return {"name": clf.name, "db": clf.db, "krona_id": clf.name}
         return {"name": clf.name, "db": clf.db, "krona_id": None}
 
@@ -319,7 +318,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
     )
 
     if request.multiqc_report_path:
-        await _store_multiqc(case_object_id, request.multiqc_report_path)
+        await _store_multiqc(request.case_id, request.multiqc_report_path)
 
     # Fix 1: load each taxpasta file once, keyed by path
     import pandas as pd
@@ -385,8 +384,7 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
 
         sample_docs.append(
             {
-                "case_id": case_object_id,
-                "case_id_str": request.case_id,
+                "case_id": request.case_id,
                 "sample_id": s.sample_id,
                 "sample_source": s.sample_source,
                 "order_date": request.order_date.isoformat()
@@ -450,14 +448,13 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
         # Fix 4: fan out all metaval results concurrently
         await asyncio.gather(
             *[
-                _process_one_metaval_result(r, case_object_id, db, now)
+                _process_one_metaval_result(r, request.case_id, db, now)
                 for r in metaval_results
             ]
         )
 
     return {
         "case_id": request.case_id,
-        "case_object_id": str(case_object_id),
         "samples_ingested": len(sample_ids),
         "sample_ids": [str(sid) for sid in sample_ids],
     }
@@ -508,12 +505,12 @@ async def ingest_trana_case(
     krona_tasks = []
     for s in request.samples:
         if s.krona_path:
-            krona_tasks.append(_store_krona(case_object_id, s.sample_id, s.krona_path))
+            krona_tasks.append(_store_krona(request.case_id, s.sample_id, s.krona_path))
     if krona_tasks:
         await asyncio.gather(*krona_tasks)
 
     if request.multiqc_report_path:
-        await _store_multiqc(case_object_id, request.multiqc_report_path)
+        await _store_multiqc(request.case_id, request.multiqc_report_path)
 
     sample_names = [s.sample_id for s in request.samples if s.sample_type == "sample"]
     sample_count = len(sample_names)
@@ -566,8 +563,7 @@ async def ingest_trana_case(
 
         sample_docs.append(
             {
-                "case_id": case_object_id,
-                "case_id_str": request.case_id,
+                "case_id": request.case_id,
                 "sample_id": s.sample_id,
                 "sample_source": s.sample_source,
                 "order_date": (
@@ -610,7 +606,6 @@ async def ingest_trana_case(
 
     return {
         "case_id": request.case_id,
-        "case_object_id": str(case_object_id),
         "samples_ingested": len(sample_ids),
         "sample_ids": [str(sid) for sid in sample_ids],
     }

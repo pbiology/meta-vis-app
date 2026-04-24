@@ -33,20 +33,20 @@ async def insert_metaval(
     with_reads=True,
     with_igv=True,
 ):
-    case_oid = ObjectId()
+    case_id = "testcase"
     sample_oid = ObjectId(sample_id) if sample_id else ObjectId()
 
     reads_keys = {}
     if with_reads:
         read_key = (
-            f"verification_data/{case_oid}/SRR001/{classifier}/{taxon_name}_read_1.fa"
+            f"verification_data/{case_id}/SRR001/{classifier}/{taxon_name}_read_1.fa"
         )
         await blob_store.put(read_key, ">READ_1\nATCGATCG\n")
         reads_keys["read_1_key"] = read_key
 
     organisms = []
     if with_igv:
-        igv_key = f"igv/{case_oid}/SRR001/{classifier}/Shigella-virus-Moo19.html"
+        igv_key = f"igv/{case_id}/SRR001/{classifier}/Shigella-virus-Moo19.html"
         await blob_store.put(igv_key, "<html>igv</html>")
         organisms.append(
             {
@@ -59,7 +59,7 @@ async def insert_metaval(
 
     result = await db["metaval_results"].insert_one(
         {
-            "case_id": case_oid,
+            "case_id": case_id,
             "sample_id": sample_oid,
             "sample_name": "SRR001",
             "classifier": classifier,

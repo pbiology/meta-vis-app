@@ -26,8 +26,6 @@ def _oid(sample_id: str) -> ObjectId:
 
 def _serialise(doc: dict) -> dict:
     doc["_id"] = str(doc["_id"])
-    if "case_id" in doc:
-        doc["case_id"] = str(doc["case_id"])
     if "subject_id" in doc:
         doc["subject_id"] = str(doc["subject_id"])
     return doc
@@ -79,7 +77,7 @@ async def list_samples(
             "$lookup": {
                 "from": "cases",
                 "localField": "case_id",
-                "foreignField": "_id",
+                "foreignField": "case_id",
                 "as": "_case",
             }
         },
@@ -89,7 +87,7 @@ async def list_samples(
                 "_id": 1,
                 "sample_id": 1,
                 "sample_type": 1,
-                "case_id_str": 1,
+                "case_id": 1,
                 "order_date": 1,
                 "ingested_at": 1,
                 "review": 1,

@@ -23,15 +23,13 @@ def _make_app(fake_db):
 
 
 async def _seed_samples(db):
-    case_id = ObjectId()
     await db["samples"].insert_many(
         [
             {
                 "_id": ObjectId(),
                 "sample_id": "S-shotgun-1",
                 "sample_type": "sample",
-                "case_id": case_id,
-                "case_id_str": "CASE-1",
+                "case_id": "CASE-1",
                 "order_date": "2026-01-01",
                 "taxprofiler": {"classifiers": {"kraken2": {"num_species": 10}}},
             },
@@ -39,8 +37,7 @@ async def _seed_samples(db):
                 "_id": ObjectId(),
                 "sample_id": "S-trana-1",
                 "sample_type": "sample",
-                "case_id": case_id,
-                "case_id_str": "CASE-2",
+                "case_id": "CASE-1",
                 "order_date": "2026-01-02",
                 "trana": {"nanoplot_processed": {"number_of_reads": 123}},
             },
@@ -48,7 +45,7 @@ async def _seed_samples(db):
     )
     # The samples aggregation $lookups the parent case; seed minimally so $set works.
     await db["cases"].insert_one(
-        {"_id": case_id, "case_id": "CASE", "review": {"reviewed": False}}
+        {"_id": ObjectId(), "case_id": "CASE-1", "review": {"reviewed": False}}
     )
 
 

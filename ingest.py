@@ -331,7 +331,6 @@ def _print_result(resp: requests.Response, case_id: str) -> None:
     if resp.status_code == 200:
         result = resp.json()
         print(f"Ingested case '{result['case_id']}'")
-        print(f"  Case ObjectId : {result['case_object_id']}")
         print(f"  Samples       : {result['samples_ingested']}")
         for sid in result["sample_ids"]:
             print(f"  Sample ID     : {sid}")

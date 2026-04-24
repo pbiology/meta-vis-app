@@ -49,11 +49,10 @@ async def insert_case(db, case_id="testcase", reviewed=False, order_date="2026-0
     return result.inserted_id
 
 
-async def insert_sample(db, case_oid, sample_id="SRR001", sample_type="sample"):
+async def insert_sample(db, case_id, sample_id="SRR001", sample_type="sample"):
     result = await db["samples"].insert_one(
         {
-            "case_id": case_oid,
-            "case_id_str": "testcase",
+            "case_id": case_id,
             "sample_type": sample_type,
             "material": "DNA",
             "sample": {"sample_id": sample_id, "sample_source": "blood"},
@@ -149,8 +148,8 @@ class TestGetCase:
 
 class TestListSamplesForCase:
     async def test_returns_samples(self, client, fake_db):
-        oid = await insert_case(fake_db, "testcase")
-        await insert_sample(fake_db, oid, "SRR001")
+        await insert_case(fake_db, "testcase")
+        await insert_sample(fake_db, "testcase", "SRR001")
         resp = client.get("/api/v1/cases/testcase/samples")
         assert resp.status_code == 200
         assert len(resp.json()) == 1
@@ -161,9 +160,9 @@ class TestListSamplesForCase:
         assert resp.status_code == 404
 
     async def test_type_filter_controls(self, client, fake_db):
-        oid = await insert_case(fake_db, "testcase")
-        await insert_sample(fake_db, oid, "SRR001", sample_type="sample")
-        await insert_sample(fake_db, oid, "CTRL01", sample_type="negative_ctrl")
+        await insert_case(fake_db, "testcase")
+        await insert_sample(fake_db, "testcase", "SRR001", sample_type="sample")
+        await insert_sample(fake_db, "testcase", "CTRL01", sample_type="negative_ctrl")
         resp = client.get("/api/v1/cases/testcase/samples?type=controls")
         data = resp.json()
         assert len(data) == 1
@@ -273,8 +272,8 @@ class TestDeleteCase:
 
 class TestGetCaseKrona:
     async def test_serves_krona_html(self, client, fake_db, fake_blob):
-        oid = await insert_case(fake_db, "testcase")
-        await fake_blob.put(f"krona/{oid}/kraken2.html", "<html>krona</html>")
+        await insert_case(fake_db, "testcase")
+        await fake_blob.put("krona/testcase/kraken2.html", "<html>krona</html>")
         resp = client.get("/api/v1/cases/testcase/krona?classifier=kraken2")
         assert resp.status_code == 200
         assert "<html>" in resp.text
@@ -289,8 +288,8 @@ class TestGetCaseKrona:
         assert resp.status_code == 404
 
     async def test_default_classifier_is_kraken2(self, client, fake_db, fake_blob):
-        oid = await insert_case(fake_db, "testcase")
-        await fake_blob.put(f"krona/{oid}/kraken2.html", "<html>krona</html>")
+        await insert_case(fake_db, "testcase")
+        await fake_blob.put("krona/testcase/kraken2.html", "<html>krona</html>")
         resp = client.get("/api/v1/cases/testcase/krona")
         assert resp.status_code == 200
 
@@ -302,20 +301,19 @@ class TestGetCaseKrona:
 
 class TestListSamplesExtended:
     async def test_type_filter_sample(self, client, fake_db):
-        oid = await insert_case(fake_db, "testcase")
-        await insert_sample(fake_db, oid, "SRR001", sample_type="sample")
-        await insert_sample(fake_db, oid, "CTRL01", sample_type="negative_ctrl")
+        await insert_case(fake_db, "testcase")
+        await insert_sample(fake_db, "testcase", "SRR001", sample_type="sample")
+        await insert_sample(fake_db, "testcase", "CTRL01", sample_type="negative_ctrl")
         resp = client.get("/api/v1/cases/testcase/samples?type=sample")
         assert resp.status_code == 200
         assert len(resp.json()) == 1
         assert resp.json()[0]["sample"]["sample_id"] == "SRR001"
 
     async def test_profiles_produce_top_taxa(self, client, fake_db):
-        oid = await insert_case(fake_db, "testcase")
+        await insert_case(fake_db, "testcase")
         await fake_db["samples"].insert_one(
             {
-                "case_id": oid,
-                "case_id_str": "testcase",
+                "case_id": "testcase",
                 "sample_type": "sample",
                 "material": "DNA",
                 "sample": {"sample_id": "SRR001"},
@@ -351,12 +349,11 @@ class TestListSamplesExtended:
         assert top[0]["name"] == "Staphylococcus"
 
     async def test_subject_id_serialised(self, client, fake_db):
-        oid = await insert_case(fake_db, "testcase")
+        await insert_case(fake_db, "testcase")
         subject_oid = ObjectId()
         await fake_db["samples"].insert_one(
             {
-                "case_id": oid,
-                "case_id_str": "testcase",
+                "case_id": "testcase",
                 "subject_id": subject_oid,
                 "sample_type": "sample",
                 "material": "DNA",

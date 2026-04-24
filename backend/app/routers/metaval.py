@@ -22,7 +22,6 @@ def _oid(id_str: str) -> ObjectId:
 
 def _serialise(doc: dict) -> dict:
     doc["_id"] = str(doc["_id"])
-    doc["case_id"] = str(doc["case_id"])
     if doc.get("sample_id"):
         doc["sample_id"] = str(doc["sample_id"])
     # Strip internal storage fields from organism list

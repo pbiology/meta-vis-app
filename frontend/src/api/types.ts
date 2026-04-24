@@ -30,7 +30,6 @@ export interface MyStats {
 }
 
 export interface Case {
-  _id?: string;
   case_id: string;
   [key: string]: unknown;
 }
@@ -205,7 +204,6 @@ export interface NtcTrendsResponse {
 
 export interface OutbreakCase {
   case_id: string;
-  case_name: string;
   order_date?: string | null;
   [key: string]: unknown;
 }

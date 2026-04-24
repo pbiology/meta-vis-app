@@ -33,10 +33,9 @@ async def insert_sample(
     profiles=None,
     case_reviewed=False,
 ):
-    case_oid = ObjectId()
     await db["cases"].insert_one(
         {
-            "_id": case_oid,
+            "_id": ObjectId(),
             "case_id": "testcase",
             "review": {
                 "reviewed": case_reviewed,
@@ -48,8 +47,7 @@ async def insert_sample(
     )
     result = await db["samples"].insert_one(
         {
-            "case_id": case_oid,
-            "case_id_str": "testcase",
+            "case_id": "testcase",
             "sample_id": sample_id,
             "sample_source": "blood",
             "sample_type": sample_type,
@@ -62,7 +60,7 @@ async def insert_sample(
             "ingested_at": datetime.now(timezone.utc),
         }
     )
-    return result.inserted_id, case_oid
+    return result.inserted_id, "testcase"
 
 
 # ---------------------------------------------------------------------------
@@ -112,10 +110,9 @@ class TestListSamples:
 
     async def test_review_status_reflects_case_not_sample(self, client, fake_db):
         """review.reviewed in the list must come from the parent case, not the stale sample field."""
-        case_oid = ObjectId()
         await fake_db["cases"].insert_one(
             {
-                "_id": case_oid,
+                "_id": ObjectId(),
                 "case_id": "reviewed-case",
                 "review": {
                     "reviewed": True,
@@ -127,8 +124,7 @@ class TestListSamples:
         )
         await fake_db["samples"].insert_one(
             {
-                "case_id": case_oid,
-                "case_id_str": "reviewed-case",
+                "case_id": "reviewed-case",
                 "sample_id": "SRR999",
                 "sample_type": "sample",
                 "order_date": "2026-01-01",
@@ -210,11 +206,9 @@ class TestGetNtcProfiles:
 
     async def test_returns_ntc_in_same_case(self, client, fake_db):
         # Insert a sample and an NTC in the same case
-        case_oid = ObjectId()
         sample_result = await fake_db["samples"].insert_one(
             {
-                "case_id": case_oid,
-                "case_id_str": "testcase",
+                "case_id": "testcase",
                 "sample_id": "SRR001",
                 "sample_type": "sample",
                 "material": "DNA",
@@ -226,8 +220,7 @@ class TestGetNtcProfiles:
         )
         await fake_db["samples"].insert_one(
             {
-                "case_id": case_oid,
-                "case_id_str": "testcase",
+                "case_id": "testcase",
                 "sample_id": "CTRL01",
                 "sample_type": "negative_ctrl",
                 "material": "DNA",
@@ -247,11 +240,9 @@ class TestGetNtcProfiles:
         # A DNA sample must never receive RNA NTCs in its contaminant baseline —
         # the two are technically incomparable. Invariant guards the
         # contaminant-pill logic downstream.
-        case_oid = ObjectId()
         sample_result = await fake_db["samples"].insert_one(
             {
-                "case_id": case_oid,
-                "case_id_str": "testcase",
+                "case_id": "testcase",
                 "sample_id": "SRR001",
                 "sample_type": "sample",
                 "material": "DNA",
@@ -264,8 +255,7 @@ class TestGetNtcProfiles:
         # RNA NTC — must be filtered out
         await fake_db["samples"].insert_one(
             {
-                "case_id": case_oid,
-                "case_id_str": "testcase",
+                "case_id": "testcase",
                 "sample_id": "CTRL_RNA",
                 "sample_type": "negative_ctrl",
                 "material": "RNA",
@@ -278,8 +268,7 @@ class TestGetNtcProfiles:
         # DNA NTC — must be included
         await fake_db["samples"].insert_one(
             {
-                "case_id": case_oid,
-                "case_id_str": "testcase",
+                "case_id": "testcase",
                 "sample_id": "CTRL_DNA",
                 "sample_type": "negative_ctrl",
                 "material": "DNA",
@@ -306,8 +295,8 @@ class TestGetNtcProfiles:
 
 class TestGetKrona:
     async def test_returns_krona_html(self, client, fake_db, fake_blob):
-        oid, case_oid = await insert_sample(fake_db, "SRR001", has_krona=True)
-        key = f"krona/{case_oid}/kraken2.html"
+        oid, case_id = await insert_sample(fake_db, "SRR001", has_krona=True)
+        key = f"krona/{case_id}/kraken2.html"
         await fake_blob.put(key, "<html>krona</html>")
         resp = client.get(f"/api/v1/samples/{oid}/krona?classifier=kraken2")
         assert resp.status_code == 200

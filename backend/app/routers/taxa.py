@@ -518,7 +518,7 @@ async def get_taxon_occurrences(
             "$group": {
                 "_id": {
                     "sample_id": "$sample_id",
-                    "case_id_str": "$case_id_str",
+                    "case_id": "$case_id",
                     "order_date": "$order_date",
                     "classifier": "$profiles.classifier",
                 },
@@ -529,7 +529,7 @@ async def get_taxon_occurrences(
         {
             "$group": {
                 "_id": {
-                    "case_id_str": "$_id.case_id_str",
+                    "case_id": "$_id.case_id",
                     "order_date": "$_id.order_date",
                 },
                 "samples": {
@@ -547,7 +547,7 @@ async def get_taxon_occurrences(
         {
             "$project": {
                 "_id": 0,
-                "case_id": "$_id.case_id_str",
+                "case_id": "$_id.case_id",
                 "order_date": "$_id.order_date",
                 "sample_count": {"$size": "$sample_count"},
                 "samples": 1,

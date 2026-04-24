@@ -23,7 +23,7 @@ class ReviewPayload(BaseModel):
 
 
 def _serialise_case(doc: dict) -> dict:
-    doc["_id"] = str(doc["_id"])
+    doc.pop("_id", None)
     if "sample_ids" in doc:
         doc["sample_ids"] = [str(sid) for sid in doc["sample_ids"]]
     ticket_id = doc.get("ticket_id")
@@ -34,7 +34,6 @@ def _serialise_case(doc: dict) -> dict:
 
 def _serialise_sample(doc: dict) -> dict:
     doc["_id"] = str(doc["_id"])
-    doc["case_id"] = str(doc["case_id"])
     if doc.get("subject_id"):
         doc["subject_id"] = str(doc["subject_id"])
     return doc
@@ -153,7 +152,7 @@ async def pathogen_cases(
         {"$group": {"_id": "$case_id"}},
     ]
     results = await db["samples"].aggregate(pipeline).to_list(None)
-    case_ids = [str(r["_id"]) for r in results]
+    case_ids = [r["_id"] for r in results]
     return {"case_ids": case_ids}
 
 
@@ -246,11 +245,11 @@ async def list_samples_for_case(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    case = await db["cases"].find_one({"case_id": case_id})
+    case = await db["cases"].find_one({"case_id": case_id}, {"_id": 1})
     if not case:
         raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
 
-    query: dict = {"case_id": case["_id"]}
+    query: dict = {"case_id": case_id}
     if type == "controls":
         query["sample_type"] = {"$in": ["positive_ctrl", "negative_ctrl"]}
     elif type == "sample":
@@ -292,17 +291,15 @@ async def delete_case(
     if not case:
         raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
 
-    oid = case["_id"]
-
-    await db["samples"].delete_many({"case_id": oid})
+    await db["samples"].delete_many({"case_id": case_id})
     from app.database import get_blob_store
 
     store = get_blob_store()
-    await store.delete_prefix(f"krona/{oid}/")
-    await store.delete_prefix(f"igv/{oid}/")
-    await store.delete_prefix(f"multiqc/{oid}/")
-    await db["metaval_results"].delete_many({"case_id": oid})
-    await db["cases"].delete_one({"_id": oid})
+    await store.delete_prefix(f"krona/{case_id}/")
+    await store.delete_prefix(f"igv/{case_id}/")
+    await store.delete_prefix(f"multiqc/{case_id}/")
+    await db["metaval_results"].delete_many({"case_id": case_id})
+    await db["cases"].delete_one({"_id": case["_id"]})
 
     await log_audit_event(
         db,
@@ -322,13 +319,13 @@ async def get_krona(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    case = await db["cases"].find_one({"case_id": case_id})
+    case = await db["cases"].find_one({"case_id": case_id}, {"_id": 1})
     if not case:
         raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
 
     from app.database import get_blob_store
 
-    key = f"krona/{case['_id']}/{classifier}.html"
+    key = f"krona/{case_id}/{classifier}.html"
     html = await get_blob_store().get(key)
     if not html:
         raise HTTPException(
@@ -344,13 +341,13 @@ async def get_multiqc(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    case = await db["cases"].find_one({"case_id": case_id})
+    case = await db["cases"].find_one({"case_id": case_id}, {"_id": 1})
     if not case:
         raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
 
     from app.database import get_blob_store
 
-    key = f"multiqc/{case['_id']}/report.html"
+    key = f"multiqc/{case_id}/report.html"
     html = await get_blob_store().get(key)
     if not html:
         raise HTTPException(status_code=404, detail="No MultiQC report for this case")
