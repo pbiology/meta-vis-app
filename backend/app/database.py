@@ -1,4 +1,7 @@
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+from motor.motor_asyncio import (
+    AsyncIOMotorClient,
+    AsyncIOMotorDatabase,
+)
 from app.config import settings
 
 client: AsyncIOMotorClient | None = None
@@ -7,12 +10,17 @@ _blob_store = None
 
 def _build_mongo_url() -> str:
     if settings.mongodb_username and settings.mongodb_password:
-        return (
+        base = (
             f"mongodb://{settings.mongodb_username}:{settings.mongodb_password}"
             f"@{settings.mongodb_host}:{settings.mongodb_port}"
             f"/{settings.mongodb_db_name}?authSource={settings.mongodb_auth_source}"
         )
-    return f"mongodb://{settings.mongodb_host}:{settings.mongodb_port}"
+    else:
+        base = f"mongodb://{settings.mongodb_host}:{settings.mongodb_port}"
+    if settings.mongodb_direct_connection:
+        sep = "&" if "?" in base else "?"
+        base = f"{base}{sep}directConnection=true"
+    return base
 
 
 async def connect_db():
@@ -26,6 +34,13 @@ async def connect_db():
 
 def get_blob_store():
     return _blob_store
+
+
+def get_client() -> AsyncIOMotorClient:
+    """Return the shared Motor client (used for transaction sessions)."""
+    if client is None:
+        raise RuntimeError("Database not connected")
+    return client
 
 
 async def _ensure_indexes():
@@ -91,6 +106,9 @@ async def _ensure_indexes():
 
     # ntc_known_contaminants — fast lookup by taxon_id
     await db["ntc_known_contaminants"].create_index("taxon_id", unique=True)
+
+    # subjects — fast lookup by subject_id
+    await db["subjects"].create_index("subject_id", unique=True)
 
     # taxa — reference collection populated by load_taxonomy.py
     await db["taxa"].create_index("taxon_id", unique=True)
