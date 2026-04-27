@@ -155,9 +155,7 @@ def patched_client():
 
 @pytest.fixture(autouse=True)
 def patch_db_client():
-    import app.database as database_module
-
-    with patch.object(database_module, "get_client", return_value=_FakeClient()):
+    with patch.object(orchestrator, "get_client", return_value=_FakeClient()):
         yield
 
 
