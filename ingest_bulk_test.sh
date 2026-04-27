@@ -123,6 +123,7 @@ if [ "$COUNT" -gt 0 ]; then
     order_epoch=$(( start_epoch + offset_secs ))
     order_date=$(date -j -r "$order_epoch" "+%Y-%m-%d")
 
+    t0=$(date +%s%3N)
     if python "$INGEST_SCRIPT" taxprofiler \
       --case-id "$case_id" \
       --ticket-id "1007645" \
@@ -143,11 +144,14 @@ if [ "$COUNT" -gt 0 ]; then
       --url "$URL" \
       --password "$PASSWORD" 2>/dev/null; then
       success=$(( success + 1 ))
+      status="ok"
     else
       fail=$(( fail + 1 ))
+      status="FAILED"
     fi
+    elapsed=$(( $(date +%s%3N) - t0 ))
 
-    echo "  [taxprofiler $i/$COUNT] $case_id — $order_date (ok: $success, failed: $fail)"
+    echo "  [taxprofiler $i/$COUNT] $case_id — $order_date — ${elapsed}ms ($status, ok: $success, failed: $fail)"
   done
 
   echo ""
@@ -174,6 +178,7 @@ if [ "$TRANA_COUNT" -gt 0 ]; then
     order_epoch=$(( start_epoch + offset_secs ))
     order_date=$(date -j -r "$order_epoch" "+%Y-%m-%d")
 
+    t0=$(date +%s%3N)
     if python "$INGEST_SCRIPT" trana \
       --case-id "$case_id" \
       --ticket-id "1007645" \
@@ -187,11 +192,14 @@ if [ "$TRANA_COUNT" -gt 0 ]; then
       --url "$URL" \
       --password "$PASSWORD" 2>/dev/null; then
       t_success=$(( t_success + 1 ))
+      status="ok"
     else
       t_fail=$(( t_fail + 1 ))
+      status="FAILED"
     fi
+    elapsed=$(( $(date +%s%3N) - t0 ))
 
-    echo "  [trana $i/$TRANA_COUNT] $case_id — $order_date (ok: $t_success, failed: $t_fail)"
+    echo "  [trana $i/$TRANA_COUNT] $case_id — $order_date — ${elapsed}ms ($status, ok: $t_success, failed: $t_fail)"
   done
 
   echo ""
