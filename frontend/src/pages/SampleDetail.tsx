@@ -125,11 +125,12 @@ export default function SampleDetail() {
   );
 
   useEffect(() => {
-    if (profile?.profiles?.length && activeTab === null) {
-      const requestedClassifier = searchParams.get("classifier");
-      const match = profile.profiles.find((p) => p.classifier === requestedClassifier);
-      setActiveTab(match ? match.classifier : profile.profiles[0].classifier);
-    }
+    if (!profile?.profiles?.length) return;
+    const available = profile.profiles.map((p) => p.classifier);
+    if (activeTab && available.includes(activeTab)) return;
+    const requested = searchParams.get("classifier");
+    const match = profile.profiles.find((p) => p.classifier === requested);
+    setActiveTab(match ? match.classifier : profile.profiles[0].classifier);
   }, [profile, activeTab, searchParams]);
 
   if (sampleLoading || profileLoading)
@@ -232,7 +233,9 @@ export default function SampleDetail() {
                   value: fp ? fmt(fp.passed_filter_reads) : "—",
                   sub:
                     fp && fp.passed_filter_reads != null && fp.total_reads_before_filtering
-                      ? `${fmtPct((fp.passed_filter_reads / fp.total_reads_before_filtering) * 100)} of raw`
+                      ? `${fmtPct(
+                          (fp.passed_filter_reads / fp.total_reads_before_filtering) * 100
+                        )} of raw`
                       : "",
                 },
                 {

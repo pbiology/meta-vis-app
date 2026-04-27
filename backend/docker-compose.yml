@@ -6,6 +6,7 @@ services:
       - "127.0.0.1:27017:27017"
     volumes:
       - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
       - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     environment:
       MONGO_INITDB_DATABASE: ${MONGODB_DB_NAME}
@@ -16,6 +17,36 @@ services:
       MONGODB_DB_NAME: ${MONGODB_DB_NAME}
     env_file:
       - .env
+    # Single-node replica set is required so ingest can use multi-document
+    # transactions (mongod only permits txns on a replica-set member).
+    entrypoint:
+      - bash
+      - -c
+      - |
+        set -e
+        KF=/data/configdb/mongo-keyfile
+        if [ ! -s "$$KF" ]; then
+          openssl rand -base64 756 > "$$KF"
+        fi
+        chmod 400 "$$KF"
+        chown 999:999 "$$KF" || true
+        exec docker-entrypoint.sh mongod \
+          --replSet rs0 \
+          --keyFile "$$KF" \
+          --bind_ip_all
+    healthcheck:
+      # Idempotently initiate the replica set once mongod is up. Clients
+      # connect with directConnection=true, so the rs member name only needs
+      # to be reachable from the mongod itself — 'localhost:27017' is correct.
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --quiet -u admin -p $$MONGO_ROOT_PASSWORD --authenticationDatabase admin --eval \"try { rs.status().ok } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'localhost:27017'}]}).ok }\" | grep -q 1",
+        ]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 15s
 
   minio:
     image: minio/minio
@@ -32,4 +63,5 @@ services:
 
 volumes:
   mongodb_data:
+  mongodb_config:
   minio_data:

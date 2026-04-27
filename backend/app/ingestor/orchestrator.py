@@ -1,13 +1,15 @@
 # app/ingestor/orchestrator.py
 
+import asyncio
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-import asyncio
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from typing import Any
-from pymongo import UpdateOne
+from pymongo import ReturnDocument, UpdateOne
 
+from app.database import get_client
 from app.models.sample import IngestRequest, TranaIngestRequest
 from app.ingestor.taxpasta_reader import load_taxpasta, extract_sample_profile
 from app.ingestor.multiqc_reader import read_multiqc
@@ -25,60 +27,65 @@ from app.ingestor.models import (
 )
 
 
-async def _upsert_subject(db: AsyncIOMotorDatabase, subject_id: str) -> ObjectId:
-    result = await db["subjects"].find_one({"subject_id": subject_id})
-    if result:
-        return result["_id"]
-    insert = await db["subjects"].insert_one(
-        {
-            "subject_id": subject_id,
-            "created_at": datetime.now(timezone.utc),
-        }
-    )
-    return insert.inserted_id
+# ---------------------------------------------------------------------------
+# Prepared-ingest dataclasses
+#
+# Issue #10: ingest_case is split into three phases — prepare (pure; no DB or
+# blob writes), commit (all Mongo writes inside a single transaction), and
+# upload-blobs (after the transaction commits). These dataclasses carry the
+# fully-materialised writes from prepare to commit/upload so that a failure
+# in any one phase cannot leave Mongo in an inconsistent state.
+# ---------------------------------------------------------------------------
 
 
-async def _store_krona(
-    case_id: str,
-    classifier_name: str,
-    krona_path: str,
-) -> None:
-    from app.database import get_blob_store
-
-    path = Path(krona_path)
-    if not path.exists():
-        raise FileNotFoundError(f"Krona file not found: {krona_path}")
-    html = path.read_text(encoding="utf-8")
-    key = f"krona/{case_id}/{classifier_name}.html"
-    await get_blob_store().put(key, html)
+@dataclass
+class _BlobUpload:
+    key: str
+    content: str
 
 
-async def _store_multiqc(case_id: str, multiqc_html_path: str) -> None:
-    from app.database import get_blob_store
-
-    path = Path(multiqc_html_path)
-    if not path.exists():
-        raise FileNotFoundError(f"MultiQC HTML not found: {multiqc_html_path}")
-    html = path.read_text(encoding="utf-8")
-    key = f"multiqc/{case_id}/report.html"
-    await get_blob_store().put(key, html)
+@dataclass
+class _MetavalPrepared:
+    doc: dict  # ready-to-insert metaval_results document
+    blob_uploads: list[_BlobUpload]
 
 
-def _compute_outbreak_taxa(
-    profiles: list,
-) -> list:
-    """
-    Extract taxa from profiles that match any enabled outbreak config.
+@dataclass
+class _PreparedIngest:
+    case_doc: dict
+    # sample_docs each carry a pre-generated _id and (possibly placeholder)
+    # subject_id that is resolved to a real ObjectId inside the transaction.
+    sample_docs: list[dict]
+    # subject_id string -> list of sample_doc indices that reference it
+    subject_refs: dict[str, list[int]] = field(default_factory=dict)
+    taxa_upsert_ops: list[UpdateOne] = field(default_factory=list)
+    metaval_prepared: list[_MetavalPrepared] = field(default_factory=list)
+    metaval_pipeline_info: dict | None = None
+    krona_uploads: list[_BlobUpload] = field(default_factory=list)
+    multiqc_upload: _BlobUpload | None = None
 
-    Uses the outbreak configs loaded from outbreak_configs.json at startup.
-    """
+
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
+
+
+def _read_text(path: str, label: str) -> str:
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"{label} not found: {path}")
+    return p.read_text(encoding="utf-8")
+
+
+def _compute_outbreak_taxa(profiles: list) -> list:
+    """Extract taxa from profiles that match any enabled outbreak config."""
     from app.config import settings
 
     if not settings.outbreak_configs:
         return []
 
     outbreak_taxa = []
-    seen_taxon_ids = set()
+    seen_taxon_ids: set = set()
 
     for profile in profiles:
         classifier_name = profile.get("classifier")
@@ -93,7 +100,6 @@ def _compute_outbreak_taxa(
             rank = entry.get("rank")
             abundance = entry.get("abundance", 0)
 
-            # Check if this taxon matches ANY outbreak config
             for config in settings.outbreak_configs:
                 if (
                     superkingdom in config["superkingdoms"]
@@ -116,20 +122,15 @@ def _compute_outbreak_taxa(
     return outbreak_taxa
 
 
-async def _upsert_taxa_from_profiles(profiles: list, db: AsyncIOMotorDatabase) -> None:
+def _build_taxa_upsert_ops(all_profiles: list) -> list[UpdateOne]:
     """
-    Lightweight fallback: upsert minimal taxon records from profile data.
+    Build $setOnInsert upsert operations for every taxon_id seen in profiles.
 
-    This ensures every taxon_id seen in a sample has at least a skeleton
-    record in the `taxa` collection, even if load_taxonomy.py has not been
-    run yet or hasn't been refreshed recently.
-
-    Only creates new records ($setOnInsert) — never overwrites existing
-    taxonomy data or clinical_notes populated by load_taxonomy.py.
+    Ensures every taxon_id seen in a sample has at least a skeleton record in
+    the `taxa` collection. Never overwrites existing taxonomy data.
     """
-
     seen: dict[int, dict[str, Any]] = {}
-    for p in profiles:
+    for p in all_profiles:
         for entry in p.get("profile", []):
             taxon_id = entry.get("taxon_id")
             if taxon_id is None or taxon_id in seen:
@@ -139,9 +140,6 @@ async def _upsert_taxa_from_profiles(profiles: list, db: AsyncIOMotorDatabase) -
                 "rank": entry.get("rank"),
                 "superkingdom": entry.get("superkingdom"),
             }
-
-    if not seen:
-        return
 
     ops: list[UpdateOne] = []
     for taxon_id, taxon_fields in seen.items():
@@ -154,7 +152,6 @@ async def _upsert_taxa_from_profiles(profiles: list, db: AsyncIOMotorDatabase) -
                         "name": taxon_fields["name"],
                         "rank": taxon_fields["rank"],
                         "superkingdom": taxon_fields["superkingdom"],
-                        # Full lineage fields absent — indicates needs refresh
                         "kingdom": None,
                         "phylum": None,
                         "class": None,
@@ -167,52 +164,54 @@ async def _upsert_taxa_from_profiles(profiles: list, db: AsyncIOMotorDatabase) -
                             f"wwwtax.cgi?id={taxon_id}"
                         ),
                         "clinical_notes": None,
-                        "taxdump_version": None,  # None = not yet loaded from dump
+                        "taxdump_version": None,
                         "updated_at": None,
                     }
                 },
                 upsert=True,
             )
         )
+    return ops
 
-    await db["taxa"].bulk_write(ops, ordered=False)
+
+# ---------------------------------------------------------------------------
+# Prepare phase — taxprofiler / metaval ingest
+# ---------------------------------------------------------------------------
 
 
-async def _process_one_metaval_result(
+def _prepare_metaval_result(
     r: MetavalResult,
     case_id: str,
-    db: AsyncIOMotorDatabase,
+    sample_name_to_oid: dict[str, ObjectId],
     now: datetime,
-) -> None:
-    """Upload blobs and insert a single metaval result document."""
-    from app.database import get_blob_store
+) -> _MetavalPrepared:
+    """
+    Build the metaval_results document + blob uploads for one result, reading
+    all file contents upfront so the transaction phase never touches disk.
+    """
+    blob_uploads: list[_BlobUpload] = []
 
-    blob_store = get_blob_store()
-
-    existing_sample: dict | None = await db["samples"].find_one(
-        {
-            "case_id": case_id,
-            "sample_id": r.sample_name,
-        }
-    )
-    sample_object_id = existing_sample["_id"] if existing_sample else None
-
-    async def _upload_igv(org: Any) -> dict:
+    organisms: list[dict] = []
+    for org in r.organisms:
         igv_key = None
         if not org.igv_too_large and org.igv_file_path:
             igv_key = (
                 f"igv/{case_id}/{r.sample_name}/{r.classifier}/{org.organism_name}.html"
             )
-            html = Path(org.igv_file_path).read_text(encoding="utf-8")
-            await blob_store.put(igv_key, html)
-        return {
-            "organism_name": org.organism_name,
-            "igv_key": igv_key,
-            "igv_file_size_bytes": org.igv_file_size_bytes,
-            "igv_too_large": org.igv_too_large,
-        }
-
-    organisms = list(await asyncio.gather(*[_upload_igv(org) for org in r.organisms]))
+            blob_uploads.append(
+                _BlobUpload(
+                    key=igv_key,
+                    content=_read_text(org.igv_file_path, "IGV report"),
+                )
+            )
+        organisms.append(
+            {
+                "organism_name": org.organism_name,
+                "igv_key": igv_key,
+                "igv_file_size_bytes": org.igv_file_size_bytes,
+                "igv_too_large": org.igv_too_large,
+            }
+        )
 
     vd = r.verification_data
     vd_store: dict[str, object] = {
@@ -228,8 +227,12 @@ async def _process_one_metaval_result(
                 f"verification_data/{case_id}/{r.sample_name}/"
                 f"{r.classifier}/{r.taxon_name}_{vd.type}.fa"
             )
-            content = Path(vd.path).read_text(encoding="utf-8")
-            await blob_store.put(blob_key, content)
+            blob_uploads.append(
+                _BlobUpload(
+                    key=blob_key,
+                    content=_read_text(vd.path, "verification data"),
+                )
+            )
             vd_store["blob_key"] = blob_key
     elif vd.type == "raw_reads":
         for read_num, path_val in [
@@ -241,95 +244,99 @@ async def _process_one_metaval_result(
                     f"verification_data/{case_id}/{r.sample_name}/"
                     f"{r.classifier}/{r.taxon_name}_read_{read_num}.fa"
                 )
-                content = Path(path_val).read_text(encoding="utf-8")
-                await blob_store.put(blob_key, content)
+                blob_uploads.append(
+                    _BlobUpload(
+                        key=blob_key,
+                        content=_read_text(path_val, "verification data"),
+                    )
+                )
                 vd_store[f"read_{read_num}_key"] = blob_key
 
-    await db["metaval_results"].insert_one(
-        {
-            "case_id": case_id,
-            "sample_id": sample_object_id,
-            "sample_name": r.sample_name,
-            "classifier": r.classifier,
-            "taxon_id": r.taxon_id,
-            "taxon_name": r.taxon_name,
-            "organisms": organisms,
-            "blast": r.blast.model_dump(),
-            "verification_data": vd_store,
-            "ingested_at": now,
-        }
-    )
+    sample_object_id = sample_name_to_oid.get(r.sample_name)
 
-
-async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
-    now = datetime.now(timezone.utc)
-
-    pipeline_info: PipelineInfoOutput = read_pipeline_info(request.pipeline_info_path)
-    qc_data: MultiQCRaw = read_multiqc(request.multiqc_path)
-
-    existing_case = await db["cases"].find_one({"case_id": request.case_id})
-    if existing_case:
-        raise ValueError(
-            f"Case '{request.case_id}' already exists. "
-            f"Delete the existing case first, or use a unique case_id."
-        )
-
-    classifier_docs = []
-    for clf in request.classifiers:
-        classifier_docs.append({"name": clf.name, "db": clf.db, "krona": None})
-
-    case_doc = {
-        "case_id": request.case_id,
-        "ticket_id": request.ticket_id,
-        "order_date": request.order_date.isoformat() if request.order_date else None,
+    doc = {
+        "case_id": case_id,
+        "sample_id": sample_object_id,
+        "sample_name": r.sample_name,
+        "classifier": r.classifier,
+        "taxon_id": r.taxon_id,
+        "taxon_name": r.taxon_name,
+        "organisms": organisms,
+        "blast": r.blast.model_dump(),
+        "verification_data": vd_store,
         "ingested_at": now,
-        "sample_ids": [],
-        "classifiers": classifier_docs,
-        "has_krona": any(clf.krona for clf in request.classifiers),
-        "has_multiqc": bool(request.multiqc_report_path),
-        "pipeline_info": pipeline_info.model_dump(),
-        "analysis_type": request.analysis_type.value if request.analysis_type else None,
-        "sequencing_platform": request.sequencing_platform.value
-        if request.sequencing_platform
-        else None,
-        "review": {
-            "reviewed": False,
-            "reviewed_by": None,
-            "reviewed_at": None,
-            "notes": None,
-        },
     }
-    case_result = await db["cases"].insert_one(case_doc)
-    case_object_id = case_result.inserted_id
+    return _MetavalPrepared(doc=doc, blob_uploads=blob_uploads)
 
-    async def _upload_krona(clf: Any) -> dict:
-        if clf.krona:
-            await _store_krona(request.case_id, clf.name, clf.krona)
-            return {"name": clf.name, "db": clf.db, "krona_id": clf.name}
-        return {"name": clf.name, "db": clf.db, "krona_id": None}
 
-    updated_classifiers = list(
-        await asyncio.gather(*[_upload_krona(clf) for clf in request.classifiers])
-    )
+async def _prepare_ingest(request: IngestRequest, now: datetime) -> _PreparedIngest:
+    """
+    Phase 1: parse, validate, and materialise every write — no DB or blob I/O.
 
-    await db["cases"].update_one(
-        {"_id": case_object_id},
-        {"$set": {"classifiers": updated_classifiers}},
-    )
-
-    if request.multiqc_report_path:
-        await _store_multiqc(request.case_id, request.multiqc_report_path)
-
-    # Fix 1: load each taxpasta file once, keyed by path
+    All blocking file reads (taxpasta CSV, Krona HTML, MultiQC JSON) are fanned
+    out concurrently via asyncio.to_thread so the event loop stays unblocked.
+    Any exception raised here means nothing has been written anywhere.
+    """
     import pandas as pd
 
-    taxpasta_cache: dict[str, pd.DataFrame] = {}
+    # Deduplicate taxpasta paths so we load each file only once
+    unique_taxpasta_paths = list(
+        dict.fromkeys(clf.taxpasta for clf in request.classifiers)
+    )
+
+    # Fan out: pipeline info + multiqc data + all taxpasta tables
+    _io_results = await asyncio.gather(
+        asyncio.to_thread(read_pipeline_info, request.pipeline_info_path),
+        asyncio.to_thread(read_multiqc, request.multiqc_path),
+        *(asyncio.to_thread(load_taxpasta, p) for p in unique_taxpasta_paths),
+    )
+    pipeline_info_typed: PipelineInfoOutput = _io_results[0]  # type: ignore[assignment]
+    qc_data_typed: MultiQCRaw = _io_results[1]  # type: ignore[assignment]
+    taxpasta_cache: dict[str, pd.DataFrame] = {
+        p: _io_results[2 + i]  # type: ignore[misc]
+        for i, p in enumerate(unique_taxpasta_paths)
+    }
+
+    # Fan out: Krona HTML files + optional MultiQC report HTML
+    blob_keys: list[str] = []
+    blob_tasks: list = []
     for clf in request.classifiers:
-        if clf.taxpasta not in taxpasta_cache:
-            taxpasta_cache[clf.taxpasta] = load_taxpasta(clf.taxpasta)
+        if clf.krona:
+            blob_keys.append(f"krona:{clf.name}")
+            blob_tasks.append(asyncio.to_thread(_read_text, clf.krona, "Krona file"))
+    if request.multiqc_report_path:
+        blob_keys.append("multiqc")
+        blob_tasks.append(
+            asyncio.to_thread(_read_text, request.multiqc_report_path, "MultiQC HTML")
+        )
+    blob_contents: dict[str, str] = {}
+    if blob_tasks:
+        blob_results = await asyncio.gather(*blob_tasks)
+        blob_contents = dict(zip(blob_keys, blob_results))
+
+    krona_uploads: list[_BlobUpload] = []
+    classifier_docs: list[dict] = []
+    for clf in request.classifiers:
+        krona_id = None
+        if clf.krona:
+            krona_id = clf.name
+            krona_uploads.append(
+                _BlobUpload(
+                    key=f"krona/{request.case_id}/{clf.name}.html",
+                    content=blob_contents[f"krona:{clf.name}"],
+                )
+            )
+        classifier_docs.append({"name": clf.name, "db": clf.db, "krona_id": krona_id})
+
+    multiqc_upload: _BlobUpload | None = None
+    if request.multiqc_report_path:
+        multiqc_upload = _BlobUpload(
+            key=f"multiqc/{request.case_id}/report.html",
+            content=blob_contents["multiqc"],
+        )
 
     sample_names = [s.sample_id for s in request.samples if s.sample_type == "sample"]
-    sample_count = len([s for s in request.samples if s.sample_type == "sample"])
+    sample_count = len(sample_names)
     control_count = len(
         [
             s
@@ -338,17 +345,16 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
         ]
     )
 
-    # Fix 2 + 3: build all sample docs first; accumulate profiles for one bulk taxa upsert
     sample_docs: list[dict] = []
     all_profiles: list[dict] = []
+    subject_refs: dict[str, list[int]] = {}
 
-    for s in request.samples:
-        subject_object_id = None
+    for idx, s in enumerate(request.samples):
         if s.subject_id:
-            subject_object_id = await _upsert_subject(db, s.subject_id)
+            subject_refs.setdefault(s.subject_id, []).append(idx)
 
-        profiles = []
-        classifier_qc = {}
+        profiles: list[dict] = []
+        classifier_qc: dict = {}
 
         for clf in request.classifiers:
             col = s.columns.get(clf.name)
@@ -364,13 +370,12 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
                     "profile": [e.model_dump() for e in taxon_entries],
                 }
             )
-            clf_qc = _extract_classifier_qc(qc_data, clf.name, col)
+            clf_qc = _extract_classifier_qc(qc_data_typed, clf.name, col)
             if clf_qc:
                 classifier_qc[clf.name] = clf_qc
 
         all_profiles.extend(profiles)
-        base_qc = _extract_base_qc(qc_data, s.sample_id)
-
+        base_qc = _extract_base_qc(qc_data_typed, s.sample_id)
         outbreak_taxa = _compute_outbreak_taxa(profiles)
 
         all_taxon_ids: list[int] = list(
@@ -384,19 +389,20 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
 
         sample_docs.append(
             {
+                "_id": ObjectId(),
                 "case_id": request.case_id,
                 "sample_id": s.sample_id,
                 "sample_source": s.sample_source,
                 "order_date": request.order_date.isoformat()
                 if request.order_date
                 else None,
-                "subject_id": subject_object_id,
+                "subject_id": None,
                 "sample_type": s.sample_type,
                 "material": s.material,
                 "taxprofiler": {
                     **base_qc,
                     "classifiers": classifier_qc,
-                    "pipeline_info": pipeline_info.model_dump(),
+                    "pipeline_info": pipeline_info_typed.model_dump(),
                 },
                 "profiles": profiles,
                 "outbreak_taxa": outbreak_taxa,
@@ -412,81 +418,22 @@ async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
             }
         )
 
-    # Single taxa upsert across all samples
-    await _upsert_taxa_from_profiles(all_profiles, db)
+    sample_ids = [doc["_id"] for doc in sample_docs]
+    sample_name_to_oid = {doc["sample_id"]: doc["_id"] for doc in sample_docs}
 
-    # Batch insert all samples in one round-trip
-    insert_result = await db["samples"].insert_many(sample_docs)
-    sample_ids = list(insert_result.inserted_ids)
-
-    await db["cases"].update_one(
-        {"_id": case_object_id},
-        {
-            "$set": {
-                "sample_ids": sample_ids,
-                "sample_count": sample_count,
-                "control_count": control_count,
-                "sample_names": sample_names,
-            }
-        },
-    )
-
-    if request.metaval:
-        metaval_data: MetavalOutput = read_metaval(request.metaval.metaval_dir)
-        metaval_results = metaval_data.results
-
-        if metaval_data.pipeline_info:
-            await db["cases"].update_one(
-                {"_id": case_object_id},
-                {
-                    "$set": {
-                        "metaval_pipeline_info": metaval_data.pipeline_info.model_dump()
-                    }
-                },
-            )
-
-        # Fix 4: fan out all metaval results concurrently
-        await asyncio.gather(
-            *[
-                _process_one_metaval_result(r, request.case_id, db, now)
-                for r in metaval_results
-            ]
-        )
-
-    return {
-        "case_id": request.case_id,
-        "samples_ingested": len(sample_ids),
-        "sample_ids": [str(sid) for sid in sample_ids],
-    }
-
-
-async def ingest_trana_case(
-    request: TranaIngestRequest, db: AsyncIOMotorDatabase
-) -> dict:
-    """Ingest a Trana pipeline case (16S amplicon, ONT, Emu classifier)."""
-    now = datetime.now(timezone.utc)
-
-    pipeline_info: PipelineInfoOutput = read_pipeline_info(request.pipeline_info_path)
-
-    existing_case = await db["cases"].find_one({"case_id": request.case_id})
-    if existing_case:
-        raise ValueError(
-            f"Case '{request.case_id}' already exists. "
-            f"Delete the existing case first, or use a unique case_id."
-        )
-
-    has_krona = any(s.krona_path for s in request.samples)
-
-    case_doc: dict[str, Any] = {
+    case_doc = {
         "case_id": request.case_id,
         "ticket_id": request.ticket_id,
         "order_date": request.order_date.isoformat() if request.order_date else None,
         "ingested_at": now,
-        "sample_ids": [],
-        "classifiers": [{"name": "emu", "db": "default", "krona_id": None}],
-        "has_krona": has_krona,
+        "sample_ids": sample_ids,
+        "sample_count": sample_count,
+        "control_count": control_count,
+        "sample_names": sample_names,
+        "classifiers": classifier_docs,
+        "has_krona": any(clf.krona for clf in request.classifiers),
         "has_multiqc": bool(request.multiqc_report_path),
-        "pipeline_info": pipeline_info.model_dump(),
+        "pipeline_info": pipeline_info_typed.model_dump(),
         "analysis_type": request.analysis_type.value if request.analysis_type else None,
         "sequencing_platform": (
             request.sequencing_platform.value if request.sequencing_platform else None
@@ -498,19 +445,255 @@ async def ingest_trana_case(
             "notes": None,
         },
     }
-    case_result = await db["cases"].insert_one(case_doc)
-    case_object_id = case_result.inserted_id
 
-    # Upload per-sample Krona files
-    krona_tasks = []
-    for s in request.samples:
-        if s.krona_path:
-            krona_tasks.append(_store_krona(request.case_id, s.sample_id, s.krona_path))
-    if krona_tasks:
-        await asyncio.gather(*krona_tasks)
+    metaval_prepared: list[_MetavalPrepared] = []
+    metaval_pipeline_info: dict | None = None
+    if request.metaval:
+        metaval_data: MetavalOutput = await asyncio.to_thread(
+            read_metaval, request.metaval.metaval_dir
+        )
+        if metaval_data.pipeline_info:
+            metaval_pipeline_info = metaval_data.pipeline_info.model_dump()
+        if metaval_data.results:
+            metaval_prepared = list(
+                await asyncio.gather(
+                    *(
+                        asyncio.to_thread(
+                            _prepare_metaval_result,
+                            r,
+                            request.case_id,
+                            sample_name_to_oid,
+                            now,
+                        )
+                        for r in metaval_data.results
+                    )
+                )
+            )
 
+    return _PreparedIngest(
+        case_doc=case_doc,
+        sample_docs=sample_docs,
+        subject_refs=subject_refs,
+        taxa_upsert_ops=_build_taxa_upsert_ops(all_profiles),
+        metaval_prepared=metaval_prepared,
+        metaval_pipeline_info=metaval_pipeline_info,
+        krona_uploads=krona_uploads,
+        multiqc_upload=multiqc_upload,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Commit phase — all Mongo writes inside one transaction
+# ---------------------------------------------------------------------------
+
+
+async def _resolve_subject_ids(
+    db: AsyncIOMotorDatabase,
+    subject_ids: list[str],
+) -> dict[str, ObjectId]:
+    """
+    Upsert each subject_id and return a map from subject_id -> ObjectId.
+
+    Runs outside the transaction — $setOnInsert skeleton docs are idempotent,
+    so a leftover subject row if the txn later aborts is harmless. Running
+    outside the txn lets us fan out all upserts concurrently (MongoDB sessions
+    do not support concurrent operations).
+    """
+    now = datetime.now(timezone.utc)
+
+    async def _upsert_one(subject_id: str) -> tuple[str, ObjectId]:
+        doc = await db["subjects"].find_one_and_update(
+            {"subject_id": subject_id},
+            {"$setOnInsert": {"subject_id": subject_id, "created_at": now}},
+            upsert=True,
+            return_document=ReturnDocument.AFTER,
+        )
+        return subject_id, doc["_id"]
+
+    pairs = await asyncio.gather(*(_upsert_one(sid) for sid in subject_ids))
+    return dict(pairs)
+
+
+async def _commit_prepared(
+    db: AsyncIOMotorDatabase,
+    prepared: _PreparedIngest,
+    subject_map: dict[str, ObjectId],
+    session: Any,
+) -> None:
+    """Run every Mongo write for one ingest, inside an already-started txn."""
+    # 1. Patch pre-resolved subject ObjectIds onto sample docs
+    for subject_id, indices in prepared.subject_refs.items():
+        oid = subject_map[subject_id]
+        for idx in indices:
+            prepared.sample_docs[idx]["subject_id"] = oid
+
+    # 2. Case — unique index on case_id enforces atomicity inside the txn
+    case_doc = dict(prepared.case_doc)
+    if prepared.metaval_pipeline_info is not None:
+        case_doc["metaval_pipeline_info"] = prepared.metaval_pipeline_info
+    await db["cases"].insert_one(case_doc, session=session)
+
+    # 3. Samples — pre-generated _ids ensure case_doc.sample_ids references
+    #    exactly these documents.
+    if prepared.sample_docs:
+        await db["samples"].insert_many(prepared.sample_docs, session=session)
+
+    # 4. Metaval results
+    if prepared.metaval_prepared:
+        await db["metaval_results"].insert_many(
+            [m.doc for m in prepared.metaval_prepared], session=session
+        )
+
+
+# ---------------------------------------------------------------------------
+# Taxa skeleton upsert — runs outside the transaction
+#
+# Taxa entries are idempotent $setOnInsert skeletons. Running them inside the
+# txn is expensive (thousands of upserts per case on single-node RS) and not
+# required for correctness: if the txn later aborts, leftover skeleton rows
+# are harmless reference data — same trade-off we accept for blob uploads.
+# ---------------------------------------------------------------------------
+
+
+async def _upsert_taxa_skeleton(db: AsyncIOMotorDatabase, ops: list[UpdateOne]) -> None:
+    if ops:
+        await db["taxa"].bulk_write(ops, ordered=False)
+
+
+# ---------------------------------------------------------------------------
+# Blob-upload phase — runs only after the transaction commits
+# ---------------------------------------------------------------------------
+
+
+async def _upload_all_blobs(prepared: _PreparedIngest) -> None:
+    """
+    Upload every blob concurrently. Fail-fast: the first exception aborts.
+    Because this runs after the DB transaction has committed, a partial upload
+    leaves the DB consistent but the blob store may have orphans. Orphaned
+    blobs are acceptable for a clinical app — orphaned DB records are not.
+    """
+    import asyncio
+
+    from app.database import get_blob_store
+
+    store = get_blob_store()
+
+    uploads: list[_BlobUpload] = list(prepared.krona_uploads)
+    if prepared.multiqc_upload is not None:
+        uploads.append(prepared.multiqc_upload)
+    for mv in prepared.metaval_prepared:
+        uploads.extend(mv.blob_uploads)
+
+    if uploads:
+        await asyncio.gather(*(store.put(u.key, u.content) for u in uploads))
+
+
+# ---------------------------------------------------------------------------
+# Public entry points
+# ---------------------------------------------------------------------------
+
+
+async def ingest_case(request: IngestRequest, db: AsyncIOMotorDatabase) -> dict:
+    """
+    Atomic ingest of a taxprofiler + optional metaval case.
+
+    Runs in three phases:
+      1. Prepare — parse inputs, read every blob into memory, materialise
+         every Mongo doc. No side effects.
+      2. Commit — all Mongo writes inside one transaction. On any failure
+         the txn aborts; no records are persisted.
+      3. Upload — blob-store writes. Partial failure leaves orphan blobs,
+         never orphan Mongo records.
+    """
+    now = datetime.now(timezone.utc)
+
+    # Pre-check: friendlier error than the transaction-time DuplicateKeyError.
+    # The unique index on case_id still enforces atomicity inside the txn.
+    if await db["cases"].find_one({"case_id": request.case_id}):
+        raise ValueError(
+            f"Case '{request.case_id}' already exists. "
+            f"Delete the existing case first, or use a unique case_id."
+        )
+
+    prepared = await _prepare_ingest(request, now)
+
+    subject_map: dict[str, ObjectId] = {}
+    if prepared.subject_refs:
+        subject_map = await _resolve_subject_ids(db, list(prepared.subject_refs.keys()))
+
+    await _upsert_taxa_skeleton(db, prepared.taxa_upsert_ops)
+
+    client = get_client()
+    async with await client.start_session() as session:
+        async with session.start_transaction():
+            await _commit_prepared(db, prepared, subject_map, session=session)
+
+    await _upload_all_blobs(prepared)
+
+    return {
+        "case_id": request.case_id,
+        "samples_ingested": len(prepared.sample_docs),
+        "sample_ids": [str(doc["_id"]) for doc in prepared.sample_docs],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Trana ingest — same three-phase pattern
+# ---------------------------------------------------------------------------
+
+
+async def _prepare_trana_ingest(
+    request: TranaIngestRequest, now: datetime
+) -> _PreparedIngest:
+    has_krona = any(s.krona_path for s in request.samples)
+
+    # Fan out per-sample I/O: emu abundance + optional nanoplot stats + optional krona
+    async def _load_sample_io(
+        s: Any,
+    ) -> tuple[
+        list[TaxonEntry], NanoPlotStats | None, NanoPlotStats | None, str | None
+    ]:
+        tasks: list = [asyncio.to_thread(read_emu_abundance, s.abundance_path)]
+        has_unprocessed = bool(s.nanoplot_unprocessed_path)
+        has_processed = bool(s.nanoplot_processed_path)
+        has_krona_file = bool(s.krona_path)
+        if has_unprocessed:
+            tasks.append(asyncio.to_thread(read_nanostats, s.nanoplot_unprocessed_path))
+        if has_processed:
+            tasks.append(asyncio.to_thread(read_nanostats, s.nanoplot_processed_path))
+        if has_krona_file:
+            tasks.append(asyncio.to_thread(_read_text, s.krona_path, "Krona file"))
+        results = await asyncio.gather(*tasks)
+        i = 0
+        taxon_entries: list[TaxonEntry] = results[i]
+        i += 1
+        nano_unproc: NanoPlotStats | None = results[i] if has_unprocessed else None
+        if has_unprocessed:
+            i += 1
+        nano_proc: NanoPlotStats | None = results[i] if has_processed else None
+        if has_processed:
+            i += 1
+        krona_content: str | None = results[i] if has_krona_file else None
+        return taxon_entries, nano_unproc, nano_proc, krona_content
+
+    # pipeline info + all per-sample I/O concurrently
+    _trana_results = await asyncio.gather(
+        asyncio.to_thread(read_pipeline_info, request.pipeline_info_path),
+        *(_load_sample_io(s) for s in request.samples),
+    )
+    pipeline_info: PipelineInfoOutput = _trana_results[0]  # type: ignore[assignment]
+    sample_io_results: list[
+        tuple[list[TaxonEntry], NanoPlotStats | None, NanoPlotStats | None, str | None]
+    ] = _trana_results[1:]  # type: ignore[assignment]
+
+    multiqc_upload: _BlobUpload | None = None
     if request.multiqc_report_path:
-        await _store_multiqc(request.case_id, request.multiqc_report_path)
+        multiqc_upload = _BlobUpload(
+            key=f"multiqc/{request.case_id}/report.html",
+            content=await asyncio.to_thread(
+                _read_text, request.multiqc_report_path, "MultiQC HTML"
+            ),
+        )
 
     sample_names = [s.sample_id for s in request.samples if s.sample_type == "sample"]
     sample_count = len(sample_names)
@@ -524,13 +707,23 @@ async def ingest_trana_case(
 
     sample_docs: list[dict[str, Any]] = []
     all_profiles: list[dict[str, Any]] = []
+    subject_refs: dict[str, list[int]] = {}
+    krona_uploads: list[_BlobUpload] = []
 
-    for s in request.samples:
-        subject_object_id = None
+    for idx, (s, (taxon_entries, nano_unproc, nano_proc, krona_content)) in enumerate(
+        zip(request.samples, sample_io_results)
+    ):
         if s.subject_id:
-            subject_object_id = await _upsert_subject(db, s.subject_id)
+            subject_refs.setdefault(s.subject_id, []).append(idx)
 
-        taxon_entries: list[TaxonEntry] = read_emu_abundance(s.abundance_path)
+        if krona_content is not None:
+            krona_uploads.append(
+                _BlobUpload(
+                    key=f"krona/{request.case_id}/{s.sample_id}.html",
+                    content=krona_content,
+                )
+            )
+
         profile: dict[str, Any] = {
             "classifier": "emu",
             "classifier_db": "default",
@@ -540,36 +733,24 @@ async def ingest_trana_case(
         all_profiles.extend(profiles)
 
         outbreak_taxa = _compute_outbreak_taxa(profiles)
-
         all_taxon_ids: list[int] = [e.taxon_id for e in taxon_entries]
 
-        # Read NanoPlot QC if paths provided
-        nanoplot_unprocessed: NanoPlotStats | None = None
-        nanoplot_processed: NanoPlotStats | None = None
-        if s.nanoplot_unprocessed_path:
-            nanoplot_unprocessed = read_nanostats(s.nanoplot_unprocessed_path)
-        if s.nanoplot_processed_path:
-            nanoplot_processed = read_nanostats(s.nanoplot_processed_path)
-
         trana_qc: dict[str, Any] = {
-            "nanoplot_unprocessed": (
-                nanoplot_unprocessed.model_dump() if nanoplot_unprocessed else None
-            ),
-            "nanoplot_processed": (
-                nanoplot_processed.model_dump() if nanoplot_processed else None
-            ),
+            "nanoplot_unprocessed": nano_unproc.model_dump() if nano_unproc else None,
+            "nanoplot_processed": nano_proc.model_dump() if nano_proc else None,
             "pipeline_info": pipeline_info.model_dump(),
         }
 
         sample_docs.append(
             {
+                "_id": ObjectId(),
                 "case_id": request.case_id,
                 "sample_id": s.sample_id,
                 "sample_source": s.sample_source,
                 "order_date": (
                     request.order_date.isoformat() if request.order_date else None
                 ),
-                "subject_id": subject_object_id,
+                "subject_id": None,
                 "sample_type": s.sample_type,
                 "material": s.material,
                 "trana": trana_qc,
@@ -587,28 +768,82 @@ async def ingest_trana_case(
             }
         )
 
-    await _upsert_taxa_from_profiles(all_profiles, db)
+    sample_ids = [doc["_id"] for doc in sample_docs]
 
-    insert_result = await db["samples"].insert_many(sample_docs)
-    sample_ids = list(insert_result.inserted_ids)
-
-    await db["cases"].update_one(
-        {"_id": case_object_id},
-        {
-            "$set": {
-                "sample_ids": sample_ids,
-                "sample_count": sample_count,
-                "control_count": control_count,
-                "sample_names": sample_names,
-            }
+    case_doc: dict[str, Any] = {
+        "case_id": request.case_id,
+        "ticket_id": request.ticket_id,
+        "order_date": request.order_date.isoformat() if request.order_date else None,
+        "ingested_at": now,
+        "sample_ids": sample_ids,
+        "sample_count": sample_count,
+        "control_count": control_count,
+        "sample_names": sample_names,
+        "classifiers": [{"name": "emu", "db": "default", "krona_id": None}],
+        "has_krona": has_krona,
+        "has_multiqc": bool(request.multiqc_report_path),
+        "pipeline_info": pipeline_info.model_dump(),
+        "analysis_type": request.analysis_type.value if request.analysis_type else None,
+        "sequencing_platform": (
+            request.sequencing_platform.value if request.sequencing_platform else None
+        ),
+        "review": {
+            "reviewed": False,
+            "reviewed_by": None,
+            "reviewed_at": None,
+            "notes": None,
         },
+    }
+
+    return _PreparedIngest(
+        case_doc=case_doc,
+        sample_docs=sample_docs,
+        subject_refs=subject_refs,
+        taxa_upsert_ops=_build_taxa_upsert_ops(all_profiles),
+        metaval_prepared=[],
+        metaval_pipeline_info=None,
+        krona_uploads=krona_uploads,
+        multiqc_upload=multiqc_upload,
     )
+
+
+async def ingest_trana_case(
+    request: TranaIngestRequest, db: AsyncIOMotorDatabase
+) -> dict:
+    """Atomic ingest of a Trana (16S / ONT / Emu) case. See `ingest_case`."""
+    now = datetime.now(timezone.utc)
+
+    if await db["cases"].find_one({"case_id": request.case_id}):
+        raise ValueError(
+            f"Case '{request.case_id}' already exists. "
+            f"Delete the existing case first, or use a unique case_id."
+        )
+
+    prepared = await _prepare_trana_ingest(request, now)
+
+    subject_map: dict[str, ObjectId] = {}
+    if prepared.subject_refs:
+        subject_map = await _resolve_subject_ids(db, list(prepared.subject_refs.keys()))
+
+    await _upsert_taxa_skeleton(db, prepared.taxa_upsert_ops)
+
+    client = get_client()
+    async with await client.start_session() as session:
+        async with session.start_transaction():
+            await _commit_prepared(db, prepared, subject_map, session=session)
+
+    await _upload_all_blobs(prepared)
 
     return {
         "case_id": request.case_id,
-        "samples_ingested": len(sample_ids),
-        "sample_ids": [str(sid) for sid in sample_ids],
+        "samples_ingested": len(prepared.sample_docs),
+        "sample_ids": [str(doc["_id"]) for doc in prepared.sample_docs],
     }
+
+
+# ---------------------------------------------------------------------------
+# Unchanged QC helpers
+# ---------------------------------------------------------------------------
 
 
 def _extract_classifier_qc(qc_data: MultiQCRaw, classifier_name: str, col: str) -> dict:
@@ -617,7 +852,6 @@ def _extract_classifier_qc(qc_data: MultiQCRaw, classifier_name: str, col: str) 
     Expects the MultiQC v2 dict-of-dicts format:
       {"U": {"unclassified": N}, "R": {"root": N}, "S": {taxon: N, ...}, ...}
     """
-
     if classifier_name == "kraken2":
         key = col.split(".kraken2")[0]
         records = qc_data.kraken2.get(key)
