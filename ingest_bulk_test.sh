@@ -123,7 +123,7 @@ if [ "$COUNT" -gt 0 ]; then
     order_epoch=$(( start_epoch + offset_secs ))
     order_date=$(date -j -r "$order_epoch" "+%Y-%m-%d")
 
-    t0=$(date +%s%3N)
+    t0=$(python3 -c "import time; print(int(time.time()*1000))")
     if python "$INGEST_SCRIPT" taxprofiler \
       --case-id "$case_id" \
       --ticket-id "1007645" \
@@ -149,7 +149,7 @@ if [ "$COUNT" -gt 0 ]; then
       fail=$(( fail + 1 ))
       status="FAILED"
     fi
-    elapsed=$(( $(date +%s%3N) - t0 ))
+    elapsed=$(( $(python3 -c "import time; print(int(time.time()*1000))") - t0 ))
 
     echo "  [taxprofiler $i/$COUNT] $case_id — $order_date — ${elapsed}ms ($status, ok: $success, failed: $fail)"
   done
@@ -178,7 +178,7 @@ if [ "$TRANA_COUNT" -gt 0 ]; then
     order_epoch=$(( start_epoch + offset_secs ))
     order_date=$(date -j -r "$order_epoch" "+%Y-%m-%d")
 
-    t0=$(date +%s%3N)
+    t0=$(python3 -c "import time; print(int(time.time()*1000))")
     if python "$INGEST_SCRIPT" trana \
       --case-id "$case_id" \
       --ticket-id "1007645" \
@@ -197,7 +197,7 @@ if [ "$TRANA_COUNT" -gt 0 ]; then
       t_fail=$(( t_fail + 1 ))
       status="FAILED"
     fi
-    elapsed=$(( $(date +%s%3N) - t0 ))
+    elapsed=$(( $(python3 -c "import time; print(int(time.time()*1000))") - t0 ))
 
     echo "  [trana $i/$TRANA_COUNT] $case_id — $order_date — ${elapsed}ms ($status, ok: $t_success, failed: $t_fail)"
   done

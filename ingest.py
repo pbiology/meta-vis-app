@@ -28,16 +28,24 @@ Backward-compatible: calling without a subcommand (old style) routes to taxprofi
 
 import argparse
 import sys
+import time
 import requests
 
 
-def get_session(base_url: str, username: str, password: str) -> requests.Session:
+def _ms() -> int:
+    return int(time.time() * 1000)
+
+
+def get_session(base_url: str, username: str, password: str) -> tuple[requests.Session, int]:
+    """Return (session, login_ms)."""
+    t0 = _ms()
     session = requests.Session()
     resp = session.post(
         f"{base_url}/api/v1/auth/login",
         data={"username": username, "password": password},
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
+    login_ms = _ms() - t0
     if resp.status_code != 200:
         print(f"Login failed ({resp.status_code}): {resp.text}")
         sys.exit(1)
@@ -46,7 +54,7 @@ def get_session(base_url: str, username: str, password: str) -> requests.Session
     csrf_token = session.cookies.get("csrf_token")
     if csrf_token:
         session.headers["X-CSRF-Token"] = csrf_token
-    return session
+    return session, login_ms
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +132,7 @@ def parse_sample(raw: str, classifier_names: list) -> dict:
 
 
 def ingest_taxprofiler(args):
-    session = get_session(args.url, args.username, args.password)
+    session, login_ms = get_session(args.url, args.username, args.password)
 
     classifiers = [parse_classifier(c) for c in args.classifier]
     classifier_names = [c["name"] for c in classifiers]
@@ -146,12 +154,14 @@ def ingest_taxprofiler(args):
 
     print(f"Ingesting {len(samples)} sample(s) for case '{args.case_id}' ...")
 
+    t0 = _ms()
     resp = session.post(
         f"{args.url}/api/v1/ingest",
         json=payload,
     )
+    api_ms = _ms() - t0
 
-    _print_result(resp, args.case_id)
+    _print_result(resp, args.case_id, login_ms=login_ms, api_ms=api_ms)
 
 
 def _add_taxprofiler_args(parser: argparse.ArgumentParser) -> None:
@@ -251,7 +261,7 @@ def parse_trana_sample(raw: str) -> dict:
 
 
 def ingest_trana(args):
-    session = get_session(args.url, args.username, args.password)
+    session, login_ms = get_session(args.url, args.username, args.password)
 
     samples = [parse_trana_sample(s) for s in args.sample]
 
@@ -268,12 +278,14 @@ def ingest_trana(args):
 
     print(f"Ingesting {len(samples)} Trana sample(s) for case '{args.case_id}' ...")
 
+    t0 = _ms()
     resp = session.post(
         f"{args.url}/api/v1/ingest/trana",
         json=payload,
     )
+    api_ms = _ms() - t0
 
-    _print_result(resp, args.case_id)
+    _print_result(resp, args.case_id, login_ms=login_ms, api_ms=api_ms)
 
 
 def _add_trana_args(parser: argparse.ArgumentParser) -> None:
@@ -330,13 +342,19 @@ def _add_trana_args(parser: argparse.ArgumentParser) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _print_result(resp: requests.Response, case_id: str) -> None:
+def _print_result(
+    resp: requests.Response,
+    case_id: str,
+    login_ms: int = 0,
+    api_ms: int = 0,
+) -> None:
     if resp.status_code == 200:
         result = resp.json()
         print(f"Ingested case '{result['case_id']}'")
         print(f"  Samples       : {result['samples_ingested']}")
         for sid in result["sample_ids"]:
             print(f"  Sample ID     : {sid}")
+        print(f"  Timing        : login {login_ms}ms  api {api_ms}ms  total {login_ms + api_ms}ms")
     else:
         print(f"Ingest failed ({resp.status_code}): {resp.text}")
         sys.exit(1)
