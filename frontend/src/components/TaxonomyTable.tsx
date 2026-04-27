@@ -149,6 +149,7 @@ export default function TaxonomyTable({
     if (taxKingdoms.length > 0 && !taxKingdoms.includes(t.superkingdom ?? "")) return false;
     if (
       metavalOnly &&
+      metavalResults.length > 0 &&
       !metavalResults.find((r) => r.taxon_id === t.taxon_id && r.classifier === profile.classifier)
     )
       return false;
@@ -436,7 +437,9 @@ export default function TaxonomyTable({
                         )}
                         {isContaminant(t) && (
                           <span
-                            title={`NTC reads (${ntcSum(t.taxon_id)}) exceed threshold of ${contaminantThreshold}`}
+                            title={`NTC reads (${ntcSum(
+                              t.taxon_id
+                            )}) exceed threshold of ${contaminantThreshold}`}
                             className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-orange-50 text-orange-700 font-medium"
                           >
                             contaminant
@@ -544,7 +547,9 @@ export default function TaxonomyTable({
                           <div
                             className="bg-blue-400 h-1.5 rounded-full"
                             style={{
-                              width: `${Math.min(100, (t.abundance / maxAbundance) * 100).toFixed(1)}%`,
+                              width: `${Math.min(100, (t.abundance / maxAbundance) * 100).toFixed(
+                                1
+                              )}%`,
                             }}
                           />
                         </div>
