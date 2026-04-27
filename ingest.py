@@ -43,6 +43,9 @@ def get_session(base_url: str, username: str, password: str) -> requests.Session
         sys.exit(1)
     data = resp.json()
     print(f"Logged in as {data['username']} ({data['role']})")
+    csrf_token = session.cookies.get("csrf_token")
+    if csrf_token:
+        session.headers["X-CSRF-Token"] = csrf_token
     return session
 
 

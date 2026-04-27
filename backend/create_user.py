@@ -26,8 +26,11 @@ def _build_mongo_url() -> str:
     host = os.getenv("MONGODB_HOST", "localhost")
     port = os.getenv("MONGODB_PORT", "27017")
     if password:
-        return f"mongodb://{username}:{password}@{host}:{port}/?authSource=admin"
-    return f"mongodb://{host}:{port}"
+        return (
+            f"mongodb://{username}:{password}@{host}:{port}"
+            f"/?authSource=admin&directConnection=true"
+        )
+    return f"mongodb://{host}:{port}/?directConnection=true"
 
 
 async def create_user(username: str, password: str, role: str):
