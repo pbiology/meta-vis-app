@@ -712,9 +712,10 @@ export default function CaseDetail() {
                                     <iframe
                                       key={kronaUrls[kronaSelectedSample]}
                                       src={kronaUrls[kronaSelectedSample]}
-                                      title={`Krona — ${samples.find(
-                                        (s) => s._id === kronaSelectedSample
-                                      )?.sample_id}`}
+                                      title={`Krona — ${
+                                        samples.find((s) => s._id === kronaSelectedSample)
+                                          ?.sample_id
+                                      }`}
                                       className="w-full rounded-lg border border-gray-100"
                                       style={{ height: "85vh" }}
                                       sandbox="allow-scripts allow-popups allow-forms"
