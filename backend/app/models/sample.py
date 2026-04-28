@@ -185,6 +185,7 @@ class CaseClassifier(_Base):
 
 
 class CaseNote(_Base):
+    id: str
     text: str
     author: str
     created_at: str
