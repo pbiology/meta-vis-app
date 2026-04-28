@@ -244,8 +244,9 @@ export default function CaseDetail() {
   const reviewed = review?.reviewed;
   const classifiers = (caseData?.classifiers as Classifier[] | undefined) ?? [];
   const notes =
-    (caseData?.notes as { id: string; author?: string; text?: string; created_at?: string }[] | undefined) ??
-    [];
+    (caseData?.notes as
+      | { id: string; author?: string; text?: string; created_at?: string }[]
+      | undefined) ?? [];
   const ticketId = caseData?.ticket_id as string | undefined;
   const ticketUrl = caseData?.ticket_url as string | undefined;
 
@@ -934,7 +935,10 @@ export default function CaseDetail() {
                 // Preserves legacy access pattern: `user` is a username string.
                 const currentUsername = (user as unknown as { username?: string } | null)?.username;
                 return (
-                  <div key={note.id} className="bg-gray-50 rounded-lg px-3 py-2.5 flex flex-col gap-1">
+                  <div
+                    key={note.id}
+                    className="bg-gray-50 rounded-lg px-3 py-2.5 flex flex-col gap-1"
+                  >
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-medium text-gray-600">{note.author}</span>
                       <span className="text-gray-200">·</span>
