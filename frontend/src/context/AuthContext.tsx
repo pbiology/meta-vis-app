@@ -1,17 +1,12 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { getMyPreferences, updateMyPreferences } from "../api/users";
+import { getMe } from "../api/auth";
 import type { AuthContextValue, Role, UserPreferences } from "../api/types";
 
 const DEFAULT_PREFERENCES: UserPreferences = {
   preferred_kingdoms: ["Viruses"],
   visible_analysis_types: ["shotgun", "amplicon"],
 };
-
-const VALID_ROLES: Role[] = ["admin", "writer", "reader"];
-
-function toRole(value: string | null): Role {
-  return VALID_ROLES.includes(value as Role) ? (value as Role) : "reader";
-}
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -21,36 +16,41 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<string | null>(() => localStorage.getItem("username"));
-  const [role, setRole] = useState<Role>(() => toRole(localStorage.getItem("role")));
+  // Role is never read from localStorage — always sourced from the server.
+  const [role, setRole] = useState<Role>("reader");
   const [preferences, setPreferencesState] = useState<UserPreferences>(DEFAULT_PREFERENCES);
-  // False while the authed user's saved preferences are still being fetched.
-  // Pages that filter by visible_analysis_types gate their first fetch on this
-  // to avoid a stale "all types" request racing with the real one.
   const [preferencesLoaded, setPreferencesLoaded] = useState<boolean>(
     () => !localStorage.getItem("username")
   );
-  // In-memory session state: survives navigation but resets on logout / fresh login.
-  // Initialized from saved preferences; updated by the taxonomy dropdown without API calls.
+  // True while the initial /auth/me call is in-flight. Prevents rendering
+  // the protected shell with a stale/spoofed role from localStorage.
+  const [authLoading, setAuthLoading] = useState<boolean>(() => !!localStorage.getItem("username"));
   const [sessionKingdoms, setSessionKingdoms] = useState<string[]>(
     DEFAULT_PREFERENCES.preferred_kingdoms
   );
 
-  // Load preferences when the app starts with an already-logged-in user
+  // On startup with a stored session: verify the token and fetch authoritative role + prefs.
   useEffect(() => {
-    if (localStorage.getItem("username")) {
-      getMyPreferences()
-        .then((prefs) => {
-          setPreferencesState(prefs);
-          setSessionKingdoms(prefs.preferred_kingdoms);
-        })
-        .catch(() => {})
-        .finally(() => setPreferencesLoaded(true));
-    }
+    if (!localStorage.getItem("username")) return;
+    Promise.all([getMe(), getMyPreferences()])
+      .then(([me, prefs]) => {
+        setRole(me.role);
+        setPreferencesState(prefs);
+        setSessionKingdoms(prefs.preferred_kingdoms);
+      })
+      .catch(() => {
+        // Token expired or invalid — clear the stale session.
+        logout();
+      })
+      .finally(() => {
+        setAuthLoading(false);
+        setPreferencesLoaded(true);
+      });
   }, []);
 
   async function login(username: string, role: Role): Promise<void> {
     localStorage.setItem("username", username);
-    localStorage.setItem("role", role);
+    // Role is received directly from the server LoginResponse — no localStorage.
     setUser(username);
     setRole(role);
     setPreferencesLoaded(false);
@@ -68,7 +68,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   function logout(): void {
     localStorage.removeItem("username");
-    localStorage.removeItem("role");
     setUser(null);
     setRole("reader");
     setPreferencesState(DEFAULT_PREFERENCES);
@@ -79,7 +78,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   async function setPreferences(prefs: Partial<UserPreferences>): Promise<void> {
     const saved = await updateMyPreferences(prefs);
     setPreferencesState(saved);
-    // Also sync the session state so the next sample opened reflects the new saved default.
     setSessionKingdoms(saved.preferred_kingdoms);
   }
 
@@ -90,6 +88,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         role,
         preferences,
         preferencesLoaded,
+        authLoading,
         sessionKingdoms,
         setSessionKingdoms,
         login,

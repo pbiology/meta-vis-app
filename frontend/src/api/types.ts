@@ -242,6 +242,7 @@ export interface AuthContextValue {
   role: Role;
   preferences: UserPreferences;
   preferencesLoaded: boolean;
+  authLoading: boolean;
   sessionKingdoms: string[];
   setSessionKingdoms: (kingdoms: string[]) => void;
   login: (username: string, role: Role) => Promise<void>;
