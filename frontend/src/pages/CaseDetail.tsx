@@ -61,6 +61,18 @@ export default function CaseDetail() {
   const [multiqcError, setMultiqcError] = useState(false);
 
   useEffect(() => {
+    return () => {
+      Object.values(kronaUrls).forEach(URL.revokeObjectURL);
+    };
+  }, [kronaUrls]);
+
+  useEffect(() => {
+    return () => {
+      if (multiqcUrl) URL.revokeObjectURL(multiqcUrl);
+    };
+  }, [multiqcUrl]);
+
+  useEffect(() => {
     async function load() {
       try {
         const [fetchedCase, samplesData, pathogens] = await Promise.all([
