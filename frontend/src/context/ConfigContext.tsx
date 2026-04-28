@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from "react";
 import { fetchAppConfig } from "../api/config";
 
 // Fallback used during the initial fetch so TaxonomyTable renders correctly
@@ -22,7 +22,9 @@ export function ConfigProvider({ children }: Readonly<{ children: ReactNode }>) 
       });
   }, []);
 
-  return <ConfigContext.Provider value={{ hostTaxonIds }}>{children}</ConfigContext.Provider>;
+  const value = useMemo(() => ({ hostTaxonIds }), [hostTaxonIds]);
+
+  return <ConfigContext.Provider value={value}>{children}</ConfigContext.Provider>;
 }
 
 export function useAppConfig(): ConfigContextValue {
