@@ -19,7 +19,13 @@ import UserPreferences from "./pages/UserPreferences";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, authLoading } = useAuth();
+  if (authLoading)
+    return (
+      <div className="flex h-screen items-center justify-center text-sm text-gray-400">
+        Loading…
+      </div>
+    );
   return user ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
