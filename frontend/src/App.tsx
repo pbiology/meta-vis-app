@@ -18,7 +18,7 @@ import NtcListsPage from "./pages/NtcListsPage";
 import UserPreferences from "./pages/UserPreferences";
 import ErrorBoundary from "./components/ErrorBoundary";
 
-function ProtectedRoute({ children }: { children: ReactNode }) {
+function ProtectedRoute({ children }: Readonly<{ children: ReactNode }>) {
   const { user, authLoading } = useAuth();
   if (authLoading)
     return (
