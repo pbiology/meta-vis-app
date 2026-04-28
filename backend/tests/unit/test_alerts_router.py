@@ -100,6 +100,7 @@ class TestIgnorelistPost:
         mock_db = MagicMock()
         mock_db["outbreak_ignorelist"].find_one = AsyncMock(return_value=existing)
         mock_db["outbreak_ignorelist"].insert_one = mock_insert_one
+        mock_db["meta"].update_one = AsyncMock()
         return mock_db
 
     def test_add_new_taxon_succeeds(self):
@@ -154,6 +155,7 @@ class TestIgnorelistDelete:
         mock_db["outbreak_ignorelist"].delete_one = AsyncMock(
             return_value=MagicMock(deleted_count=1)
         )
+        mock_db["meta"].update_one = AsyncMock()
         app.dependency_overrides[get_db] = lambda: mock_db
         override_auth(app, admin_user())
 
@@ -168,6 +170,7 @@ class TestIgnorelistDelete:
         mock_db["outbreak_ignorelist"].delete_one = AsyncMock(
             return_value=MagicMock(deleted_count=0)
         )
+        mock_db["meta"].update_one = AsyncMock()
         app.dependency_overrides[get_db] = lambda: mock_db
         override_auth(app, admin_user())
 
@@ -182,6 +185,7 @@ class TestIgnorelistDelete:
         mock_db["outbreak_ignorelist"].delete_one = AsyncMock(
             return_value=MagicMock(deleted_count=1)
         )
+        mock_db["meta"].update_one = AsyncMock()
         app.dependency_overrides[get_db] = lambda: mock_db
         override_auth(app, admin_user())
 
