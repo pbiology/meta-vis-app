@@ -351,6 +351,12 @@ function CandidateOrganismsSection({ metavalId, organisms }: CandidateOrganismsP
   const [igvLoading, setIgvLoading] = useState(false);
   const [igvError, setIgvError] = useState<string | null>(null);
 
+  useEffect(() => {
+    return () => {
+      if (igvUrl) URL.revokeObjectURL(igvUrl);
+    };
+  }, [igvUrl]);
+
   async function handleSelect(org: CandidateOrganism) {
     if (selected === org.organism_name) return;
     setSelected(org.organism_name);
