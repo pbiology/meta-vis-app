@@ -188,13 +188,13 @@ export default function CaseDetail() {
     }
   }
 
-  async function handleDeleteNote(index: number) {
+  async function handleDeleteNote(noteId: string) {
     try {
-      await deleteNote(caseId, index);
+      await deleteNote(caseId, noteId);
       setCaseData((prev) => {
         if (!prev) return prev;
-        const prevNotes = (prev.notes as unknown[] | undefined) ?? [];
-        return { ...prev, notes: prevNotes.filter((_, i) => i !== index) } as Case;
+        const prevNotes = (prev.notes as { id: string }[] | undefined) ?? [];
+        return { ...prev, notes: prevNotes.filter((n) => n.id !== noteId) } as Case;
       });
     } catch {
       alert("Failed to delete note.");
@@ -244,8 +244,9 @@ export default function CaseDetail() {
   const reviewed = review?.reviewed;
   const classifiers = (caseData?.classifiers as Classifier[] | undefined) ?? [];
   const notes =
-    (caseData?.notes as { author?: string; text?: string; created_at?: string }[] | undefined) ??
-    [];
+    (caseData?.notes as
+      | { id: string; author?: string; text?: string; created_at?: string }[]
+      | undefined) ?? [];
   const ticketId = caseData?.ticket_id as string | undefined;
   const ticketUrl = caseData?.ticket_url as string | undefined;
 
@@ -930,11 +931,14 @@ export default function CaseDetail() {
               {notes.length === 0 && (
                 <p className="text-xs text-gray-300 text-center py-6">No notes yet.</p>
               )}
-              {notes.map((note, i) => {
+              {notes.map((note) => {
                 // Preserves legacy access pattern: `user` is a username string.
                 const currentUsername = (user as unknown as { username?: string } | null)?.username;
                 return (
-                  <div key={i} className="bg-gray-50 rounded-lg px-3 py-2.5 flex flex-col gap-1">
+                  <div
+                    key={note.id}
+                    className="bg-gray-50 rounded-lg px-3 py-2.5 flex flex-col gap-1"
+                  >
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-medium text-gray-600">{note.author}</span>
                       <span className="text-gray-200">·</span>
@@ -950,7 +954,7 @@ export default function CaseDetail() {
                       </span>
                       {(role === "admin" || note.author === currentUsername) && (
                         <button
-                          onClick={() => handleDeleteNote(i)}
+                          onClick={() => handleDeleteNote(note.id)}
                           className="ml-auto text-gray-300 hover:text-red-400 transition-colors"
                         >
                           <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">

@@ -148,6 +148,7 @@ class TestCaseResponse:
         doc = minimal_case_doc(
             notes=[
                 {
+                    "id": "aaaaaaaa-0000-0000-0000-000000000001",
                     "text": "Looks clean",
                     "author": "admin",
                     "created_at": "2024-03-15T10:00:00",

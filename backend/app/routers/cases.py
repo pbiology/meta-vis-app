@@ -1,5 +1,6 @@
 # app/routers/cases.py
 
+import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
@@ -437,6 +438,7 @@ async def add_note(
     if not payload.text.strip():
         raise HTTPException(status_code=422, detail="Note text cannot be empty")
     note = {
+        "id": str(uuid.uuid4()),
         "text": payload.text.strip(),
         "author": current_user["username"],
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -458,20 +460,20 @@ async def add_note(
     return note
 
 
-@router.delete("/{case_id}/notes/{note_index}", summary="Delete a note from a case")
+@router.delete("/{case_id}/notes/{note_id}", summary="Delete a note from a case")
 async def delete_note(
     case_id: str,
-    note_index: int,
+    note_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(require_role("writer", "admin")),
 ):
-    case = await db["cases"].find_one({"case_id": case_id})
+    case = await db["cases"].find_one({"case_id": case_id}, {"notes": 1})
     if not case:
         raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
-    notes = case.get("notes", [])
-    if note_index < 0 or note_index >= len(notes):
+
+    note = next((n for n in case.get("notes", []) if n.get("id") == note_id), None)
+    if not note:
         raise HTTPException(status_code=404, detail="Note not found")
-    note = notes[note_index]
     if (
         current_user["role"] != "admin"
         and note.get("author") != current_user["username"]
@@ -479,10 +481,10 @@ async def delete_note(
         raise HTTPException(
             status_code=403, detail="You can only delete your own notes"
         )
-    notes.pop(note_index)
+
     await db["cases"].update_one(
         {"case_id": case_id},
-        {"$set": {"notes": notes}},
+        {"$pull": {"notes": {"id": note_id}}},
     )
     await log_audit_event(
         db,
@@ -491,6 +493,6 @@ async def delete_note(
         resource_type="case",
         resource_id=case_id,
         outcome="success",
-        detail={"note_index": note_index},
+        detail={"note_id": note_id},
     )
     return {"deleted": True}

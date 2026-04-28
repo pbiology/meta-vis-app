@@ -216,6 +216,7 @@ class TestAddNote:
         assert resp.status_code == 200
         assert resp.json()["text"] == "Looks clean"
         assert resp.json()["author"] == "testuser"
+        assert resp.json()["id"] is not None
 
     async def test_empty_note_returns_422(self, client, fake_db):
         await insert_case(fake_db, "testcase")
@@ -228,21 +229,26 @@ class TestAddNote:
 
 
 # ---------------------------------------------------------------------------
-# DELETE /cases/{case_id}/notes/{note_index}
+# DELETE /cases/{case_id}/notes/{note_id}
 # ---------------------------------------------------------------------------
 
 
 class TestDeleteNote:
     async def test_deletes_note(self, client, fake_db):
         await insert_case(fake_db, "testcase")
-        client.post("/api/v1/cases/testcase/notes", json={"text": "First note"})
-        resp = client.delete("/api/v1/cases/testcase/notes/0")
+        add_resp = client.post(
+            "/api/v1/cases/testcase/notes", json={"text": "First note"}
+        )
+        note_id = add_resp.json()["id"]
+        resp = client.delete(f"/api/v1/cases/testcase/notes/{note_id}")
         assert resp.status_code == 200
         assert resp.json()["deleted"] is True
 
-    async def test_out_of_range_index_returns_404(self, client, fake_db):
+    async def test_unknown_note_id_returns_404(self, client, fake_db):
         await insert_case(fake_db, "testcase")
-        resp = client.delete("/api/v1/cases/testcase/notes/99")
+        resp = client.delete(
+            "/api/v1/cases/testcase/notes/00000000-0000-0000-0000-000000000000"
+        )
         assert resp.status_code == 404
 
 
@@ -379,11 +385,13 @@ class TestDeleteNotePermissions:
         app = make_test_app(router, fake_db, fake_blob, role="writer")
         client = TestClient(app)
         await insert_case(fake_db, "testcase")
+        note_id = "aaaaaaaa-0000-0000-0000-000000000001"
         await fake_db["cases"].update_one(
             {"case_id": "testcase"},
             {
                 "$push": {
                     "notes": {
+                        "id": note_id,
                         "text": "Other user's note",
                         "author": "otheruser",
                         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -391,16 +399,18 @@ class TestDeleteNotePermissions:
                 }
             },
         )
-        resp = client.delete("/api/v1/cases/testcase/notes/0")
+        resp = client.delete(f"/api/v1/cases/testcase/notes/{note_id}")
         assert resp.status_code == 403
 
     async def test_owner_can_delete_own_note(self, client, fake_db):
         await insert_case(fake_db, "testcase")
+        note_id = "aaaaaaaa-0000-0000-0000-000000000002"
         await fake_db["cases"].update_one(
             {"case_id": "testcase"},
             {
                 "$push": {
                     "notes": {
+                        "id": note_id,
                         "text": "My note",
                         "author": "testuser",
                         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -408,6 +418,6 @@ class TestDeleteNotePermissions:
                 }
             },
         )
-        resp = client.delete("/api/v1/cases/testcase/notes/0")
+        resp = client.delete(f"/api/v1/cases/testcase/notes/{note_id}")
         assert resp.status_code == 200
         assert resp.json()["deleted"] is True

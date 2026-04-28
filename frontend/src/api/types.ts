@@ -35,9 +35,10 @@ export interface Case {
 }
 
 export interface CaseNote {
+  id: string;
   text: string;
-  added_by: string;
-  added_at: string;
+  author: string;
+  created_at: string;
 }
 
 export interface CaseReview {
