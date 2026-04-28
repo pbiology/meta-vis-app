@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { getPathogens, addToPathogens, removeFromPathogens } from "../api/alerts";
 import { useAuth } from "../context/AuthContext";
 import type { PathogenItem } from "../api/types";
@@ -6,6 +7,7 @@ import AddTaxonModal from "../components/AddTaxonModal";
 
 export default function KnownPathogens() {
   const { role } = useAuth();
+  const queryClient = useQueryClient();
   const [items, setItems] = useState<PathogenItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +30,7 @@ export default function KnownPathogens() {
   ) {
     const doc = await addToPathogens(id, name, superkingdom ?? "Viruses", notes);
     setItems((prev) => [doc, ...prev]);
+    void queryClient.invalidateQueries({ queryKey: ["pathogens"] });
   }
 
   async function handleRemove() {
@@ -37,6 +40,7 @@ export default function KnownPathogens() {
       await removeFromPathogens(removeTarget.taxon_id);
       setItems((prev) => prev.filter((i) => i.taxon_id !== removeTarget.taxon_id));
       setRemoveTarget(null);
+      void queryClient.invalidateQueries({ queryKey: ["pathogens"] });
     } catch {
       alert("Failed to remove taxon.");
     } finally {
