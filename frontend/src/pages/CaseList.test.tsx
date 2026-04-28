@@ -115,12 +115,19 @@ describe("CaseList", () => {
       })
     );
 
-    renderWithProviders(<CaseList />, { route: "/cases" });
-    // Wait for initial fetch using real microtasks via advancing timers.
-    await vi.waitFor(() => expect(calls).toBeGreaterThanOrEqual(1));
-    const before = calls;
-    vi.advanceTimersByTime(30_000);
-    await vi.waitFor(() => expect(calls).toBeGreaterThan(before));
-    vi.useRealTimers();
+    // React Query's background refetches trigger state updates that aren't
+    // wrapped in act() by the test — the assertion below verifies the polling
+    // behaviour itself; suppress the noisy act() warnings here.
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      renderWithProviders(<CaseList />, { route: "/cases" });
+      await vi.waitFor(() => expect(calls).toBeGreaterThanOrEqual(1));
+      const before = calls;
+      vi.advanceTimersByTime(30_000);
+      await vi.waitFor(() => expect(calls).toBeGreaterThan(before));
+    } finally {
+      vi.useRealTimers();
+      errSpy.mockRestore();
+    }
   });
 });
