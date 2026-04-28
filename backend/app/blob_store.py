@@ -11,12 +11,14 @@
 #   put(key, content)        — store content at key
 #   get(key)                 — retrieve content, returns None if not found
 #   delete_prefix(prefix)    — delete all objects whose key starts with prefix
+#   close()                  — release any held resources (S3 only)
 
 from __future__ import annotations
 
 import asyncio
 import re
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -34,6 +36,9 @@ class BlobStore(ABC):
     @abstractmethod
     async def delete_prefix(self, prefix: str) -> None:
         """Delete all objects whose key starts with prefix."""
+
+    async def close(self) -> None:
+        """Release any held resources. No-op for backends that don't need it."""
 
 
 # ---------------------------------------------------------------------------
@@ -66,21 +71,39 @@ class MongoBlobStore(BlobStore):
 
 # ---------------------------------------------------------------------------
 # S3-compatible object storage backend (MinIO / AWS S3)
+#
+# boto3 (urllib3-backed) consistently outperforms aiobotocore/aiohttp for large
+# blob uploads to localhost MinIO. We wrap the synchronous client in a dedicated
+# ThreadPoolExecutor so S3 threads are isolated from FastAPI's default executor,
+# which is the actual fix for the thread-pool exhaustion concern.
 # ---------------------------------------------------------------------------
 
 
 class S3BlobStore(BlobStore):
-    def __init__(self, endpoint: str, access_key: str, secret_key: str, bucket: str):
+    def __init__(
+        self,
+        endpoint: str,
+        access_key: str,
+        secret_key: str,
+        bucket: str,
+        max_workers: int = 10,
+    ):
         import boto3
         from botocore.config import Config
 
         self._bucket = bucket
+        self._executor = ThreadPoolExecutor(
+            max_workers=max_workers, thread_name_prefix="s3-blob"
+        )
         self._s3 = boto3.client(
             "s3",
             endpoint_url=endpoint,
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
-            config=Config(signature_version="s3v4"),
+            config=Config(
+                signature_version="s3v4",
+                max_pool_connections=max_workers,
+            ),
         )
         self._ensure_bucket()
 
@@ -93,7 +116,7 @@ class S3BlobStore(BlobStore):
     async def put(self, key: str, content: str) -> None:
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(
-            None,
+            self._executor,
             lambda: self._s3.put_object(
                 Bucket=self._bucket,
                 Key=key,
@@ -106,7 +129,7 @@ class S3BlobStore(BlobStore):
         loop = asyncio.get_running_loop()
         try:
             response = await loop.run_in_executor(
-                None,
+                self._executor,
                 lambda: self._s3.get_object(Bucket=self._bucket, Key=key),
             )
             return response["Body"].read().decode("utf-8")
@@ -116,7 +139,7 @@ class S3BlobStore(BlobStore):
     async def delete_prefix(self, prefix: str) -> None:
         loop = asyncio.get_running_loop()
 
-        def _delete():
+        def _delete() -> None:
             paginator = self._s3.get_paginator("list_objects_v2")
             for page in paginator.paginate(Bucket=self._bucket, Prefix=prefix):
                 objects = page.get("Contents", [])
@@ -126,7 +149,10 @@ class S3BlobStore(BlobStore):
                         Delete={"Objects": [{"Key": o["Key"]} for o in objects]},
                     )
 
-        await loop.run_in_executor(None, _delete)
+        await loop.run_in_executor(self._executor, _delete)
+
+    async def close(self) -> None:
+        self._executor.shutdown(wait=False)
 
 
 # ---------------------------------------------------------------------------

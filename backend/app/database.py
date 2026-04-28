@@ -126,6 +126,8 @@ async def _ensure_indexes():
 
 async def close_db():
     global client
+    if _blob_store is not None:
+        await _blob_store.close()
     if client:
         client.close()
 

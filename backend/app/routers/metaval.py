@@ -1,11 +1,11 @@
 # app/routers/metaval.py
 
 import logging
+import re
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
-import asyncio
-import requests as http_requests
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 
@@ -103,31 +103,29 @@ async def blast_verification_data(
             status_code=404, detail="Verification data not found in storage"
         )
 
-    def _submit_to_ncbi(fasta: str) -> str:
-        import re
-
-        response = http_requests.post(
-            "https://blast.ncbi.nlm.nih.gov/blast/Blast.cgi",
-            data={
-                "CMD": "Put",
-                "PROGRAM": "blastn",
-                "DATABASE": "nt",
-                "QUERY": fasta,
-                "FORMAT_TYPE": "HTML",
-                "MEGABLAST": "on",
-                "HITLIST_SIZE": "10",
-            },
-            timeout=60,
-        )
-        response.raise_for_status()
+    async def _submit_to_ncbi(fasta: str) -> str:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://blast.ncbi.nlm.nih.gov/blast/Blast.cgi",
+                data={
+                    "CMD": "Put",
+                    "PROGRAM": "blastn",
+                    "DATABASE": "nt",
+                    "QUERY": fasta,
+                    "FORMAT_TYPE": "HTML",
+                    "MEGABLAST": "on",
+                    "HITLIST_SIZE": "10",
+                },
+                timeout=60,
+            )
+            response.raise_for_status()
         match = re.search(r"RID = ([A-Z0-9]+)", response.text)
         if not match:
             raise ValueError("Could not parse RID from NCBI response")
         return match.group(1)
 
     try:
-        loop = asyncio.get_event_loop()
-        rid = await loop.run_in_executor(None, _submit_to_ncbi, fasta)
+        rid = await _submit_to_ncbi(fasta)
     except ValueError as e:
         logger.error("NCBI BLAST RID parse error: %s", e, exc_info=True)
         raise HTTPException(
