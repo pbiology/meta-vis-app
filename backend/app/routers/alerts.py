@@ -203,7 +203,10 @@ async def get_outbreaks(
     # Fast path: serve from cache without acquiring the lock.
     if cache_key in _cache:
         stored_version, computed_at, cached_result = _cache[cache_key]
-        if stored_version == current_version and (now - computed_at).total_seconds() < CACHE_TTL_SECONDS:
+        if (
+            stored_version == current_version
+            and (now - computed_at).total_seconds() < CACHE_TTL_SECONDS
+        ):
             return cached_result
 
     configs = [c for c in settings.outbreak_configs if c.get("enabled", True)]
@@ -217,7 +220,10 @@ async def get_outbreaks(
         now = datetime.now(timezone.utc)
         if cache_key in _cache:
             stored_version, computed_at, cached_result = _cache[cache_key]
-            if stored_version == current_version and (now - computed_at).total_seconds() < CACHE_TTL_SECONDS:
+            if (
+                stored_version == current_version
+                and (now - computed_at).total_seconds() < CACHE_TTL_SECONDS
+            ):
                 return cached_result
 
         results = []
