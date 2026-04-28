@@ -714,7 +714,8 @@ class TestContaminantAlerts:
             "alerts": [{"taxon_id": 99999}],
             "contaminant_case_ids": ["sentinel"],
         }
-        ntc_module._contaminant_alert_cache = {90: sentinel}
+        # Cache stores (db_version, result); version 0 matches a fresh mongomock DB
+        ntc_module._contaminant_alert_cache = {90: (0, sentinel)}
         app_ = make_app(fake_db)
         resp = TestClient(app_).get("/api/v1/ntc/contaminant-alerts")
         assert resp.json()["contaminant_case_ids"] == ["sentinel"]

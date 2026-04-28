@@ -1,5 +1,6 @@
 # app/routers/alerts.py
 
+import asyncio
 from datetime import datetime, date, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -7,18 +8,20 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.audit import log_audit_event
+from app.cache import get_cache_version, bump_cache_version
 from app.database import get_db
 from app.auth.utils import get_current_user, require_role
 from app.config import settings
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
-# Simple in-memory cache — keyed by (window_days, analysis_types tuple)
-_cache: dict[tuple, dict] = {}
-_cache_computed_at: datetime | None = None
+# key → (db_version, computed_at, result)
+# Valid when stored db_version matches the shared MongoDB counter and within TTL.
+_cache: dict[tuple, tuple[int, datetime, dict]] = {}
+_cache_lock = asyncio.Lock()
 
-# Cache is explicitly cleared on ignorelist changes.
-# TTL is a safety net only — set high since data changes infrequently.
+# TTL is a safety net for rolling-window staleness (cases aging in/out of window).
+# Primary invalidation is the shared db_version counter.
 CACHE_TTL_SECONDS = 3600
 
 
@@ -90,6 +93,7 @@ async def add_to_ignorelist(
     }
     result = await db["outbreak_ignorelist"].insert_one(doc)
     _cache.clear()
+    await bump_cache_version(db)
     doc["_id"] = str(result.inserted_id)
     await log_audit_event(
         db,
@@ -113,6 +117,7 @@ async def remove_from_ignorelist(
     """Remove a taxon from ignorelist (admin only)."""
     result = await db["outbreak_ignorelist"].delete_one({"taxon_id": taxon_id})
     _cache.clear()
+    await bump_cache_version(db)
 
     if result.deleted_count == 0:
         raise HTTPException(
@@ -145,6 +150,7 @@ async def update_ignorelist_note(
         {"$set": {"reason": payload.reason}},
     )
     _cache.clear()
+    await bump_cache_version(db)
 
     if result.matched_count == 0:
         raise HTTPException(
@@ -190,38 +196,45 @@ async def get_outbreaks(
     Runs each configured outbreak pattern (e.g., Viral, Bacterial) and returns
     results grouped by configuration.
     """
-    global _cache_computed_at
-
-    # Return cached result if still fresh
     now = datetime.now(timezone.utc)
-
     cache_key = (window_days, tuple(sorted(analysis_types)) if analysis_types else ())
+    current_version = await get_cache_version(db)
 
-    if (
-        cache_key in _cache
-        and _cache_computed_at is not None
-        and (now - _cache_computed_at).total_seconds() < CACHE_TTL_SECONDS
-    ):
-        return _cache[cache_key]
+    # Fast path: serve from cache without acquiring the lock.
+    if cache_key in _cache:
+        stored_version, computed_at, cached_result = _cache[cache_key]
+        if (
+            stored_version == current_version
+            and (now - computed_at).total_seconds() < CACHE_TTL_SECONDS
+        ):
+            return cached_result
 
-    # Only include enabled configs
     configs = [c for c in settings.outbreak_configs if c.get("enabled", True)]
-
     if not configs:
         return {"window_days": window_days, "results": []}
 
-    # Compute outbreaks for each config
-    results = []
-    for config in configs:
-        outbreak_data = await _compute_outbreaks_for_config(
-            config, window_days, db, analysis_types
-        )
-        results.append(outbreak_data)
+    async with _cache_lock:
+        # Re-check after acquiring the lock: another coroutine may have computed
+        # the result while we were waiting.
+        current_version = await get_cache_version(db)
+        now = datetime.now(timezone.utc)
+        if cache_key in _cache:
+            stored_version, computed_at, cached_result = _cache[cache_key]
+            if (
+                stored_version == current_version
+                and (now - computed_at).total_seconds() < CACHE_TTL_SECONDS
+            ):
+                return cached_result
 
-    # Cache result
-    result = {"window_days": window_days, "results": results}
-    _cache[cache_key] = result
-    _cache_computed_at = now
+        results = []
+        for config in configs:
+            outbreak_data = await _compute_outbreaks_for_config(
+                config, window_days, db, analysis_types
+            )
+            results.append(outbreak_data)
+
+        result = {"window_days": window_days, "results": results}
+        _cache[cache_key] = (current_version, now, result)
 
     return result
 
