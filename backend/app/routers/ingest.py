@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.audit import log_audit_event
+from app.cache import bump_cache_version
 from app.database import get_db
 from app.models.sample import IngestRequest, TranaIngestRequest
 from app.ingestor.orchestrator import ingest_case, ingest_trana_case
@@ -25,6 +26,7 @@ async def ingest(
         alerts._cache.clear()
         ntc.invalidate_contaminant_cache()
         ntc.invalidate_ntc_trends_cache()
+        await bump_cache_version(db)
         await log_audit_event(
             db,
             action="ingest",
@@ -87,6 +89,7 @@ async def ingest_trana(
         alerts._cache.clear()
         ntc.invalidate_contaminant_cache()
         ntc.invalidate_ntc_trends_cache()
+        await bump_cache_version(db)
         await log_audit_event(
             db,
             action="ingest_trana",

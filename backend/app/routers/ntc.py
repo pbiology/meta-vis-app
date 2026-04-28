@@ -2,13 +2,14 @@
 
 import asyncio
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
 from typing import Literal, Optional
 
 from app.audit import log_audit_event
+from app.cache import get_cache_version, bump_cache_version
 from app.database import get_db
 from app.auth.utils import get_current_user, require_role
 from app.constants import HOST_TAXON_IDS
@@ -16,11 +17,12 @@ from app.constants import HOST_TAXON_IDS
 router = APIRouter(prefix="/ntc", tags=["ntc"])
 
 # ---------------------------------------------------------------------------
-# Simple in-memory cache for contaminant alert results.
-# Invalidated on ingest and on any change to the contaminants list.
+# In-memory cache for contaminant alert results.
+# key (window_days) → (db_version, result)
 # ---------------------------------------------------------------------------
 
-_contaminant_alert_cache: dict[int, dict] = {}  # window_days -> payload
+_contaminant_alert_cache: dict[int, tuple[int, dict]] = {}
+_contaminant_alert_lock = asyncio.Lock()
 
 
 def invalidate_contaminant_cache() -> None:
@@ -28,12 +30,13 @@ def invalidate_contaminant_cache() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Simple in-memory cache for NTC trends results.
-# Invalidated on ingest and on any change to the ignorelist.
+# In-memory cache for NTC trends results.
+# key → (db_version, timestamp, result)
 # ---------------------------------------------------------------------------
 
 _TRENDS_TTL = 900  # 15 minutes
-_trends_cache: dict[tuple, tuple[float, dict]] = {}  # key -> (timestamp, payload)
+_trends_cache: dict[tuple, tuple[int, float, dict]] = {}
+_trends_lock = asyncio.Lock()
 
 
 def invalidate_ntc_trends_cache() -> None:
@@ -119,6 +122,7 @@ async def add_to_ntc_ignorelist(
     # Ignoring a taxon affects trend calculations — invalidate caches
     invalidate_contaminant_cache()
     invalidate_ntc_trends_cache()
+    await bump_cache_version(db)
     await log_audit_event(
         db,
         action="ntc_ignorelist_add",
@@ -171,6 +175,7 @@ async def remove_from_ntc_ignorelist(
         )
     invalidate_contaminant_cache()
     invalidate_ntc_trends_cache()
+    await bump_cache_version(db)
     await log_audit_event(
         db,
         action="ntc_ignorelist_remove",
@@ -236,6 +241,7 @@ async def add_ntc_contaminant(
     result = await db["ntc_known_contaminants"].insert_one(doc)
     doc["_id"] = str(result.inserted_id)
     invalidate_contaminant_cache()
+    await bump_cache_version(db)
     await log_audit_event(
         db,
         action="ntc_contaminant_add",
@@ -272,6 +278,7 @@ async def update_ntc_contaminant(
             detail=f"Taxon {taxon_id} not found in known contaminants list",
         )
     invalidate_contaminant_cache()
+    await bump_cache_version(db)
     await log_audit_event(
         db,
         action="ntc_contaminant_update",
@@ -299,6 +306,7 @@ async def remove_ntc_contaminant(
             detail=f"Taxon {taxon_id} not found in known contaminants list",
         )
     invalidate_contaminant_cache()
+    await bump_cache_version(db)
     await log_audit_event(
         db,
         action="ntc_contaminant_remove",
@@ -324,86 +332,99 @@ async def get_contaminant_alerts(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ) -> dict:
+    current_version = await get_cache_version(db)
     if window_days in _contaminant_alert_cache:
-        return _contaminant_alert_cache[window_days]
+        stored_version, cached_result = _contaminant_alert_cache[window_days]
+        if stored_version == current_version:
+            return cached_result
 
-    contaminants = await db["ntc_known_contaminants"].find().to_list(length=1000)
-    if not contaminants:
-        result: dict = {"alerts": [], "contaminant_case_ids": []}
-        _contaminant_alert_cache[window_days] = result
-        return result
+    async with _contaminant_alert_lock:
+        # Re-check after acquiring lock: another coroutine may have computed
+        # the result while we were waiting.
+        current_version = await get_cache_version(db)
+        if window_days in _contaminant_alert_cache:
+            stored_version, cached_result = _contaminant_alert_cache[window_days]
+            if stored_version == current_version:
+                return cached_result
 
-    from datetime import date
+        contaminants = await db["ntc_known_contaminants"].find().to_list(length=1000)
+        if not contaminants:
+            result: dict = {"alerts": [], "contaminant_case_ids": []}
+            _contaminant_alert_cache[window_days] = (current_version, result)
+            return result
 
-    cutoff = (date.today() - timedelta(days=window_days)).isoformat()
+        from datetime import date
 
-    # For each contaminant find NTC samples where its abundance exceeds min_reads.
-    # We iterate profiles in Python rather than using $unwind because the NTC
-    # sample count is small and we need per-contaminant min_reads thresholds.
-    ntc_docs = (
-        await db["samples"]
-        .find(
-            {"sample_type": "negative_ctrl", "order_date": {"$gte": cutoff}},
-            {
-                "sample_id": 1,
-                "case_id": 1,
-                "order_date": 1,
-                "profiles": 1,
-            },
+        cutoff = (date.today() - timedelta(days=window_days)).isoformat()
+
+        # For each contaminant find NTC samples where its abundance exceeds min_reads.
+        # We iterate profiles in Python rather than using $unwind because the NTC
+        # sample count is small and we need per-contaminant min_reads thresholds.
+        ntc_docs = (
+            await db["samples"]
+            .find(
+                {"sample_type": "negative_ctrl", "order_date": {"$gte": cutoff}},
+                {
+                    "sample_id": 1,
+                    "case_id": 1,
+                    "order_date": 1,
+                    "profiles": 1,
+                },
+            )
+            .sort("order_date", -1)
+            .to_list(None)
         )
-        .sort("order_date", -1)
-        .to_list(None)
-    )
 
-    # Build a lookup: taxon_id -> contaminant doc
-    contaminant_map = {c["taxon_id"]: c for c in contaminants}
+        # Build a lookup: taxon_id -> contaminant doc
+        contaminant_map = {c["taxon_id"]: c for c in contaminants}
 
-    # taxon_id -> list of affected NTC occurrences
-    hits: dict[int, list[dict]] = {c["taxon_id"]: [] for c in contaminants}
+        # taxon_id -> list of affected NTC occurrences
+        hits: dict[int, list[dict]] = {c["taxon_id"]: [] for c in contaminants}
 
-    for doc in ntc_docs:
-        for p in doc.get("profiles", []):
-            if p.get("classifier") != "kraken2":
-                continue
-            for entry in p.get("profile", []):
-                tid = entry.get("taxon_id")
-                if tid not in contaminant_map:
+        for doc in ntc_docs:
+            for p in doc.get("profiles", []):
+                if p.get("classifier") != "kraken2":
                     continue
-                min_r = contaminant_map[tid]["min_reads"]
-                if entry.get("abundance", 0) > min_r:
-                    hits[tid].append(
-                        {
-                            "case_id": doc["case_id"],
-                            "sample_id": doc["sample_id"],
-                            "order_date": doc.get("order_date"),
-                            "abundance": entry["abundance"],
-                        }
-                    )
+                for entry in p.get("profile", []):
+                    tid = entry.get("taxon_id")
+                    if tid not in contaminant_map:
+                        continue
+                    min_r = contaminant_map[tid]["min_reads"]
+                    if entry.get("abundance", 0) > min_r:
+                        hits[tid].append(
+                            {
+                                "case_id": doc["case_id"],
+                                "sample_id": doc["sample_id"],
+                                "order_date": doc.get("order_date"),
+                                "abundance": entry["abundance"],
+                            }
+                        )
 
-    alerts = []
-    all_case_ids: set[str] = set()
-    for contaminant in contaminants:
-        tid = contaminant["taxon_id"]
-        occurrences = hits[tid]
-        if not occurrences:
-            continue
-        case_ids = list({o["case_id"] for o in occurrences})
-        all_case_ids.update(case_ids)
-        alerts.append(
-            {
-                "taxon_id": tid,
-                "taxon_name": contaminant["taxon_name"],
-                "superkingdom": contaminant.get("superkingdom"),
-                "min_reads": contaminant["min_reads"],
-                "case_count": len(case_ids),
-                "occurrences": occurrences,
-            }
-        )
+        alerts = []
+        all_case_ids: set[str] = set()
+        for contaminant in contaminants:
+            tid = contaminant["taxon_id"]
+            occurrences = hits[tid]
+            if not occurrences:
+                continue
+            case_ids = list({o["case_id"] for o in occurrences})
+            all_case_ids.update(case_ids)
+            alerts.append(
+                {
+                    "taxon_id": tid,
+                    "taxon_name": contaminant["taxon_name"],
+                    "superkingdom": contaminant.get("superkingdom"),
+                    "min_reads": contaminant["min_reads"],
+                    "case_count": len(case_ids),
+                    "occurrences": occurrences,
+                }
+            )
 
-    alerts.sort(key=lambda a: a["case_count"], reverse=True)
+        alerts.sort(key=lambda a: a["case_count"], reverse=True)
 
-    result = {"alerts": alerts, "contaminant_case_ids": list(all_case_ids)}
-    _contaminant_alert_cache[window_days] = result
+        result = {"alerts": alerts, "contaminant_case_ids": list(all_case_ids)}
+        _contaminant_alert_cache[window_days] = (current_version, result)
+
     return result
 
 
@@ -412,34 +433,17 @@ async def get_contaminant_alerts(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/trends", summary="NTC contamination trends across cases")
-async def get_ntc_trends(
-    material: Literal["DNA", "RNA"] = Query(..., description="DNA or RNA"),
-    window_days: int = Query(default=90, ge=7, le=365),
-    min_reads: float = Query(default=3, gt=0),
-    min_case_pct: float = Query(default=0.10, ge=0.0, le=1.0),
-    pipeline: Literal["taxprofiler", "trana"] = Query(default="taxprofiler"),
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(get_current_user),
+async def _compute_ntc_trends(
+    db: AsyncIOMotorDatabase,
+    material: Literal["DNA", "RNA"],
+    window_days: int,
+    min_reads: float,
+    min_case_pct: float,
+    pipeline: Literal["taxprofiler", "trana"],
 ) -> dict:
-    """
-    Return NTC trend data for the given material type within a rolling window.
-
-    Taxa on the NTC ignorelist are excluded from all three chart datasets.
-    Uses MongoDB aggregation pipelines to avoid loading full profile arrays
-    into Python memory.
-    """
-    from datetime import date
-
-    cache_key = (material, window_days, min_reads, min_case_pct, pipeline)
-    now = time.monotonic()
-    cached = _trends_cache.get(cache_key)
-    if cached is not None and now - cached[0] < _TRENDS_TTL:
-        return cached[1]
-
+    """Run the NTC trend aggregations and assemble the result dict."""
     cutoff = (date.today() - timedelta(days=window_days)).isoformat()
 
-    # Load ignorelist — excluded from all chart calculations
     ignore_docs = (
         await db["ntc_ignorelist"].find({}, {"taxon_id": 1}).to_list(length=1000)
     )
@@ -455,7 +459,7 @@ async def get_ntc_trends(
     total_ntcs: int = await db["samples"].count_documents(base_query)
 
     if not total_ntcs:
-        result: dict = {
+        return {
             "material": material,
             "pipeline": pipeline,
             "window_days": window_days,
@@ -464,8 +468,6 @@ async def get_ntc_trends(
             "kingdom_breakdown": [],
             "recurring_taxa": [],
         }
-        _trends_cache[cache_key] = (now, result)
-        return result
 
     min_case_count = max(1, round(total_ntcs * min_case_pct))
 
@@ -667,7 +669,7 @@ async def get_ntc_trends(
         for doc in rt_docs
     ]
 
-    result = {
+    return {
         "material": material,
         "pipeline": pipeline,
         "window_days": window_days,
@@ -677,5 +679,48 @@ async def get_ntc_trends(
         "kingdom_breakdown": kingdom_breakdown,
         "recurring_taxa": recurring_taxa,
     }
-    _trends_cache[cache_key] = (now, result)
+
+
+@router.get("/trends", summary="NTC contamination trends across cases")
+async def get_ntc_trends(
+    material: Literal["DNA", "RNA"] = Query(..., description="DNA or RNA"),
+    window_days: int = Query(default=90, ge=7, le=365),
+    min_reads: float = Query(default=3, gt=0),
+    min_case_pct: float = Query(default=0.10, ge=0.0, le=1.0),
+    pipeline: Literal["taxprofiler", "trana"] = Query(default="taxprofiler"),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+) -> dict:
+    """
+    Return NTC trend data for the given material type within a rolling window.
+
+    Taxa on the NTC ignorelist are excluded from all three chart datasets.
+    Uses MongoDB aggregation pipelines to avoid loading full profile arrays
+    into Python memory.
+    """
+    cache_key = (material, window_days, min_reads, min_case_pct, pipeline)
+    now = time.monotonic()
+    current_version = await get_cache_version(db)
+    cached = _trends_cache.get(cache_key)
+    if cached is not None:
+        stored_version, ts, cached_result = cached
+        if stored_version == current_version and now - ts < _TRENDS_TTL:
+            return cached_result
+
+    async with _trends_lock:
+        # Re-check after acquiring lock: another coroutine may have computed
+        # the result while we were waiting.
+        current_version = await get_cache_version(db)
+        now = time.monotonic()
+        cached = _trends_cache.get(cache_key)
+        if cached is not None:
+            stored_version, ts, cached_result = cached
+            if stored_version == current_version and now - ts < _TRENDS_TTL:
+                return cached_result
+
+        result = await _compute_ntc_trends(
+            db, material, window_days, min_reads, min_case_pct, pipeline
+        )
+        _trends_cache[cache_key] = (current_version, now, result)
+
     return result
