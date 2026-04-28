@@ -1,5 +1,7 @@
 # app/routers/metaval.py
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 import asyncio
@@ -11,6 +13,7 @@ from app.database import get_db
 from app.auth.utils import get_current_user
 
 router = APIRouter(prefix="/metaval", tags=["metaval"])
+logger = logging.getLogger(__name__)
 
 
 def _oid(id_str: str) -> ObjectId:
@@ -126,10 +129,16 @@ async def blast_verification_data(
         loop = asyncio.get_event_loop()
         rid = await loop.run_in_executor(None, _submit_to_ncbi, fasta)
     except ValueError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except Exception as e:
+        logger.error("NCBI BLAST RID parse error: %s", e, exc_info=True)
         raise HTTPException(
-            status_code=502, detail=f"NCBI BLAST submission failed: {str(e)}"
+            status_code=502,
+            detail="Could not submit to NCBI BLAST: unexpected response format",
+        )
+    except Exception as e:
+        logger.error("NCBI BLAST submission failed: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=502,
+            detail="BLAST submission failed due to a network or service error",
         )
 
     return {

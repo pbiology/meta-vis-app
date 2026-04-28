@@ -45,7 +45,9 @@ async def ingest(
             outcome="failure",
             detail={"error": "file_not_found"},
         )
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(
+            status_code=404, detail="One or more required input files were not found"
+        )
     except ValueError as e:
         logger.error("Ingest validation error: %s", e, exc_info=True)
         await log_audit_event(
@@ -57,7 +59,7 @@ async def ingest(
             outcome="failure",
             detail={"error": "validation_error"},
         )
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail="Ingest data failed validation")
     except Exception as e:
         logger.error("Ingest failed with unexpected error: %s", e, exc_info=True)
         await log_audit_event(
@@ -105,7 +107,9 @@ async def ingest_trana(
             outcome="failure",
             detail={"error": "file_not_found"},
         )
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(
+            status_code=404, detail="One or more required input files were not found"
+        )
     except ValueError as e:
         logger.error("Trana ingest validation error: %s", e, exc_info=True)
         await log_audit_event(
@@ -117,7 +121,7 @@ async def ingest_trana(
             outcome="failure",
             detail={"error": "validation_error"},
         )
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail="Ingest data failed validation")
     except Exception as e:
         logger.error("Trana ingest failed with unexpected error: %s", e, exc_info=True)
         await log_audit_event(
