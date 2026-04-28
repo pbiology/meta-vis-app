@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useAppConfig } from "../context/ConfigContext";
 import KingdomBadge from "./KingdomBadge";
 import { fmt, fmtPct } from "../utils/format";
 import type { SampleProfile, SampleProfileEntry } from "../api/types";
-
-const HOST_IDS = new Set<number>([9606, 1, 0, 131567]);
 
 const SESSION_KEY = "taxonomy-filters";
 
@@ -92,6 +91,7 @@ export default function TaxonomyTable({
   isNtc = false,
 }: TaxonomyTableProps) {
   const { sessionKingdoms, setSessionKingdoms } = useAuth();
+  const { hostTaxonIds } = useAppConfig();
 
   const saved = loadFilters();
   const [taxSearch, setTaxSearch] = useState(() => saved.taxSearch ?? "");
@@ -126,7 +126,7 @@ export default function TaxonomyTable({
       : allEntries
           .filter(
             (t) =>
-              !HOST_IDS.has(t.taxon_id) &&
+              !hostTaxonIds.has(t.taxon_id) &&
               t.name !== "unclassified" &&
               !t.name?.startsWith("unclassified ")
           )
@@ -141,7 +141,9 @@ export default function TaxonomyTable({
 
   const tableEntries = allEntries.filter(
     (t) =>
-      !HOST_IDS.has(t.taxon_id) && t.name !== "unclassified" && !t.name?.startsWith("unclassified ")
+      !hostTaxonIds.has(t.taxon_id) &&
+      t.name !== "unclassified" &&
+      !t.name?.startsWith("unclassified ")
   );
 
   const filtered = tableEntries.filter((t) => {

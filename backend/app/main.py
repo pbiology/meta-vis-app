@@ -13,7 +13,18 @@ setup_logging(settings.log_level)
 
 from app.database import connect_db, close_db  # noqa: E402
 from app.middleware import RequestLoggingMiddleware  # noqa: E402
-from app.routers import auth, ingest, cases, samples, users, metaval, alerts, taxa, ntc  # noqa: E402
+from app.routers import (  # noqa: E402
+    auth,
+    ingest,
+    cases,
+    samples,
+    users,
+    metaval,
+    alerts,
+    taxa,
+    ntc,
+    config,
+)
 
 
 @asynccontextmanager
@@ -55,3 +66,4 @@ app.include_router(metaval.router, prefix="/api/v1")
 app.include_router(alerts.router, prefix="/api/v1")
 app.include_router(taxa.router, prefix="/api/v1")
 app.include_router(ntc.router, prefix="/api/v1")
+app.include_router(config.router, prefix="/api/v1")
