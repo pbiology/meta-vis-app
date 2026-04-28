@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { getMyStats } from "../api/users";
@@ -32,6 +32,7 @@ function NavItem({ to, icon, label }: NavItemProps) {
 export default function Layout() {
   const { user, role, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [stats, setStats] = useState<MyStats | null>(null);
 
   useEffect(() => {
@@ -290,7 +291,7 @@ export default function Layout() {
       </div>
 
       <div className="flex-1 overflow-hidden flex flex-col">
-        <ErrorBoundary label="page">
+        <ErrorBoundary key={location.pathname} label="page">
           <Outlet />
         </ErrorBoundary>
       </div>
