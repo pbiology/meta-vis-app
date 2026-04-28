@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { getMyStats } from "../api/users";
 import type { MyStats } from "../api/types";
+import ErrorBoundary from "./ErrorBoundary";
 
 interface NavItemProps {
   to: string;
@@ -289,7 +290,9 @@ export default function Layout() {
       </div>
 
       <div className="flex-1 overflow-hidden flex flex-col">
-        <Outlet />
+        <ErrorBoundary label="page">
+          <Outlet />
+        </ErrorBoundary>
       </div>
     </div>
   );

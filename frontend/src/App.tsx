@@ -16,6 +16,7 @@ import TaxonDetail from "./pages/TaxonDetail";
 import NtcTrends from "./pages/NtcTrends";
 import NtcListsPage from "./pages/NtcListsPage";
 import UserPreferences from "./pages/UserPreferences";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -24,6 +25,7 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 
 export default function App() {
   return (
+    <ErrorBoundary label="application">
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route
@@ -50,5 +52,6 @@ export default function App() {
         <Route path="preferences" element={<UserPreferences />} />
       </Route>
     </Routes>
+    </ErrorBoundary>
   );
 }
