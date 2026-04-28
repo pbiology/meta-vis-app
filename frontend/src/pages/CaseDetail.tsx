@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import {
   getCase,
   getCaseSamples,
@@ -10,12 +10,13 @@ import {
   addNote,
   deleteNote,
 } from "../api/cases";
+import { getPathogens } from "../api/alerts";
 import { getKronaUrl } from "../api/samples";
 import Badge from "../components/Badge";
 import { useAuth } from "../context/AuthContext";
 import { fmt, fmtPct } from "../utils/format";
 import { useRequiredParam } from "../utils/routeParams";
-import type { Case, Sample } from "../api/types";
+import type { Case, Sample, PathogenItem } from "../api/types";
 
 const FILTERS = ["All", "Sample", "Controls"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -41,6 +42,7 @@ export default function CaseDetail() {
 
   const [caseData, setCaseData] = useState<Case | null>(null);
   const [samples, setSamples] = useState<Sample[]>([]);
+  const [pathogenMap, setPathogenMap] = useState<Record<number, PathogenItem>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("All");
@@ -61,12 +63,14 @@ export default function CaseDetail() {
   useEffect(() => {
     async function load() {
       try {
-        const [fetchedCase, samplesData] = await Promise.all([
+        const [fetchedCase, samplesData, pathogens] = await Promise.all([
           getCase(caseId),
           getCaseSamples(caseId),
+          getPathogens(),
         ]);
         setCaseData(fetchedCase);
         setSamples(samplesData);
+        setPathogenMap(Object.fromEntries(pathogens.map((p) => [p.taxon_id, p])));
 
         const classifiers = (fetchedCase.classifiers as Classifier[] | undefined) ?? [];
         if (fetchedCase.has_krona && classifiers.length) {
@@ -445,7 +449,22 @@ export default function CaseDetail() {
                       className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
                     >
                       <td className="px-4 py-3 font-mono text-xs text-gray-700">
-                        {s.sample_id ?? "—"}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span>{s.sample_id ?? "—"}</span>
+                          {((s.all_taxon_ids as number[] | undefined) ?? [])
+                            .filter((id) => id in pathogenMap)
+                            .map((id) => (
+                              <Link
+                                key={id}
+                                to={`/taxa/${id}`}
+                                title={pathogenMap[id].taxon_name}
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-red-50 text-red-600 font-medium hover:bg-red-100 transition-colors font-sans not-italic"
+                              >
+                                {pathogenMap[id].taxon_name}
+                              </Link>
+                            ))}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500">
                         {(s.material as string | undefined) ?? "—"}
@@ -693,7 +712,10 @@ export default function CaseDetail() {
                                     <iframe
                                       key={kronaUrls[kronaSelectedSample]}
                                       src={kronaUrls[kronaSelectedSample]}
-                                      title={`Krona — ${samples.find((s) => s._id === kronaSelectedSample)?.sample_id}`}
+                                      title={`Krona — ${
+                                        samples.find((s) => s._id === kronaSelectedSample)
+                                          ?.sample_id
+                                      }`}
                                       className="w-full rounded-lg border border-gray-100"
                                       style={{ height: "85vh" }}
                                       sandbox="allow-scripts allow-popups allow-forms"
@@ -742,7 +764,9 @@ export default function CaseDetail() {
                   Provenance
                 </p>
                 <svg
-                  className={`w-3 h-3 text-gray-300 transition-transform ${provenanceOpen ? "rotate-180" : ""}`}
+                  className={`w-3 h-3 text-gray-300 transition-transform ${
+                    provenanceOpen ? "rotate-180" : ""
+                  }`}
                   viewBox="0 0 16 16"
                   fill="none"
                 >
