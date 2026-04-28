@@ -71,8 +71,8 @@ export async function addNote(caseId: string, text: string): Promise<Case> {
   return res.data;
 }
 
-export async function deleteNote(caseId: string, noteIndex: number): Promise<Case> {
-  const res = await client.delete<Case>(`/cases/${caseId}/notes/${noteIndex}`);
+export async function deleteNote(caseId: string, noteId: string): Promise<Case> {
+  const res = await client.delete<Case>(`/cases/${caseId}/notes/${noteId}`);
   return res.data;
 }
 
