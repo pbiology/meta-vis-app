@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useReportBuilder } from "../../context/ReportBuilderContext";
+import ReportPreviewModal from "./ReportPreviewModal";
 
 export interface CartTaxonInfo {
   taxon_id: number;
@@ -16,6 +17,7 @@ export default function ReportCart({ sampleId, taxonLookup }: Readonly<ReportCar
   const { selectedFor, removeTaxon, clear } = useReportBuilder();
   const ids = selectedFor(sampleId);
   const [open, setOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Collapse the popover when the cart empties — nothing left to show.
@@ -90,9 +92,11 @@ export default function ReportCart({ sampleId, taxonLookup }: Readonly<ReportCar
           <footer className="px-4 py-2.5 border-t border-gray-100">
             <button
               type="button"
-              disabled
-              title="Available in the next phase"
-              className="w-full text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-400 cursor-not-allowed"
+              onClick={() => {
+                setPreviewOpen(true);
+                setOpen(false);
+              }}
+              className="w-full text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
             >
               Preview report
             </button>
@@ -120,6 +124,13 @@ export default function ReportCart({ sampleId, taxonLookup }: Readonly<ReportCar
         </svg>
         Report · {ids.length}
       </button>
+      {previewOpen && (
+        <ReportPreviewModal
+          sampleId={sampleId}
+          taxonIds={ids}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
     </div>
   );
 }
