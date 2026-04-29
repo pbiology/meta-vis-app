@@ -1,19 +1,32 @@
 import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { getProfile } from "../../api/samples";
 import { useReportBuilder } from "../../context/ReportBuilderContext";
 import ReportPreviewModal from "./ReportPreviewModal";
 
-export interface CartTaxonInfo {
-  taxon_id: number;
+interface CartTaxonInfo {
   name: string;
   rank?: string;
 }
 
 interface ReportCartProps {
   sampleId: string;
-  taxonLookup: Map<number, CartTaxonInfo>;
 }
 
-export default function ReportCart({ sampleId, taxonLookup }: Readonly<ReportCartProps>) {
+export default function ReportCart({ sampleId }: Readonly<ReportCartProps>) {
+  const { data: profileData } = useQuery({
+    queryKey: ["profile", sampleId],
+    queryFn: () => getProfile(sampleId),
+    staleTime: Infinity,
+  });
+  const taxonLookup = new Map<number, CartTaxonInfo>();
+  for (const clf of profileData?.profiles ?? []) {
+    for (const e of clf.profile ?? []) {
+      if (!taxonLookup.has(e.taxon_id)) {
+        taxonLookup.set(e.taxon_id, { name: e.name, rank: e.rank });
+      }
+    }
+  }
   const { selectedFor, removeTaxon, clear } = useReportBuilder();
   const ids = selectedFor(sampleId);
   const [open, setOpen] = useState(false);
