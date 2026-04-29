@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import TaxonomyTable from "./TaxonomyTable";
 import { renderWithProviders } from "../test/utils";
 import { taxprofilerProfile, tranaProfile } from "../test/fixtures/samples";
@@ -87,5 +88,42 @@ describe("TaxonomyTable — bug regression coverage", () => {
       expect(nonHostBodyRows().length, `case: ${name}`).toBeGreaterThan(0);
       unmount();
     }
+  });
+});
+
+describe("TaxonomyTable — report selection", () => {
+  it("renders no checkbox column when selection prop is omitted", () => {
+    const profile = taxprofilerProfile();
+    renderWithProviders(
+      <TaxonomyTable {...baseProps} profile={profile} allProfiles={[profile]} />,
+      { sessionStorage: ALL_KINGDOMS }
+    );
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
+  it("renders checkboxes and calls onToggle when a row is clicked", async () => {
+    const profile = taxprofilerProfile();
+    const onToggle = vi.fn();
+    renderWithProviders(
+      <TaxonomyTable
+        {...baseProps}
+        profile={profile}
+        allProfiles={[profile]}
+        selection={{ selected: new Set([562]), onToggle }}
+      />,
+      { sessionStorage: ALL_KINGDOMS }
+    );
+
+    // E. coli row is pre-selected per the prop.
+    const ecoliRow = screen.getByText("Escherichia coli").closest("tr")!;
+    const ecoliCheckbox = within(ecoliRow).getByRole("checkbox");
+    expect(ecoliCheckbox).toBeChecked();
+
+    // HIV-1 row is not selected; clicking should fire onToggle with its taxon_id.
+    const hivRow = screen.getByText("HIV-1").closest("tr")!;
+    const hivCheckbox = within(hivRow).getByRole("checkbox");
+    expect(hivCheckbox).not.toBeChecked();
+    await userEvent.click(hivCheckbox);
+    expect(onToggle).toHaveBeenCalledWith(11676);
   });
 });
