@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useAppConfig } from "../context/ConfigContext";
@@ -56,6 +56,12 @@ export interface ClfQc {
   [key: string]: unknown;
 }
 
+export interface TaxonomySelection {
+  selected: Set<number>;
+  onToggle: (taxonId: number) => void;
+  onToggleAll?: (taxonIds: number[]) => void;
+}
+
 interface TaxonomyTableProps {
   profile: SampleProfile;
   allProfiles?: SampleProfile[];
@@ -68,6 +74,7 @@ interface TaxonomyTableProps {
   pathogenIds?: Set<number>;
   abundanceIsFraction?: boolean;
   isNtc?: boolean;
+  selection?: TaxonomySelection;
 }
 
 type SortCol = "name" | "rank" | "superkingdom" | "abundance" | "ntc" | "concordance";
@@ -75,6 +82,38 @@ type SortCol = "name" | "rank" | "superkingdom" | "abundance" | "ntc" | "concord
 interface SortState {
   col: SortCol;
   dir: 1 | -1;
+}
+
+interface HeaderCheckboxProps {
+  selection: TaxonomySelection;
+  pageEntries: { taxon_id: number }[];
+}
+
+function HeaderCheckbox({ selection, pageEntries }: Readonly<HeaderCheckboxProps>) {
+  const ref = useRef<HTMLInputElement>(null);
+  const pageIds = pageEntries.map((e) => e.taxon_id);
+  const checkedCount = pageIds.filter((id) => selection.selected.has(id)).length;
+  const allChecked = pageIds.length > 0 && checkedCount === pageIds.length;
+  const someChecked = checkedCount > 0 && !allChecked;
+
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = someChecked;
+  }, [someChecked]);
+
+  function handleChange() {
+    selection.onToggleAll!(pageIds);
+  }
+
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      aria-label="Select all on this page"
+      checked={allChecked}
+      onChange={handleChange}
+      className="w-3.5 h-3.5 cursor-pointer accent-blue-500"
+    />
+  );
 }
 
 export default function TaxonomyTable({
@@ -89,6 +128,7 @@ export default function TaxonomyTable({
   pathogenIds,
   abundanceIsFraction = false,
   isNtc = false,
+  selection,
 }: TaxonomyTableProps) {
   const { sessionKingdoms, setSessionKingdoms } = useAuth();
   const { hostTaxonIds } = useAppConfig();
@@ -392,6 +432,13 @@ export default function TaxonomyTable({
           <table className="w-full text-left">
             <thead>
               <tr>
+                {selection && (
+                  <th className="pb-2 w-6 border-b border-gray-100">
+                    {selection.onToggleAll && (
+                      <HeaderCheckbox selection={selection} pageEntries={pageEntries} />
+                    )}
+                  </th>
+                )}
                 {columns.map(({ label, col }) => (
                   <th
                     key={label}
@@ -415,10 +462,21 @@ export default function TaxonomyTable({
                 );
                 return (
                   <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
+                    {selection && (
+                      <td className="py-2 pr-2 w-6">
+                        <input
+                          type="checkbox"
+                          aria-label={`Add ${t.name} to report`}
+                          checked={selection.selected.has(t.taxon_id)}
+                          onChange={() => selection.onToggle(t.taxon_id)}
+                          className="w-3.5 h-3.5 cursor-pointer accent-blue-500"
+                        />
+                      </td>
+                    )}
                     <td className="py-2 pr-3 text-xs text-gray-700">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <Link
-                          to={`/taxa/${t.taxon_id}`}
+                          to={`/samples/${sampleId}/taxa/${t.taxon_id}`}
                           className="italic truncate hover:text-blue-600 hover:underline transition-colors"
                         >
                           {t.name}

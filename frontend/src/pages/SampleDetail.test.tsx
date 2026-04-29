@@ -8,6 +8,7 @@ import { http, HttpResponse } from "msw";
 import { server } from "../test/server";
 import { taxprofilerProfile, tranaProfile } from "../test/fixtures/samples";
 import { AuthProvider } from "../context/AuthContext";
+import { ReportBuilderProvider } from "../context/ReportBuilderContext";
 import SampleDetail from "./SampleDetail";
 
 const API = "*/api/v1";
@@ -25,18 +26,20 @@ function renderTwoSamples(initial: string) {
   return render(
     <QueryClientProvider client={client}>
       <AuthProvider>
-        <MemoryRouter
-          initialEntries={[initial]}
-          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-        >
-          <nav>
-            <Link to="/samples/A">go-A</Link>
-            <Link to="/samples/B">go-B</Link>
-          </nav>
-          <Routes>
-            <Route path="/samples/:sampleId" element={<SampleDetail />} />
-          </Routes>
-        </MemoryRouter>
+        <ReportBuilderProvider>
+          <MemoryRouter
+            initialEntries={[initial]}
+            future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+          >
+            <nav>
+              <Link to="/samples/A">go-A</Link>
+              <Link to="/samples/B">go-B</Link>
+            </nav>
+            <Routes>
+              <Route path="/samples/:sampleId" element={<SampleDetail />} />
+            </Routes>
+          </MemoryRouter>
+        </ReportBuilderProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

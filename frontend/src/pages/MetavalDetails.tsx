@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { getMetavalResult, submitBlast, getIgvUrl } from "../api/metaval";
 import { useRequiredParam } from "../utils/routeParams";
 import { axiosErrorDetail } from "../utils/axiosError";
@@ -207,7 +207,15 @@ function VerificationDataSection({ result }: { result: MetavalResult | null }) {
   );
 }
 
-function BlastTable({ rows, program }: { rows: BlastHitRow[]; program: string }) {
+function BlastTable({
+  rows,
+  program,
+  sampleId,
+}: {
+  rows: BlastHitRow[];
+  program: string;
+  sampleId: string;
+}) {
   const COLUMNS: { key: keyof BlastHitRow; label: string }[] = [
     { key: "qseqid", label: "Query" },
     { key: "ssciname", label: "Match" },
@@ -285,13 +293,13 @@ function BlastTable({ rows, program }: { rows: BlastHitRow[]; program: string })
                       </td>
                       <td className="px-5 py-2 text-xs italic text-gray-700">
                         {row.staxid ? (
-                          <a
-                            href={`/taxa/${row.staxid}`}
+                          <Link
+                            to={`/samples/${sampleId}/taxa/${row.staxid}`}
                             onClick={(e) => e.stopPropagation()}
                             className="underline text-gray-700 hover:text-gray-900"
                           >
                             {row.ssciname}
-                          </a>
+                          </Link>
                         ) : (
                           row.ssciname
                         )}
@@ -328,14 +336,20 @@ function BlastTable({ rows, program }: { rows: BlastHitRow[]; program: string })
   );
 }
 
-function BlastResultsSection({ blast }: { blast: BlastResults | undefined }) {
+function BlastResultsSection({
+  blast,
+  sampleId,
+}: Readonly<{
+  blast: BlastResults | undefined;
+  sampleId: string;
+}>) {
   return (
     <section className="bg-white border border-gray-100 rounded-xl">
       <div className="px-5 py-3.5 border-b border-gray-100">
         <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">BLAST results</p>
       </div>
-      <BlastTable rows={blast?.blastn ?? []} program="BLASTn" />
-      <BlastTable rows={blast?.blastx ?? []} program="BLASTx" />
+      <BlastTable rows={blast?.blastn ?? []} program="BLASTn" sampleId={sampleId} />
+      <BlastTable rows={blast?.blastx ?? []} program="BLASTx" sampleId={sampleId} />
     </section>
   );
 }
@@ -527,7 +541,7 @@ export default function MetavalDetails() {
       </div>
       <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
         <VerificationDataSection result={result} />
-        <BlastResultsSection blast={blast} />
+        <BlastResultsSection blast={blast} sampleId={sampleId} />
         <CandidateOrganismsSection metavalId={metavalId} organisms={organisms} />
       </div>
     </div>

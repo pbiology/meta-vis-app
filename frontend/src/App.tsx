@@ -12,6 +12,7 @@ import Alerts from "./pages/Alerts";
 import IgnoreList from "./pages/IgnoreList";
 import KnownPathogens from "./pages/KnownPathogens";
 import Layout from "./components/Layout";
+import { ReportBuilderProvider } from "./context/ReportBuilderContext";
 import TaxonDetail from "./pages/TaxonDetail";
 import NtcTrends from "./pages/NtcTrends";
 import NtcListsPage from "./pages/NtcListsPage";
@@ -32,32 +33,35 @@ function ProtectedRoute({ children }: Readonly<{ children: ReactNode }>) {
 export default function App() {
   return (
     <ErrorBoundary label="application">
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Layout />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<Navigate to="/cases" replace />} />
-          <Route path="cases" element={<CaseList />} />
-          <Route path="cases/:caseId" element={<CaseDetail />} />
-          <Route path="samples" element={<SampleList />} />
-          <Route path="samples/:sampleId" element={<SampleDetail />} />
-          <Route path="admin" element={<Admin />} />
-          <Route path="samples/:sampleId/metaval/:metavalId" element={<MetavalDetails />} />
-          <Route path="alerts" element={<Alerts />} />
-          <Route path="alerts/ignorelist" element={<IgnoreList />} />
-          <Route path="pathogens" element={<KnownPathogens />} />
-          <Route path="taxa/:taxonId" element={<TaxonDetail />} />
-          <Route path="ntc" element={<NtcTrends />} />
-          <Route path="ntc/lists" element={<NtcListsPage />} />
-          <Route path="preferences" element={<UserPreferences />} />
-        </Route>
-      </Routes>
+      <ReportBuilderProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="/cases" replace />} />
+            <Route path="cases" element={<CaseList />} />
+            <Route path="cases/:caseId" element={<CaseDetail />} />
+            <Route path="samples" element={<SampleList />} />
+            <Route path="samples/:sampleId" element={<SampleDetail />} />
+            <Route path="admin" element={<Admin />} />
+            <Route path="samples/:sampleId/metaval/:metavalId" element={<MetavalDetails />} />
+            <Route path="alerts" element={<Alerts />} />
+            <Route path="alerts/ignorelist" element={<IgnoreList />} />
+            <Route path="pathogens" element={<KnownPathogens />} />
+            <Route path="taxa/:taxonId" element={<TaxonDetail />} />
+            <Route path="samples/:sampleId/taxa/:taxonId" element={<TaxonDetail />} />
+            <Route path="ntc" element={<NtcTrends />} />
+            <Route path="ntc/lists" element={<NtcListsPage />} />
+            <Route path="preferences" element={<UserPreferences />} />
+          </Route>
+        </Routes>
+      </ReportBuilderProvider>
     </ErrorBoundary>
   );
 }

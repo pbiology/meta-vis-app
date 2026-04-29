@@ -18,6 +18,7 @@ from app.routers import (  # noqa: E402
     ingest,
     cases,
     samples,
+    subjects,
     users,
     metaval,
     alerts,
@@ -60,6 +61,7 @@ app.add_middleware(RequestLoggingMiddleware)
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(cases.router, prefix="/api/v1")
 app.include_router(samples.router, prefix="/api/v1")
+app.include_router(subjects.router, prefix="/api/v1")
 app.include_router(ingest.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(metaval.router, prefix="/api/v1")
