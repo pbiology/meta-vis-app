@@ -5,7 +5,6 @@ import { getSample, getProfile, getNtcProfiles } from "../api/samples";
 import Badge, { type BadgeType } from "../components/Badge";
 import { MetricStrip } from "../components/MetricStrip";
 import TaxonomyTable from "../components/TaxonomyTable";
-import ReportCart, { type CartTaxonInfo } from "../components/report/ReportCart";
 import { useReportBuilder } from "../context/ReportBuilderContext";
 import { getMetavalForSample } from "../api/metaval";
 import { getOutbreaks, getPathogens } from "../api/alerts";
@@ -159,20 +158,6 @@ export default function SampleDetail() {
     }),
     [selectedIds, sampleId, addTaxon, removeTaxon]
   );
-  // Looks up display info (name, rank) for any taxon the user has selected,
-  // pulling from whichever classifier first reported it. Lets the drawer show
-  // names regardless of which classifier tab the row was ticked in.
-  const taxonLookup = useMemo(() => {
-    const m = new Map<number, CartTaxonInfo>();
-    for (const clf of profile?.profiles ?? []) {
-      for (const e of clf.profile ?? []) {
-        if (!m.has(e.taxon_id)) {
-          m.set(e.taxon_id, { taxon_id: e.taxon_id, name: e.name, rank: e.rank });
-        }
-      }
-    }
-    return m;
-  }, [profile]);
 
   if (sampleLoading || profileLoading)
     return (
@@ -197,7 +182,6 @@ export default function SampleDetail() {
 
   return (
     <div className="flex flex-col h-full">
-      <ReportCart sampleId={sampleId} taxonLookup={taxonLookup} />
       <div className="flex items-center gap-3 px-6 py-4 bg-white border-b border-gray-100 flex-shrink-0">
         <button
           onClick={() => navigate(-1)}
