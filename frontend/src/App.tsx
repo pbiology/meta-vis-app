@@ -55,6 +55,7 @@ export default function App() {
             <Route path="alerts/ignorelist" element={<IgnoreList />} />
             <Route path="pathogens" element={<KnownPathogens />} />
             <Route path="taxa/:taxonId" element={<TaxonDetail />} />
+            <Route path="samples/:sampleId/taxa/:taxonId" element={<TaxonDetail />} />
             <Route path="ntc" element={<NtcTrends />} />
             <Route path="ntc/lists" element={<NtcListsPage />} />
             <Route path="preferences" element={<UserPreferences />} />
