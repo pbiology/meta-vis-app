@@ -3,6 +3,7 @@ import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, RenderOptions } from "@testing-library/react";
 import { AuthProvider } from "../context/AuthContext";
+import { ReportBuilderProvider } from "../context/ReportBuilderContext";
 
 interface RenderOpts extends Omit<RenderOptions, "wrapper"> {
   // Initial URL the MemoryRouter starts at.
@@ -32,19 +33,21 @@ function Providers({ children, initialEntries, routePath }: ProvidersProps) {
   return (
     <QueryClientProvider client={client}>
       <AuthProvider>
-        <MemoryRouter
-          initialEntries={initialEntries}
-          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-        >
-          {routePath ? (
-            <Routes>
-              <Route path={routePath} element={children} />
-              <Route path="*" element={children} />
-            </Routes>
-          ) : (
-            children
-          )}
-        </MemoryRouter>
+        <ReportBuilderProvider>
+          <MemoryRouter
+            initialEntries={initialEntries}
+            future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+          >
+            {routePath ? (
+              <Routes>
+                <Route path={routePath} element={children} />
+                <Route path="*" element={children} />
+              </Routes>
+            ) : (
+              children
+            )}
+          </MemoryRouter>
+        </ReportBuilderProvider>
       </AuthProvider>
     </QueryClientProvider>
   );
