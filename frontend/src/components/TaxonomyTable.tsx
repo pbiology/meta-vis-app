@@ -89,7 +89,7 @@ interface HeaderCheckboxProps {
   pageEntries: { taxon_id: number }[];
 }
 
-function HeaderCheckbox({ selection, pageEntries }: HeaderCheckboxProps) {
+function HeaderCheckbox({ selection, pageEntries }: Readonly<HeaderCheckboxProps>) {
   const ref = useRef<HTMLInputElement>(null);
   const pageIds = pageEntries.map((e) => e.taxon_id);
   const checkedCount = pageIds.filter((id) => selection.selected.has(id)).length;

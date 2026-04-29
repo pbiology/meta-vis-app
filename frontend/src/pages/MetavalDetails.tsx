@@ -339,10 +339,10 @@ function BlastTable({
 function BlastResultsSection({
   blast,
   sampleId,
-}: {
+}: Readonly<{
   blast: BlastResults | undefined;
   sampleId: string;
-}) {
+}>) {
   return (
     <section className="bg-white border border-gray-100 rounded-xl">
       <div className="px-5 py-3.5 border-b border-gray-100">

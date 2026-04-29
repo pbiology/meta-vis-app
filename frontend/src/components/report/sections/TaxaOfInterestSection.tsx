@@ -1,6 +1,12 @@
 import type { ReportTaxon } from "../useReportData";
 import SectionHeading from "./SectionHeading";
 
+function formatPct(value: number | undefined): string {
+  if (value == null) return "—";
+  if (value < 0.001) return "<0.001%";
+  return `${value.toFixed(3)}%`;
+}
+
 interface TaxaOfInterestSectionProps {
   taxa: ReportTaxon[];
 }
@@ -49,11 +55,7 @@ export default function TaxaOfInterestSection({ taxa }: Readonly<TaxaOfInterestS
                         <td className="report-taxon-grid-label">% non-host</td>
                         {classifiers.map((c) => (
                           <td key={c} className="report-mono">
-                            {t.pct[c] != null
-                              ? t.pct[c] < 0.001
-                                ? "<0.001%"
-                                : `${t.pct[c].toFixed(3)}%`
-                              : "—"}
+                            {formatPct(t.pct[c])}
                           </td>
                         ))}
                       </tr>
