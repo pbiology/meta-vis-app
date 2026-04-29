@@ -60,6 +60,11 @@ export const defaultHandlers = [
     HttpResponse.json({ sample_id: params.sampleId, sample_type: "sample" })
   ),
 
+  // subjects
+  http.get(`${API}/subjects/:subjectId`, ({ params }) =>
+    HttpResponse.json({ subject_id: params.subjectId })
+  ),
+
   // metaval
   http.get(`${API}/metaval/sample/:sampleId`, () => HttpResponse.json([])),
   http.get(`${API}/metaval/:metavalId`, ({ params }) =>
