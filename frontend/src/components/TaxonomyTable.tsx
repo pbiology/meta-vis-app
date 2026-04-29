@@ -56,6 +56,11 @@ export interface ClfQc {
   [key: string]: unknown;
 }
 
+export interface TaxonomySelection {
+  selected: Set<number>;
+  onToggle: (taxonId: number) => void;
+}
+
 interface TaxonomyTableProps {
   profile: SampleProfile;
   allProfiles?: SampleProfile[];
@@ -68,6 +73,7 @@ interface TaxonomyTableProps {
   pathogenIds?: Set<number>;
   abundanceIsFraction?: boolean;
   isNtc?: boolean;
+  selection?: TaxonomySelection;
 }
 
 type SortCol = "name" | "rank" | "superkingdom" | "abundance" | "ntc" | "concordance";
@@ -89,6 +95,7 @@ export default function TaxonomyTable({
   pathogenIds,
   abundanceIsFraction = false,
   isNtc = false,
+  selection,
 }: TaxonomyTableProps) {
   const { sessionKingdoms, setSessionKingdoms } = useAuth();
   const { hostTaxonIds } = useAppConfig();
@@ -392,6 +399,9 @@ export default function TaxonomyTable({
           <table className="w-full text-left">
             <thead>
               <tr>
+                {selection && (
+                  <th aria-label="Add to report" className="pb-2 w-6 border-b border-gray-100" />
+                )}
                 {columns.map(({ label, col }) => (
                   <th
                     key={label}
@@ -415,6 +425,17 @@ export default function TaxonomyTable({
                 );
                 return (
                   <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
+                    {selection && (
+                      <td className="py-2 pr-2 w-6">
+                        <input
+                          type="checkbox"
+                          aria-label={`Add ${t.name} to report`}
+                          checked={selection.selected.has(t.taxon_id)}
+                          onChange={() => selection.onToggle(t.taxon_id)}
+                          className="w-3.5 h-3.5 cursor-pointer accent-blue-500"
+                        />
+                      </td>
+                    )}
                     <td className="py-2 pr-3 text-xs text-gray-700">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <Link
