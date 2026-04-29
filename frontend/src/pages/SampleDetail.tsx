@@ -5,6 +5,10 @@ import { getSample, getProfile, getNtcProfiles } from "../api/samples";
 import Badge, { type BadgeType } from "../components/Badge";
 import { MetricStrip } from "../components/MetricStrip";
 import TaxonomyTable from "../components/TaxonomyTable";
+import ReportBuilderDrawer, {
+  type DrawerTaxonInfo,
+} from "../components/report/ReportBuilderDrawer";
+import { useReportBuilder } from "../context/ReportBuilderContext";
 import { getMetavalForSample } from "../api/metaval";
 import { getOutbreaks, getPathogens } from "../api/alerts";
 import { fmt, fmtPct } from "../utils/format";
@@ -133,6 +137,35 @@ export default function SampleDetail() {
     setActiveTab(match ? match.classifier : profile.profiles[0].classifier);
   }, [profile, activeTab, searchParams]);
 
+  // Hooks must run on every render before any early return — keep this block
+  // above the loading/error guards.
+  const { selectedFor, addTaxon, removeTaxon } = useReportBuilder();
+  const selectedIds = selectedFor(sampleId);
+  const reportSelection = useMemo(
+    () => ({
+      selected: new Set(selectedIds),
+      onToggle: (taxonId: number) =>
+        selectedIds.includes(taxonId)
+          ? removeTaxon(sampleId, taxonId)
+          : addTaxon(sampleId, taxonId),
+    }),
+    [selectedIds, sampleId, addTaxon, removeTaxon]
+  );
+  // Looks up display info (name, rank) for any taxon the user has selected,
+  // pulling from whichever classifier first reported it. Lets the drawer show
+  // names regardless of which classifier tab the row was ticked in.
+  const taxonLookup = useMemo(() => {
+    const m = new Map<number, DrawerTaxonInfo>();
+    for (const clf of profile?.profiles ?? []) {
+      for (const e of clf.profile ?? []) {
+        if (!m.has(e.taxon_id)) {
+          m.set(e.taxon_id, { taxon_id: e.taxon_id, name: e.name, rank: e.rank });
+        }
+      }
+    }
+    return m;
+  }, [profile]);
+
   if (sampleLoading || profileLoading)
     return (
       <div className="flex items-center justify-center h-full text-sm text-gray-400">
@@ -156,6 +189,7 @@ export default function SampleDetail() {
 
   return (
     <div className="flex flex-col h-full">
+      <ReportBuilderDrawer sampleId={sampleId} taxonLookup={taxonLookup} />
       <div className="flex items-center gap-3 px-6 py-4 bg-white border-b border-gray-100 flex-shrink-0">
         <button
           onClick={() => navigate(-1)}
@@ -599,6 +633,7 @@ export default function SampleDetail() {
                     pathogenIds={pathogenIds}
                     abundanceIsFraction={isTrana}
                     isNtc={sampleType !== "sample"}
+                    selection={reportSelection}
                   />
                 ) : null
               )}
