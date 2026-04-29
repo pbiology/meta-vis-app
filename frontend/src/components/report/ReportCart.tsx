@@ -47,8 +47,7 @@ export default function ReportCart({ sampleId, taxonLookup }: Readonly<ReportCar
     <div ref={containerRef} className="fixed bottom-6 right-6 z-30">
       {open && (
         <div
-          role="dialog"
-          aria-label="Report cart"
+          aria-label="Report items"
           className="absolute bottom-full right-0 mb-2 w-[320px] max-h-[50vh] bg-white border border-gray-200 rounded-lg shadow-lg flex flex-col overflow-hidden"
         >
           <header className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">

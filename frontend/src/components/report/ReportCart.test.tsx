@@ -53,7 +53,7 @@ describe("ReportCart", () => {
 
     expect(screen.getByRole("button", { name: /report cart/i })).toHaveTextContent(/report · 2/i);
     // Popover content not visible until the pill is clicked.
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Report items")).not.toBeInTheDocument();
   });
 
   it("opens the popover with items when the pill is clicked", async () => {
@@ -66,7 +66,7 @@ describe("ReportCart", () => {
     await userEvent.click(screen.getByTestId("seed"));
     await userEvent.click(screen.getByRole("button", { name: /report cart/i }));
 
-    const dialog = screen.getByRole("dialog");
+    const dialog = screen.getByLabelText("Report items");
     expect(dialog).toHaveTextContent("2 taxa in report");
     expect(dialog).toHaveTextContent("HIV-1");
     expect(dialog).toHaveTextContent("Escherichia coli");
@@ -81,7 +81,7 @@ describe("ReportCart", () => {
     );
     await userEvent.click(screen.getByTestId("seed"));
     await userEvent.click(screen.getByRole("button", { name: /report cart/i }));
-    expect(screen.getByRole("dialog")).toHaveTextContent("1 taxon in report");
+    expect(screen.getByLabelText("Report items")).toHaveTextContent("1 taxon in report");
   });
 
   it("removes a taxon when × is clicked", async () => {
@@ -95,7 +95,7 @@ describe("ReportCart", () => {
     await userEvent.click(screen.getByRole("button", { name: /report cart/i }));
     await userEvent.click(screen.getByLabelText("Remove HIV-1 from report"));
     expect(screen.queryByText("HIV-1")).not.toBeInTheDocument();
-    expect(screen.getByRole("dialog")).toHaveTextContent("1 taxon in report");
+    expect(screen.getByLabelText("Report items")).toHaveTextContent("1 taxon in report");
   });
 
   it("clearing all hides the cart entirely", async () => {
@@ -120,9 +120,9 @@ describe("ReportCart", () => {
     );
     await userEvent.click(screen.getByTestId("seed"));
     await userEvent.click(screen.getByRole("button", { name: /report cart/i }));
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByLabelText("Report items")).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Report items")).not.toBeInTheDocument();
     // Pill itself stays — it's still in the document.
     expect(screen.getByRole("button", { name: /report cart/i })).toBeInTheDocument();
   });
@@ -139,9 +139,9 @@ describe("ReportCart", () => {
     );
     await userEvent.click(screen.getByTestId("seed"));
     await userEvent.click(screen.getByRole("button", { name: /report cart/i }));
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByLabelText("Report items")).toBeInTheDocument();
     await userEvent.click(screen.getByTestId("outside"));
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Report items")).not.toBeInTheDocument();
   });
 
   it("falls back to a placeholder when a taxon is not in the lookup", async () => {
