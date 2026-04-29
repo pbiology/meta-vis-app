@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useAppConfig } from "../context/ConfigContext";
@@ -59,6 +59,7 @@ export interface ClfQc {
 export interface TaxonomySelection {
   selected: Set<number>;
   onToggle: (taxonId: number) => void;
+  onToggleAll?: (taxonIds: number[]) => void;
 }
 
 interface TaxonomyTableProps {
@@ -81,6 +82,38 @@ type SortCol = "name" | "rank" | "superkingdom" | "abundance" | "ntc" | "concord
 interface SortState {
   col: SortCol;
   dir: 1 | -1;
+}
+
+interface HeaderCheckboxProps {
+  selection: TaxonomySelection;
+  pageEntries: { taxon_id: number }[];
+}
+
+function HeaderCheckbox({ selection, pageEntries }: HeaderCheckboxProps) {
+  const ref = useRef<HTMLInputElement>(null);
+  const pageIds = pageEntries.map((e) => e.taxon_id);
+  const checkedCount = pageIds.filter((id) => selection.selected.has(id)).length;
+  const allChecked = pageIds.length > 0 && checkedCount === pageIds.length;
+  const someChecked = checkedCount > 0 && !allChecked;
+
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = someChecked;
+  }, [someChecked]);
+
+  function handleChange() {
+    selection.onToggleAll!(pageIds);
+  }
+
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      aria-label="Select all on this page"
+      checked={allChecked}
+      onChange={handleChange}
+      className="w-3.5 h-3.5 cursor-pointer accent-blue-500"
+    />
+  );
 }
 
 export default function TaxonomyTable({
@@ -400,7 +433,11 @@ export default function TaxonomyTable({
             <thead>
               <tr>
                 {selection && (
-                  <th aria-label="Add to report" className="pb-2 w-6 border-b border-gray-100" />
+                  <th className="pb-2 w-6 border-b border-gray-100">
+                    {selection.onToggleAll && (
+                      <HeaderCheckbox selection={selection} pageEntries={pageEntries} />
+                    )}
+                  </th>
                 )}
                 {columns.map(({ label, col }) => (
                   <th
@@ -439,7 +476,7 @@ export default function TaxonomyTable({
                     <td className="py-2 pr-3 text-xs text-gray-700">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <Link
-                          to={`/taxa/${t.taxon_id}`}
+                          to={`/samples/${sampleId}/taxa/${t.taxon_id}`}
                           className="italic truncate hover:text-blue-600 hover:underline transition-colors"
                         >
                           {t.name}
