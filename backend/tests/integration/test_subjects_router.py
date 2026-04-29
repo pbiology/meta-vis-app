@@ -35,7 +35,7 @@ class TestGetSubject:
         assert data["subject_id"] == "S-002"
         assert data["sex"] is None
 
-    async def test_returns_404_when_missing(self, client):
+    def test_returns_404_when_missing(self, client):
         resp = client.get("/api/v1/subjects/does-not-exist")
         assert resp.status_code == 404
         assert "does-not-exist" in resp.json()["detail"]

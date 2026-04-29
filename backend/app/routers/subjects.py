@@ -10,7 +10,7 @@ from app.models.subject import Subject
 router = APIRouter(prefix="/subjects", tags=["subjects"])
 
 
-@router.get("/{subject_id}", response_model=Subject, summary="Get a subject by id")
+@router.get("/{subject_id}", summary="Get a subject by id")
 async def get_subject(
     subject_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
