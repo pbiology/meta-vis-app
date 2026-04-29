@@ -14,7 +14,7 @@ export default function TaxaOfInterestSection({ taxa }: Readonly<TaxaOfInterestS
       ) : (
         <ul className="report-taxa-list">
           {taxa.map((t) => {
-            const classifiers = Object.keys(t.abundance).sort();
+            const classifiers = Object.keys(t.abundance).sort((a, b) => a.localeCompare(b));
             return (
               <li
                 key={t.taxon_id}
