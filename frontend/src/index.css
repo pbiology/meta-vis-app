@@ -69,3 +69,222 @@
     @apply text-xs text-gray-400 mt-0.5;
   }
 }
+
+/* ---------- Output Report ---------- */
+/* The printable artifact. Sized to A4 so on-screen preview matches print. */
+.report-root {
+  --report-danger: #dc2626;
+  --report-gray-300: #d1d5db;
+  --report-gray-500: #6b7280;
+  --report-gray-700: #374151;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--report-gray-700);
+}
+.report-page {
+  width: 794px;
+  min-height: 1123px;
+  padding: 56px 64px;
+  margin: 0 auto 16px auto;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+.report-header {
+  margin-bottom: 24px;
+}
+.report-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #111;
+  margin: 0;
+}
+.report-subtitle {
+  margin-top: 4px;
+  color: var(--report-gray-500);
+}
+.report-section {
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid var(--report-gray-300);
+}
+.report-section-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.report-section-marker {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--report-gray-500);
+  text-transform: uppercase;
+}
+.report-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111;
+  margin: 0;
+}
+.report-soft {
+  color: var(--report-gray-500);
+  font-style: italic;
+}
+.report-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Two-column key/value grid with dotted leaders. */
+.report-kv-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px 32px;
+  margin: 0;
+}
+.report-kv-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  border-bottom: 1px dotted var(--report-gray-300);
+  padding-bottom: 2px;
+}
+.report-kv-label {
+  color: var(--report-gray-500);
+  flex-shrink: 0;
+}
+.report-kv-value {
+  flex: 1;
+  text-align: right;
+  color: #111;
+}
+
+/* Taxa list — pathogen rows get a red left rule. */
+.report-taxa-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.report-taxon {
+  padding: 6px 10px;
+  border: 1px solid var(--report-gray-300);
+  border-radius: 4px;
+}
+.report-taxon-pathogen {
+  border-left: 3px solid var(--report-danger);
+}
+.report-taxon-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 6px;
+}
+.report-taxon-name {
+  font-style: italic;
+  font-weight: 600;
+  color: #111;
+}
+.report-taxon-meta {
+  font-size: 10.5px;
+  color: var(--report-gray-500);
+}
+.report-taxon-grid {
+  width: 100%;
+  border-collapse: collapse;
+}
+.report-taxon-grid th,
+.report-taxon-grid td {
+  padding: 2px 6px;
+  text-align: right;
+  font-size: 10.5px;
+}
+.report-taxon-grid th {
+  color: var(--report-gray-500);
+  font-weight: 500;
+  border-bottom: 1px solid var(--report-gray-300);
+}
+.report-taxon-grid-label {
+  text-align: left !important;
+  color: var(--report-gray-500);
+}
+
+/* Comments + provenance tools. */
+.report-comments {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.report-comment-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 10.5px;
+  color: var(--report-gray-500);
+}
+.report-comment-text {
+  margin: 2px 0 0 0;
+}
+.report-tools {
+  margin-top: 12px;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10.5px;
+}
+.report-tools th,
+.report-tools td {
+  padding: 3px 6px;
+  text-align: left;
+  border-bottom: 1px dotted var(--report-gray-300);
+}
+.report-tools th {
+  color: var(--report-gray-500);
+  font-weight: 500;
+}
+
+/* Wraps the provenance section so it always begins on a new page when printed. */
+.report-page-break {
+  page-break-before: always;
+  break-before: page;
+}
+.report-page-break > .report-section {
+  /* When wrapped in a page break, the inner section becomes the start of a new
+     page — give it the same padding the .report-page provides. */
+  width: 794px;
+  min-height: 1123px;
+  padding: 56px 64px;
+  margin: 0 auto 16px auto;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border-top: 0;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .report-root,
+  .report-root * {
+    visibility: visible;
+  }
+  .report-root {
+    position: absolute;
+    inset: 0;
+  }
+  .report-page,
+  .report-page-break > .report-section {
+    box-shadow: none !important;
+    margin: 0 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
