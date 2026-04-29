@@ -146,6 +146,16 @@ export default function SampleDetail() {
         selectedIds.includes(taxonId)
           ? removeTaxon(sampleId, taxonId)
           : addTaxon(sampleId, taxonId),
+      onToggleAll: (taxonIds: number[]) => {
+        const allSelected = taxonIds.every((id) => selectedIds.includes(id));
+        if (allSelected) {
+          for (const id of taxonIds) removeTaxon(sampleId, id);
+        } else {
+          for (const id of taxonIds) {
+            if (!selectedIds.includes(id)) addTaxon(sampleId, id);
+          }
+        }
+      },
     }),
     [selectedIds, sampleId, addTaxon, removeTaxon]
   );
