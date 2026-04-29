@@ -91,11 +91,18 @@ describe("ReportBuilderContext", () => {
   });
 
   it("throws when used outside the provider", () => {
-    // Suppress React's expected error log for the throw.
+    // React logs to console.error AND jsdom dispatches an ErrorEvent on window.
+    // Silence both so the test output stays readable.
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(() => renderHook(() => useReportBuilder())).toThrow(
-      /useReportBuilder must be used inside ReportBuilderProvider/
-    );
-    spy.mockRestore();
+    const swallow = (e: ErrorEvent) => e.preventDefault();
+    window.addEventListener("error", swallow);
+    try {
+      expect(() => renderHook(() => useReportBuilder())).toThrow(
+        /useReportBuilder must be used inside ReportBuilderProvider/
+      );
+    } finally {
+      window.removeEventListener("error", swallow);
+      spy.mockRestore();
+    }
   });
 });
