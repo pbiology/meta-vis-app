@@ -1078,25 +1078,26 @@ export default function TaxonDetail() {
         >
           taxid:{taxon.taxon_id}
         </a>
-        {sampleId && (() => {
-          const selected = isSelected(sampleId, taxon.taxon_id);
-          return (
-            <button
-              onClick={() =>
-                selected
-                  ? removeTaxon(sampleId, taxon.taxon_id)
-                  : addTaxon(sampleId, taxon.taxon_id)
-              }
-              className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
-                selected
-                  ? "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
-                  : "border-gray-200 text-gray-500 hover:bg-gray-50"
-              }`}
-            >
-              {selected ? "In report ✓" : "Add to report"}
-            </button>
-          );
-        })()}
+        {sampleId &&
+          (() => {
+            const selected = isSelected(sampleId, taxon.taxon_id);
+            return (
+              <button
+                onClick={() =>
+                  selected
+                    ? removeTaxon(sampleId, taxon.taxon_id)
+                    : addTaxon(sampleId, taxon.taxon_id)
+                }
+                className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                  selected
+                    ? "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                    : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                }`}
+              >
+                {selected ? "In report ✓" : "Add to report"}
+              </button>
+            );
+          })()}
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
