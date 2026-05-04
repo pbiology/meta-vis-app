@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import type { Sample } from "../../../api/types";
 import { getCaseKronaUrl } from "../../../api/cases";
 import { getKronaUrl } from "../../../api/samples";
@@ -23,6 +23,7 @@ interface CaseClassifiersProps {
   classifiers: Classifier[];
   samples: Sample[];
   showKrona: boolean;
+  onSelectSample: (sampleId: string) => void;
 }
 
 interface SampleClassifierQc {
@@ -57,8 +58,8 @@ export default function CaseClassifiers({
   classifiers,
   samples,
   showKrona,
+  onSelectSample,
 }: Readonly<CaseClassifiersProps>) {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const isTrana = samples.some((s) => s.trana);
 
@@ -242,7 +243,7 @@ export default function CaseClassifiers({
             return (
               <tr
                 key={s._id as string}
-                onClick={() => navigate(`/samples/${s._id}?classifier=${activeClassifier.name}`)}
+                onClick={() => onSelectSample(s._id as string)}
                 className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
               >
                 <td className="px-4 py-1.5 font-mono text-xs text-gray-700">

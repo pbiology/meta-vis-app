@@ -21,6 +21,7 @@ import CaseProvenance from "../components/case-view/sections/CaseProvenance";
 import CaseComments from "../components/case-view/sections/CaseComments";
 import CaseTaxa from "../components/case-view/sections/CaseTaxa";
 import CaseMultiQC from "../components/case-view/sections/CaseMultiQC";
+import CaseSampleDetail from "../components/case-view/sections/CaseSampleDetail";
 import type { SignalKind } from "../components/SignalPill";
 
 function Placeholder({ title, body }: Readonly<{ title: string; body: string }>) {
@@ -41,6 +42,7 @@ export default function CaseView() {
   const [pathogenMap, setPathogenMap] = useState<Record<number, PathogenItem>>({});
   const [signals, setSignals] = useState<SignalKind[]>([]);
   const [section, setSection] = useState<CaseSection>("overview");
+  const [activeSampleId, setActiveSampleId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState(false);
@@ -49,6 +51,10 @@ export default function CaseView() {
   useEffect(() => {
     document.title = `${caseId} — meta-vis`;
   }, [caseId]);
+
+  useEffect(() => {
+    setActiveSampleId(null);
+  }, [section]);
 
   useEffect(() => {
     let cancelled = false;
@@ -239,14 +245,22 @@ export default function CaseView() {
               onJumpToComments={() => setSection("comments")}
             />
           )}
-          {section === "samples" && (
+          {section === "samples" && activeSampleId && (
+            <CaseSampleDetail sampleId={activeSampleId} onBack={() => setActiveSampleId(null)} />
+          )}
+          {section === "samples" && !activeSampleId && (
             <>
-              <CaseSamplesPanel samples={samples} pathogenMap={pathogenMap} />
+              <CaseSamplesPanel
+                samples={samples}
+                pathogenMap={pathogenMap}
+                onSelectSample={setActiveSampleId}
+              />
               <CaseClassifiers
                 caseId={caseId}
                 classifiers={classifiers}
                 samples={samples}
                 showKrona
+                onSelectSample={setActiveSampleId}
               />
             </>
           )}

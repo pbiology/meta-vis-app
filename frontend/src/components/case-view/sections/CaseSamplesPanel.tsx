@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import type { PathogenItem, Sample } from "../../../api/types";
 import Badge from "../../Badge";
 import { fmt } from "../../../utils/format";
@@ -10,6 +10,7 @@ type Filter = (typeof FILTERS)[number];
 interface CaseSamplesPanelProps {
   samples: Sample[];
   pathogenMap: Record<number, PathogenItem>;
+  onSelectSample: (sampleId: string) => void;
 }
 
 interface TaxprofilerFastp {
@@ -22,8 +23,8 @@ interface TranaNanoplot {
 export default function CaseSamplesPanel({
   samples,
   pathogenMap,
+  onSelectSample,
 }: Readonly<CaseSamplesPanelProps>) {
-  const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>("All");
 
   const filtered = useMemo(() => {
@@ -79,7 +80,7 @@ export default function CaseSamplesPanel({
             return (
               <tr
                 key={s._id as string}
-                onClick={() => navigate(`/samples/${s._id}`)}
+                onClick={() => onSelectSample(s._id as string)}
                 className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
               >
                 <td className="px-4 py-3 font-mono text-xs text-gray-700">
