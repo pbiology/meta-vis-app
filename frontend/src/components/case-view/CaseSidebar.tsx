@@ -1,0 +1,210 @@
+export type CaseSection =
+  | "overview"
+  | "samples"
+  | "taxa"
+  | "qc"
+  | "krona"
+  | "multiqc"
+  | "report"
+  | "comments"
+  | "provenance"
+  | "activity";
+
+interface NavGroup {
+  label: string | null;
+  items: NavItem[];
+}
+
+interface NavItem {
+  id: CaseSection;
+  label: string;
+  icon: IconKind;
+  count?: number | null;
+}
+
+type IconKind =
+  | "list"
+  | "vial"
+  | "leaf"
+  | "check"
+  | "donut"
+  | "bars"
+  | "doc"
+  | "chat"
+  | "branch"
+  | "clock";
+
+interface CaseSidebarProps {
+  active: CaseSection;
+  onSelect: (s: CaseSection) => void;
+  counts: Partial<Record<CaseSection, number | null>>;
+  hideKrona?: boolean;
+  hideMultiqc?: boolean;
+}
+
+// Case-specific left navigation, replacing the app sidebar inside the case view.
+// Grouped into "Analysis" (data + visualisations) and "Workflow" (review actions).
+export default function CaseSidebar({
+  active,
+  onSelect,
+  counts,
+  hideKrona,
+  hideMultiqc,
+}: CaseSidebarProps) {
+  const groups: NavGroup[] = [
+    {
+      label: null,
+      items: [{ id: "overview", icon: "list", label: "Overview" }],
+    },
+    {
+      label: "Analysis",
+      items: [
+        { id: "samples", icon: "vial", label: "Samples", count: counts.samples ?? null },
+        {
+          id: "taxa",
+          icon: "leaf",
+          label: "Taxa of interest",
+          count: counts.taxa ?? null,
+        },
+        { id: "qc", icon: "check", label: "QC" },
+        ...(hideKrona
+          ? []
+          : [{ id: "krona" as const, icon: "donut" as const, label: "Krona viewer" }]),
+        ...(hideMultiqc
+          ? []
+          : [{ id: "multiqc" as const, icon: "bars" as const, label: "MultiQC" }]),
+      ],
+    },
+    {
+      label: "Workflow",
+      items: [
+        { id: "report", icon: "doc", label: "Report" },
+        { id: "comments", icon: "chat", label: "Comments", count: counts.comments ?? null },
+        { id: "provenance", icon: "branch", label: "Provenance" },
+        { id: "activity", icon: "clock", label: "Activity" },
+      ],
+    },
+  ];
+
+  return (
+    <aside className="w-56 bg-white border-r border-gray-100 py-4 overflow-y-auto flex-shrink-0">
+      {groups.map((g, gi) => (
+        <div key={gi} className="mb-3">
+          {g.label && (
+            <div className="px-5 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+              {g.label}
+            </div>
+          )}
+          {g.items.map((item) => {
+            const isActive = active === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => onSelect(item.id)}
+                className={`w-full flex items-center gap-2.5 px-5 py-1.5 text-left transition-colors text-[12.5px] ${
+                  isActive
+                    ? "bg-gray-50 text-gray-900 font-medium border-l-2 border-gray-900"
+                    : "text-gray-600 hover:bg-gray-50 border-l-2 border-transparent"
+                }`}
+              >
+                <NavIcon kind={item.icon} active={isActive} />
+                <span className="flex-1">{item.label}</span>
+                {item.count != null && (
+                  <span className="text-[10px] font-mono text-gray-400">{item.count}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      ))}
+    </aside>
+  );
+}
+
+interface NavIconProps {
+  kind: IconKind;
+  active: boolean;
+}
+
+function NavIcon({ kind, active }: NavIconProps) {
+  const stroke = active ? "#18181b" : "#a1a1aa";
+  const common = {
+    width: 13,
+    height: 13,
+    viewBox: "0 0 16 16",
+    fill: "none" as const,
+    stroke,
+    strokeWidth: 1.5,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+  };
+  switch (kind) {
+    case "list":
+      return (
+        <svg {...common}>
+          <path d="M2 4h12M2 8h12M2 12h12" />
+        </svg>
+      );
+    case "vial":
+      return (
+        <svg {...common}>
+          <path d="M6 2v8a2 2 0 104 0V2M5 2h6" />
+        </svg>
+      );
+    case "leaf":
+      return (
+        <svg {...common}>
+          <path d="M3 13s2-7 10-10c0 0-1 9-10 10z" />
+          <path d="M3 13l5-5" />
+        </svg>
+      );
+    case "check":
+      return (
+        <svg {...common}>
+          <path d="M3 8l3 3 7-7" />
+        </svg>
+      );
+    case "donut":
+      return (
+        <svg {...common}>
+          <circle cx="8" cy="8" r="5.5" />
+          <circle cx="8" cy="8" r="2" />
+        </svg>
+      );
+    case "bars":
+      return (
+        <svg {...common}>
+          <path d="M3 13V8M7 13V4M11 13V10" />
+        </svg>
+      );
+    case "doc":
+      return (
+        <svg {...common}>
+          <path d="M4 2h6l2 2v10H4V2z" />
+          <path d="M5 7h6M5 10h4" />
+        </svg>
+      );
+    case "chat":
+      return (
+        <svg {...common}>
+          <path d="M3 4h10v7H7l-3 2v-2H3V4z" />
+        </svg>
+      );
+    case "branch":
+      return (
+        <svg {...common}>
+          <circle cx="4" cy="3" r="1.5" />
+          <circle cx="4" cy="13" r="1.5" />
+          <circle cx="12" cy="8" r="1.5" />
+          <path d="M4 4.5v7M4 8h7" />
+        </svg>
+      );
+    case "clock":
+      return (
+        <svg {...common}>
+          <circle cx="8" cy="8" r="6" />
+          <path d="M8 5v3l2 2" />
+        </svg>
+      );
+  }
+}
