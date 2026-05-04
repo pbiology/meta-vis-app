@@ -265,9 +265,9 @@ export default function CaseClassifiers({
                           {fmtPct(clfQc?.pct_unclassified)}
                         </td>
                         <td className="px-4 py-1.5 text-xs text-gray-700">
-                          {hostPct?.[activeClassifier.name] != null
-                            ? `${hostPct[activeClassifier.name]}%`
-                            : "—"}
+                          {hostPct?.[activeClassifier.name] == null
+                            ? "—"
+                            : `${hostPct[activeClassifier.name]}%`}
                         </td>
                         <td className="px-4 py-1.5 text-xs text-gray-700">
                           {fmt(clfQc?.num_species)}
