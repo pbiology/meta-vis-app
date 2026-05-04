@@ -2,8 +2,6 @@ export type CaseSection =
   | "overview"
   | "samples"
   | "taxa"
-  | "qc"
-  | "krona"
   | "multiqc"
   | "report"
   | "comments"
@@ -22,35 +20,18 @@ interface NavItem {
   count?: number | null;
 }
 
-type IconKind =
-  | "list"
-  | "vial"
-  | "leaf"
-  | "check"
-  | "donut"
-  | "bars"
-  | "doc"
-  | "chat"
-  | "branch"
-  | "clock";
+type IconKind = "list" | "vial" | "leaf" | "bars" | "doc" | "chat" | "branch" | "clock";
 
 interface CaseSidebarProps {
   active: CaseSection;
   onSelect: (s: CaseSection) => void;
   counts: Partial<Record<CaseSection, number | null>>;
-  hideKrona?: boolean;
   hideMultiqc?: boolean;
 }
 
 // Case-specific left navigation, replacing the app sidebar inside the case view.
 // Grouped into "Analysis" (data + visualisations) and "Workflow" (review actions).
-export default function CaseSidebar({
-  active,
-  onSelect,
-  counts,
-  hideKrona,
-  hideMultiqc,
-}: CaseSidebarProps) {
+export default function CaseSidebar({ active, onSelect, counts, hideMultiqc }: CaseSidebarProps) {
   const groups: NavGroup[] = [
     {
       label: null,
@@ -66,10 +47,6 @@ export default function CaseSidebar({
           label: "Taxa of interest",
           count: counts.taxa ?? null,
         },
-        { id: "qc", icon: "check", label: "QC" },
-        ...(hideKrona
-          ? []
-          : [{ id: "krona" as const, icon: "donut" as const, label: "Krona viewer" }]),
         ...(hideMultiqc
           ? []
           : [{ id: "multiqc" as const, icon: "bars" as const, label: "MultiQC" }]),
@@ -156,19 +133,6 @@ function NavIcon({ kind, active }: NavIconProps) {
         <svg {...common}>
           <path d="M3 13s2-7 10-10c0 0-1 9-10 10z" />
           <path d="M3 13l5-5" />
-        </svg>
-      );
-    case "check":
-      return (
-        <svg {...common}>
-          <path d="M3 8l3 3 7-7" />
-        </svg>
-      );
-    case "donut":
-      return (
-        <svg {...common}>
-          <circle cx="8" cy="8" r="5.5" />
-          <circle cx="8" cy="8" r="2" />
         </svg>
       );
     case "bars":

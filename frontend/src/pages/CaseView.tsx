@@ -181,7 +181,6 @@ export default function CaseView() {
   const ticketId = caseData?.ticket_id as string | undefined;
   const ticketUrl = caseData?.ticket_url as string | undefined;
   const hasMultiqc = (caseData?.has_multiqc as boolean | undefined) ?? false;
-  const hasKrona = (caseData?.has_krona as boolean | undefined) ?? false;
 
   const taxaCount = useMemo(() => {
     const ids = new Set<number>();
@@ -228,7 +227,6 @@ export default function CaseView() {
             taxa: taxaCount,
             comments: notes.length,
           }}
-          hideKrona={!hasKrona || classifiers.length === 0}
           hideMultiqc={!hasMultiqc}
         />
         <main className="flex-1 overflow-y-auto px-8 py-6 min-w-0">
@@ -244,27 +242,17 @@ export default function CaseView() {
             />
           )}
           {section === "samples" && (
-            <CaseSamplesPanel samples={samples} pathogenMap={pathogenMap} />
+            <>
+              <CaseSamplesPanel samples={samples} pathogenMap={pathogenMap} />
+              <CaseClassifiers
+                caseId={caseId}
+                classifiers={classifiers}
+                samples={samples}
+                showKrona
+              />
+            </>
           )}
           {section === "taxa" && <CaseTaxa samples={samples} pathogenMap={pathogenMap} />}
-          {section === "qc" && (
-            <Placeholder
-              title="QC overview"
-              body={
-                hasMultiqc
-                  ? "Open the MultiQC section for full per-sample metrics."
-                  : "No QC report uploaded for this case."
-              }
-            />
-          )}
-          {section === "krona" && (
-            <CaseClassifiers
-              caseId={caseId}
-              classifiers={classifiers}
-              samples={samples}
-              showKrona
-            />
-          )}
           {section === "multiqc" && <CaseMultiQC caseId={caseId} available={hasMultiqc} />}
           {section === "report" && (
             <Placeholder
