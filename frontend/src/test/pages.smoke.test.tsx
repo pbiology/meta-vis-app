@@ -12,8 +12,9 @@ import { screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "./utils";
 
 import Login from "../pages/Login";
+import Dashboard from "../pages/Dashboard";
 import CaseList from "../pages/CaseList";
-import CaseDetail from "../pages/CaseDetail";
+import CaseView from "../pages/CaseView";
 import SampleList from "../pages/SampleList";
 import SampleDetail from "../pages/SampleDetail";
 import Admin from "../pages/Admin";
@@ -40,15 +41,20 @@ describe("page smoke tests", () => {
     expect(screen.getByText(/meta-vis/i)).toBeInTheDocument();
   });
 
+  it("Dashboard renders", async () => {
+    renderWithProviders(<Dashboard />, { route: "/" });
+    await settled();
+  });
+
   it("CaseList renders empty state", async () => {
     renderWithProviders(<CaseList />, { route: "/cases" });
     await settled();
   });
 
-  it("CaseDetail renders for a case id", async () => {
-    renderWithProviders(<CaseDetail />, {
-      route: "/cases/case-1",
-      routePath: "/cases/:caseId",
+  it("CaseView renders for a case id", async () => {
+    renderWithProviders(<CaseView />, {
+      route: "/case/case-1",
+      routePath: "/case/:caseId",
     });
     await settled();
   });
