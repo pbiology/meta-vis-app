@@ -1,11 +1,12 @@
 import { ReactNode } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useParams } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import Login from "./pages/Login";
 import SampleList from "./pages/SampleList";
 import SampleDetail from "./pages/SampleDetail";
 import CaseList from "./pages/CaseList";
-import CaseDetail from "./pages/CaseDetail";
+import CaseView from "./pages/CaseView";
+import Dashboard from "./pages/Dashboard";
 import Admin from "./pages/Admin";
 import MetavalDetails from "./pages/MetavalDetails";
 import Alerts from "./pages/Alerts";
@@ -30,12 +31,31 @@ function ProtectedRoute({ children }: Readonly<{ children: ReactNode }>) {
   return user ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
+// Preserves bookmarks and external links to the legacy /cases/:caseId route by
+// redirecting to the new sidebar-less /case/:caseId page.
+function LegacyCaseRedirect() {
+  const { caseId } = useParams();
+  return <Navigate to={`/case/${caseId}`} replace />;
+}
+
 export default function App() {
   return (
     <ErrorBoundary label="application">
       <ReportBuilderProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+
+          {/* Case-centric view — protected, but rendered OUTSIDE the app Layout
+              so reviewers focus on the case (no app sidebar, only case nav). */}
+          <Route
+            path="/case/:caseId"
+            element={
+              <ProtectedRoute>
+                <CaseView />
+              </ProtectedRoute>
+            }
+          />
+
           <Route
             path="/"
             element={
@@ -44,9 +64,9 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="/cases" replace />} />
+            <Route index element={<Dashboard />} />
             <Route path="cases" element={<CaseList />} />
-            <Route path="cases/:caseId" element={<CaseDetail />} />
+            <Route path="cases/:caseId" element={<LegacyCaseRedirect />} />
             <Route path="samples" element={<SampleList />} />
             <Route path="samples/:sampleId" element={<SampleDetail />} />
             <Route path="admin" element={<Admin />} />
