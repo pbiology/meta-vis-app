@@ -238,6 +238,31 @@ function KnownPathogensSection({
   );
 }
 
+function useReportSelection(sampleId: string) {
+  const { selectedFor, addTaxon, removeTaxon } = useReportBuilder();
+  const selectedIds = selectedFor(sampleId);
+  return useMemo(
+    () => ({
+      selected: new Set(selectedIds),
+      onToggle: (taxonId: number) =>
+        selectedIds.includes(taxonId)
+          ? removeTaxon(sampleId, taxonId)
+          : addTaxon(sampleId, taxonId),
+      onToggleAll: (taxonIds: number[]) => {
+        const allSelected = taxonIds.every((id) => selectedIds.includes(id));
+        if (allSelected) {
+          for (const id of taxonIds) removeTaxon(sampleId, id);
+        } else {
+          for (const id of taxonIds) {
+            if (!selectedIds.includes(id)) addTaxon(sampleId, id);
+          }
+        }
+      },
+    }),
+    [selectedIds, sampleId, addTaxon, removeTaxon]
+  );
+}
+
 interface SampleDetailContentProps {
   sampleId: string;
   onBack: () => void;
@@ -320,28 +345,7 @@ export default function SampleDetailContent({
 
   // Hooks must run on every render before any early return — keep this block
   // above the loading/error guards.
-  const { selectedFor, addTaxon, removeTaxon } = useReportBuilder();
-  const selectedIds = selectedFor(sampleId);
-  const reportSelection = useMemo(
-    () => ({
-      selected: new Set(selectedIds),
-      onToggle: (taxonId: number) =>
-        selectedIds.includes(taxonId)
-          ? removeTaxon(sampleId, taxonId)
-          : addTaxon(sampleId, taxonId),
-      onToggleAll: (taxonIds: number[]) => {
-        const allSelected = taxonIds.every((id) => selectedIds.includes(id));
-        if (allSelected) {
-          for (const id of taxonIds) removeTaxon(sampleId, id);
-        } else {
-          for (const id of taxonIds) {
-            if (!selectedIds.includes(id)) addTaxon(sampleId, id);
-          }
-        }
-      },
-    }),
-    [selectedIds, sampleId, addTaxon, removeTaxon]
-  );
+  const reportSelection = useReportSelection(sampleId);
 
   if (sampleLoading || profileLoading)
     return (
