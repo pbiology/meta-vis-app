@@ -10,12 +10,14 @@ interface NavItemProps {
   to: string;
   icon: React.ReactNode;
   label: string;
+  end?: boolean;
 }
 
-function NavItem({ to, icon, label }: NavItemProps) {
+function NavItem({ to, icon, label, end }: NavItemProps) {
   return (
     <NavLink
       to={to}
+      end={end}
       className={({ isActive }) =>
         `flex items-center gap-2.5 px-4 py-2 text-sm rounded-md mx-2 transition-colors ${
           isActive
@@ -121,6 +123,51 @@ export default function Layout() {
         </div>
 
         <nav className="flex flex-col gap-0.5 flex-1">
+          <NavItem
+            to="/"
+            end
+            label="Dashboard"
+            icon={
+              <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+                <rect
+                  x="2"
+                  y="2"
+                  width="5"
+                  height="5"
+                  rx="1"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                />
+                <rect
+                  x="9"
+                  y="2"
+                  width="5"
+                  height="5"
+                  rx="1"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                />
+                <rect
+                  x="2"
+                  y="9"
+                  width="5"
+                  height="5"
+                  rx="1"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                />
+                <rect
+                  x="9"
+                  y="9"
+                  width="5"
+                  height="5"
+                  rx="1"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                />
+              </svg>
+            }
+          />
           <NavItem
             to="/cases"
             label="Cases"
