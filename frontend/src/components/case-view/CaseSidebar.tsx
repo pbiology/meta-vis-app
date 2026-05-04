@@ -30,7 +30,12 @@ interface CaseSidebarProps {
 
 // Case-specific left navigation, replacing the app sidebar inside the case view.
 // Grouped into "Analysis" (data + visualisations) and "Workflow" (review actions).
-export default function CaseSidebar({ active, onSelect, counts, hideMultiqc }: CaseSidebarProps) {
+export default function CaseSidebar({
+  active,
+  onSelect,
+  counts,
+  hideMultiqc,
+}: Readonly<CaseSidebarProps>) {
   const groups: NavGroup[] = [
     {
       label: null,
@@ -63,8 +68,8 @@ export default function CaseSidebar({ active, onSelect, counts, hideMultiqc }: C
 
   return (
     <aside className="w-56 bg-white border-r border-gray-100 py-4 overflow-y-auto flex-shrink-0">
-      {groups.map((g, gi) => (
-        <div key={gi} className="mb-3">
+      {groups.map((g) => (
+        <div key={g.label ?? "root"} className="mb-3">
           {g.label && (
             <div className="px-5 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
               {g.label}
@@ -101,7 +106,7 @@ interface NavIconProps {
   active: boolean;
 }
 
-function NavIcon({ kind, active }: NavIconProps) {
+function NavIcon({ kind, active }: Readonly<NavIconProps>) {
   const stroke = active ? "#18181b" : "#a1a1aa";
   const common = {
     width: 13,

@@ -6,7 +6,7 @@ interface CaseMultiQCProps {
   available: boolean;
 }
 
-export default function CaseMultiQC({ caseId, available }: CaseMultiQCProps) {
+export default function CaseMultiQC({ caseId, available }: Readonly<CaseMultiQCProps>) {
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [errored, setErrored] = useState(false);

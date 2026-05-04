@@ -19,7 +19,10 @@ interface TranaNanoplot {
   nanoplot_unprocessed?: { number_of_reads?: number };
 }
 
-export default function CaseSamplesPanel({ samples, pathogenMap }: CaseSamplesPanelProps) {
+export default function CaseSamplesPanel({
+  samples,
+  pathogenMap,
+}: Readonly<CaseSamplesPanelProps>) {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>("All");
 

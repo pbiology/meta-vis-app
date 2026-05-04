@@ -15,7 +15,7 @@ interface TaxonHit {
 // Aggregates pathogen-flagged taxa across the case's samples. Read-only summary
 // — no API of its own; derived from the same `all_taxon_ids` field that the
 // Samples table uses to render inline pathogen pills.
-export default function CaseTaxa({ samples, pathogenMap }: CaseTaxaProps) {
+export default function CaseTaxa({ samples, pathogenMap }: Readonly<CaseTaxaProps>) {
   const byTaxon = new Map<number, TaxonHit>();
   for (const s of samples) {
     const ids = (s.all_taxon_ids as number[] | undefined) ?? [];

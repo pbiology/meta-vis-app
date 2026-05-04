@@ -8,7 +8,7 @@ interface StatCardProps {
   accent?: boolean;
 }
 
-export default function StatCard({ label, value, sub, tone, accent }: StatCardProps) {
+export default function StatCard({ label, value, sub, tone, accent }: Readonly<StatCardProps>) {
   const t = tone ? TONE[tone] : null;
   return (
     <div className="relative overflow-hidden bg-white border border-gray-100 rounded-lg p-4 flex flex-col gap-1">

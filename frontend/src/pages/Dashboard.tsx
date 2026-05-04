@@ -137,11 +137,11 @@ export default function Dashboard() {
             <div className="ml-auto flex gap-3.5 text-[11px]">
               <span className="flex items-center gap-1.5">
                 <span className="w-2 h-2 bg-gray-200 rounded-sm" />
-                Routine
+                <span>Routine</span>
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="w-2 h-2 bg-red-600 rounded-sm" />
-                With pathogen
+                <span>With pathogen</span>
               </span>
             </div>
           </div>

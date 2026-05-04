@@ -20,7 +20,7 @@ function relDay(s: string | null | undefined): string {
 // Renders one case as a clickable row that opens the case-centric view in a NEW tab.
 // The dashboard never navigates the current tab to a case — the user keeps the
 // dashboard open as their work surface and switches tabs to focus on a case.
-export default function CaseRow({ c, signals, dense = false }: CaseRowProps) {
+export default function CaseRow({ c, signals, dense = false }: Readonly<CaseRowProps>) {
   const reviewed = c.review?.reviewed ?? false;
   const sampleCount = c.sample_count ?? 0;
   const analysis = c.analysis_type ?? "—";

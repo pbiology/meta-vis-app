@@ -13,7 +13,7 @@ interface NavItemProps {
   end?: boolean;
 }
 
-function NavItem({ to, icon, label, end }: NavItemProps) {
+function NavItem({ to, icon, label, end }: Readonly<NavItemProps>) {
   return (
     <NavLink
       to={to}

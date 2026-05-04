@@ -5,7 +5,6 @@ import { TONE } from "../../palette";
 import Badge from "../../Badge";
 
 interface CaseOverviewProps {
-  caseId: string;
   caseData: Case;
   samples: Sample[];
   notes: CaseNote[];
@@ -47,7 +46,7 @@ export default function CaseOverview({
   signals,
   onJumpToSamples,
   onJumpToComments,
-}: CaseOverviewProps) {
+}: Readonly<CaseOverviewProps>) {
   const reviewed = (caseData.review as { reviewed?: boolean } | undefined)?.reviewed ?? false;
   const hasPathogen = signals.includes("pathogen");
   const orderDate = caseData.order_date as string | undefined;
@@ -70,6 +69,9 @@ export default function CaseOverview({
 
   const samplePreview = samples.slice(0, 4);
   const noteSlice = notes.slice(-2).reverse();
+  const samplesLabel = controlCount
+    ? `${sampleCount} (+${controlCount} ctrl)`
+    : String(sampleCount);
 
   const meta: Array<[string, string]> = [
     ["Order date", relDay(orderDate)],
@@ -81,7 +83,7 @@ export default function CaseOverview({
     ],
     ["Ticket", ticket ?? "—"],
     ["Status", reviewed ? "Reviewed" : "Pending"],
-    ["Samples", `${sampleCount}${controlCount ? ` (+${controlCount} ctrl)` : ""}`],
+    ["Samples", samplesLabel],
     ["Analysis", analysis ?? "—"],
     ["Platform", platform ?? "—"],
     ["Pipeline", pipelineLabel(caseData)],

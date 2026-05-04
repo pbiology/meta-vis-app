@@ -39,6 +39,16 @@ interface TranaInfo {
   nanoplot_unprocessed?: { number_of_reads?: number };
 }
 
+function superkingdomColor(kingdom: string | undefined): string {
+  const COLORS: Record<string, string> = {
+    Bacteria: "bg-blue-400",
+    Viruses: "bg-red-400",
+    Eukaryota: "bg-amber-400",
+    Archaea: "bg-purple-400",
+  };
+  return COLORS[kingdom ?? ""] ?? "bg-gray-300";
+}
+
 // Renders the classifier results table and (optionally) the Krona iframe for the
 // case's samples. Extracted from the legacy CaseDetail page to fit the case-view
 // sidebar's "Krona viewer" section. Behaviour kept identical to legacy.
@@ -47,7 +57,7 @@ export default function CaseClassifiers({
   classifiers,
   samples,
   showKrona,
-}: CaseClassifiersProps) {
+}: Readonly<CaseClassifiersProps>) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const isTrana = samples.some((s) => s.trana);
@@ -72,9 +82,7 @@ export default function CaseClassifiers({
 
     if (isTrana) {
       const kronaSamples = samples.filter((s) => s.has_krona);
-      setKronaSelectedSample(
-        (prev) => prev ?? (kronaSamples[0]?._id as string | undefined) ?? null
-      );
+      setKronaSelectedSample((prev) => prev ?? (kronaSamples[0]?._id as string) ?? null);
       let cancelled = false;
       Promise.all(
         kronaSamples.map(async (s) => {
@@ -144,6 +152,7 @@ export default function CaseClassifiers({
   }
 
   const activeClassifier = classifiers.find((c) => c.name === tab) ?? classifiers[0];
+  const kronaIsLoading = !kronaUrls[activeClassifier.name] && !kronaErrors[activeClassifier.name];
 
   return (
     <section className="bg-white border border-gray-100 rounded-lg overflow-hidden">
@@ -211,24 +220,14 @@ export default function CaseClassifiers({
             const topTaxaCell = (
               <td className="px-4 py-1.5">
                 <div className="flex flex-col gap-0">
-                  {topTaxa.map((t, i) => (
+                  {topTaxa.map((t) => (
                     <span
-                      key={i}
+                      key={t.name}
                       className="flex items-center gap-1"
                       style={{ fontSize: "11px", lineHeight: "1.4" }}
                     >
                       <span
-                        className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                          t.superkingdom === "Bacteria"
-                            ? "bg-blue-400"
-                            : t.superkingdom === "Viruses"
-                              ? "bg-red-400"
-                              : t.superkingdom === "Eukaryota"
-                                ? "bg-amber-400"
-                                : t.superkingdom === "Archaea"
-                                  ? "bg-purple-400"
-                                  : "bg-gray-300"
-                        }`}
+                        className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${superkingdomColor(t.superkingdom)}`}
                       />
                       <span className="text-gray-600 italic truncate max-w-36">{t.name}</span>
                       {t.pct != null && (
@@ -279,8 +278,8 @@ export default function CaseClassifiers({
                         <td className="px-4 py-1.5 text-xs">
                           {spikeIn.length > 0 ? (
                             <div className="flex flex-col gap-0.5">
-                              {spikeIn.map((t, i) => (
-                                <span key={i} className="text-gray-600 italic">
+                              {spikeIn.map((t) => (
+                                <span key={t.name} className="text-gray-600 italic">
                                   {t.name}
                                   {t.pct != null && (
                                     <span className="not-italic text-gray-400 ml-1">
@@ -347,7 +346,7 @@ export default function CaseClassifiers({
                   {kronaErrors[activeClassifier.name] && (
                     <p className="text-xs text-red-400">Krona file could not be loaded.</p>
                   )}
-                  {!kronaUrls[activeClassifier.name] && !kronaErrors[activeClassifier.name] && (
+                  {kronaIsLoading && (
                     <div className="flex items-center justify-center h-40 text-sm text-gray-400">
                       Loading Krona…
                     </div>

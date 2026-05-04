@@ -16,6 +16,11 @@ interface CaseProvenanceProps {
   caseData: Case;
 }
 
+interface PipelineBlockProps {
+  config: PipelineConfig;
+  toolRows: Array<[string, string]>;
+}
+
 function tools(info: PipelineInfoShape | undefined): Array<[string, string]> {
   const map: Record<string, string> = {};
   Object.values(info?.software_used ?? {}).forEach((processTools) => {
@@ -26,13 +31,7 @@ function tools(info: PipelineInfoShape | undefined): Array<[string, string]> {
   return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
 }
 
-function PipelineBlock({
-  config,
-  toolRows,
-}: {
-  config: PipelineConfig;
-  toolRows: Array<[string, string]>;
-}) {
+function PipelineBlock({ config, toolRows }: Readonly<PipelineBlockProps>) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex gap-6">
@@ -73,7 +72,7 @@ function PipelineBlock({
   );
 }
 
-export default function CaseProvenance({ caseData }: CaseProvenanceProps) {
+export default function CaseProvenance({ caseData }: Readonly<CaseProvenanceProps>) {
   const info = caseData.pipeline_info as PipelineInfoShape | undefined;
   const mvInfo = caseData.metaval_pipeline_info as PipelineInfoShape | undefined;
 

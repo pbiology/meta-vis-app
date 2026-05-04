@@ -7,8 +7,7 @@ import {
   reviewCase,
   unreviewCase,
 } from "../api/cases";
-import { getPathogens } from "../api/alerts";
-import { getOutbreaks } from "../api/alerts";
+import { getOutbreaks, getPathogens } from "../api/alerts";
 import { getNtcContaminantCaseIds } from "../api/ntc";
 import type { Case, CaseNote, PathogenItem, Sample } from "../api/types";
 import { useAuth } from "../context/AuthContext";
@@ -24,7 +23,7 @@ import CaseTaxa from "../components/case-view/sections/CaseTaxa";
 import CaseMultiQC from "../components/case-view/sections/CaseMultiQC";
 import type { SignalKind } from "../components/SignalPill";
 
-function Placeholder({ title, body }: { title: string; body: string }) {
+function Placeholder({ title, body }: Readonly<{ title: string; body: string }>) {
   return (
     <section className="bg-white border border-gray-100 rounded-lg p-10 text-center">
       <div className="text-sm font-semibold text-gray-700 mb-1">{title}</div>
@@ -232,7 +231,6 @@ export default function CaseView() {
         <main className="flex-1 overflow-y-auto px-8 py-6 min-w-0">
           {section === "overview" && (
             <CaseOverview
-              caseId={caseId}
               caseData={caseData}
               samples={samples}
               notes={notes}

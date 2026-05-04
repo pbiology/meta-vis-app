@@ -13,7 +13,7 @@ const SIGNALS: Record<SignalKind, { label: string; tone: keyof typeof TONE }> = 
   ntc: { label: "NTC contamination", tone: "alert" },
 };
 
-export default function SignalPill({ kind, big = false }: SignalPillProps) {
+export default function SignalPill({ kind, big = false }: Readonly<SignalPillProps>) {
   const { label, tone } = SIGNALS[kind];
   const t = TONE[tone];
   const sizing = big ? "px-2.5 py-1 text-xs rounded-md" : "px-2 py-0.5 text-[11px] rounded";
@@ -32,7 +32,7 @@ interface SignalDotProps {
   title?: string;
 }
 
-export function SignalDot({ kind, title }: SignalDotProps) {
+export function SignalDot({ kind, title }: Readonly<SignalDotProps>) {
   const t = TONE[SIGNALS[kind].tone];
   return (
     <span

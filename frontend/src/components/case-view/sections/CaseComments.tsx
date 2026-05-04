@@ -15,7 +15,7 @@ export default function CaseComments({
   role,
   onAdd,
   onDelete,
-}: CaseCommentsProps) {
+}: Readonly<CaseCommentsProps>) {
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
 
