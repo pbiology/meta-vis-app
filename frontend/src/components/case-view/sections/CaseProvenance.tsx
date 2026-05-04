@@ -23,7 +23,7 @@ function tools(info: PipelineInfoShape | undefined): Array<[string, string]> {
       map[String(name)] = String(ver);
     });
   });
-  return Object.entries(map).sort();
+  return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
 }
 
 function PipelineBlock({
