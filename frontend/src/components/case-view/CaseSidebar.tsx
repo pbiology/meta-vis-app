@@ -5,8 +5,7 @@ export type CaseSection =
   | "multiqc"
   | "report"
   | "comments"
-  | "provenance"
-  | "activity";
+  | "provenance";
 
 interface NavGroup {
   label: string | null;
@@ -20,7 +19,7 @@ interface NavItem {
   count?: number | null;
 }
 
-type IconKind = "list" | "vial" | "leaf" | "bars" | "doc" | "chat" | "branch" | "clock";
+type IconKind = "list" | "vial" | "leaf" | "bars" | "doc" | "chat" | "branch";
 
 interface CaseSidebarProps {
   active: CaseSection;
@@ -58,7 +57,6 @@ export default function CaseSidebar({ active, onSelect, counts, hideMultiqc }: C
         { id: "report", icon: "doc", label: "Report" },
         { id: "comments", icon: "chat", label: "Comments", count: counts.comments ?? null },
         { id: "provenance", icon: "branch", label: "Provenance" },
-        { id: "activity", icon: "clock", label: "Activity" },
       ],
     },
   ];
@@ -161,13 +159,6 @@ function NavIcon({ kind, active }: NavIconProps) {
           <circle cx="4" cy="13" r="1.5" />
           <circle cx="12" cy="8" r="1.5" />
           <path d="M4 4.5v7M4 8h7" />
-        </svg>
-      );
-    case "clock":
-      return (
-        <svg {...common}>
-          <circle cx="8" cy="8" r="6" />
-          <path d="M8 5v3l2 2" />
         </svg>
       );
   }

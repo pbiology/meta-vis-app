@@ -270,9 +270,6 @@ export default function CaseView() {
             />
           )}
           {section === "provenance" && <CaseProvenance caseData={caseData} />}
-          {section === "activity" && (
-            <Placeholder title="Activity" body="Audit log not yet available." />
-          )}
         </main>
       </div>
 
