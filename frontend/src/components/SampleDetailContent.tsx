@@ -10,13 +10,13 @@ import { getMetavalForSample } from "../api/metaval";
 import { getOutbreaks, getPathogens } from "../api/alerts";
 import { fmt, fmtPct } from "../utils/format";
 import { TAXON_ID_HUMAN } from "../utils/taxonomy";
-import type { SampleProfile, SampleProfileEntry } from "../api/types";
+import type { PathogenItem, SampleProfile, SampleProfileEntry } from "../api/types";
 
 interface DataWarningProps {
   message: string;
 }
 
-function DataWarning({ message }: DataWarningProps) {
+function DataWarning({ message }: Readonly<DataWarningProps>) {
   return <p className="text-xs text-amber-600 bg-amber-50 rounded px-3 py-1.5 mb-2">{message}</p>;
 }
 
@@ -58,6 +58,99 @@ interface TaxprofilerQc {
 }
 
 type SuperkingdomKey = "Bacteria" | "Eukaryota" | "Viruses" | "Archaea";
+
+interface ClassifierMetricsRowProps {
+  clf: SampleProfile;
+  clfQc: ClassifierQcStats | undefined;
+}
+
+function ClassifierMetricsRow({ clf, clfQc }: Readonly<ClassifierMetricsRowProps>) {
+  const sumBySuperkingdom: Record<SuperkingdomKey, number> = {
+    Bacteria: 0,
+    Eukaryota: 0,
+    Viruses: 0,
+    Archaea: 0,
+  };
+  let humanReads = 0;
+  for (const e of clf.profile ?? []) {
+    if (e.taxon_id === TAXON_ID_HUMAN) humanReads += e.abundance ?? 0;
+    const sk = e.superkingdom as SuperkingdomKey | null | undefined;
+    if (sk && sk in sumBySuperkingdom) {
+      sumBySuperkingdom[sk] += e.abundance ?? 0;
+    }
+  }
+  const eukReads = Math.max(0, sumBySuperkingdom.Eukaryota - humanReads);
+  const bacReads = sumBySuperkingdom.Bacteria;
+  const virReads = sumBySuperkingdom.Viruses;
+  const archReads = sumBySuperkingdom.Archaea;
+  const unclassReads = clfQc?.unclassified_reads ?? 0;
+  const accountedReads = humanReads + eukReads + bacReads + archReads + virReads + unclassReads;
+  const totalReads = clfQc?.total_reads ?? clfQc?.queries_aligned ?? accountedReads;
+  let totalSub: string | null = null;
+  if (clfQc?.total_reads != null) {
+    totalSub = `of ${fmt(clfQc.total_reads)} reads`;
+  } else if (clfQc?.queries_aligned != null) {
+    totalSub = `of ${fmt(clfQc.queries_aligned)} aligned queries`;
+  }
+  const otherReads = Math.max(0, totalReads - accountedReads);
+  const pct = (n: number) => (totalReads > 0 ? (n / totalReads) * 100 : 0);
+  return (
+    <div>
+      <p className="text-xs text-gray-400 mb-1.5">
+        {clf.classifier}
+        <span className="ml-1.5 text-gray-300">&middot; {clf.classifier_db}</span>
+        {totalSub && <span className="ml-1.5 text-gray-300">&middot; {totalSub}</span>}
+      </p>
+      <MetricStrip
+        metrics={[
+          {
+            label: "Unclassified",
+            value: fmtPct(pct(unclassReads), 2),
+            sub: `${fmt(unclassReads)} reads`,
+            warn: pct(unclassReads) > 20,
+          },
+          { label: "Human", value: fmtPct(pct(humanReads), 2), sub: `${fmt(humanReads)} reads` },
+          { label: "Viruses", value: fmtPct(pct(virReads), 2), sub: `${fmt(virReads)} reads` },
+          { label: "Bacteria", value: fmtPct(pct(bacReads), 2), sub: `${fmt(bacReads)} reads` },
+          { label: "Eukaryotes", value: fmtPct(pct(eukReads), 2), sub: `${fmt(eukReads)} reads` },
+          { label: "Archaea", value: fmtPct(pct(archReads), 2), sub: `${fmt(archReads)} reads` },
+          { label: "Other", value: fmtPct(pct(otherReads), 2), sub: `${fmt(otherReads)} reads` },
+        ]}
+      />
+    </div>
+  );
+}
+
+interface PathogenTableRowProps {
+  t: SampleProfileEntry;
+  classifiers: SampleProfile[];
+  pathogenMap: Record<string | number, PathogenItem>;
+}
+
+function PathogenTableRow({ t, classifiers, pathogenMap }: Readonly<PathogenTableRowProps>) {
+  const pathogenReason = pathogenMap[t.taxon_id]?.reason;
+  return (
+    <tr className="border-b border-gray-50">
+      <td className="px-4 py-3 text-xs italic text-gray-800 font-medium">{t.name}</td>
+      <td className="px-4 py-3 text-xs text-gray-500">{t.superkingdom ?? "—"}</td>
+      <td className="px-4 py-3 text-xs text-gray-400">
+        {pathogenReason ?? <span className="text-gray-300">{"—"}</span>}
+      </td>
+      {classifiers.map((clf) => {
+        const entry = clf.profile?.find((e) => e.taxon_id === t.taxon_id);
+        return (
+          <td key={clf.classifier} className="px-4 py-3 text-xs tabular-nums">
+            {entry ? (
+              <span className="text-red-600 font-medium">{entry.abundance.toLocaleString()}</span>
+            ) : (
+              <span className="text-gray-300">{"—"}</span>
+            )}
+          </td>
+        );
+      })}
+    </tr>
+  );
+}
 
 interface SampleDetailContentProps {
   sampleId: string;
@@ -230,18 +323,12 @@ export default function SampleDetailContent({
                 },
                 {
                   label: "Mean read length",
-                  value:
-                    trana?.nanoplot_processed?.mean_read_length != null
-                      ? trana.nanoplot_processed.mean_read_length.toFixed(0)
-                      : "—",
+                  value: trana?.nanoplot_processed?.mean_read_length?.toFixed(0) ?? "—",
                   sub: "bp",
                 },
                 {
                   label: "Mean quality",
-                  value:
-                    trana?.nanoplot_processed?.mean_read_quality != null
-                      ? trana.nanoplot_processed.mean_read_quality.toFixed(1)
-                      : "—",
+                  value: trana?.nanoplot_processed?.mean_read_quality?.toFixed(1) ?? "—",
                   sub: "Q",
                 },
                 {
@@ -263,7 +350,7 @@ export default function SampleDetailContent({
                   label: "Passed filter",
                   value: fp ? fmt(fp.passed_filter_reads) : "—",
                   sub:
-                    fp && fp.passed_filter_reads != null && fp.total_reads_before_filtering
+                    fp?.passed_filter_reads != null && fp.total_reads_before_filtering
                       ? `${fmtPct(
                           (fp.passed_filter_reads / fp.total_reads_before_filtering) * 100
                         )} of raw`
@@ -300,90 +387,13 @@ export default function SampleDetailContent({
               Classifier metrics
             </p>
             <div className="flex flex-col gap-2">
-              {classifiers.map((clf) => {
-                const clfQc = qc?.classifiers?.[clf.classifier];
-                const sumBySuperkingdom: Record<SuperkingdomKey, number> = {
-                  Bacteria: 0,
-                  Eukaryota: 0,
-                  Viruses: 0,
-                  Archaea: 0,
-                };
-                let humanReads = 0;
-                for (const e of clf.profile ?? []) {
-                  if (e.taxon_id === TAXON_ID_HUMAN) humanReads += e.abundance ?? 0;
-                  const sk = e.superkingdom as SuperkingdomKey | null | undefined;
-                  if (sk && sk in sumBySuperkingdom) {
-                    sumBySuperkingdom[sk] += e.abundance ?? 0;
-                  }
-                }
-                const eukReads = Math.max(0, sumBySuperkingdom.Eukaryota - humanReads);
-                const bacReads = sumBySuperkingdom.Bacteria;
-                const virReads = sumBySuperkingdom.Viruses;
-                const archReads = sumBySuperkingdom.Archaea;
-                const unclassReads = clfQc?.unclassified_reads ?? 0;
-                const accountedReads =
-                  humanReads + eukReads + bacReads + archReads + virReads + unclassReads;
-                const totalReads = clfQc?.total_reads ?? clfQc?.queries_aligned ?? accountedReads;
-                const totalSub =
-                  clfQc?.total_reads != null
-                    ? `of ${fmt(clfQc.total_reads)} reads`
-                    : clfQc?.queries_aligned != null
-                      ? `of ${fmt(clfQc.queries_aligned)} aligned queries`
-                      : null;
-                const otherReads = Math.max(0, totalReads - accountedReads);
-                const pct = (n: number) => (totalReads > 0 ? (n / totalReads) * 100 : 0);
-                return (
-                  <div key={clf.classifier}>
-                    <p className="text-xs text-gray-400 mb-1.5">
-                      {clf.classifier}
-                      <span className="ml-1.5 text-gray-300">&middot; {clf.classifier_db}</span>
-                      {totalSub && (
-                        <span className="ml-1.5 text-gray-300">&middot; {totalSub}</span>
-                      )}
-                    </p>
-                    <MetricStrip
-                      metrics={[
-                        {
-                          label: "Unclassified",
-                          value: fmtPct(pct(unclassReads), 2),
-                          sub: `${fmt(unclassReads)} reads`,
-                          warn: pct(unclassReads) > 20,
-                        },
-                        {
-                          label: "Human",
-                          value: fmtPct(pct(humanReads), 2),
-                          sub: `${fmt(humanReads)} reads`,
-                        },
-                        {
-                          label: "Viruses",
-                          value: fmtPct(pct(virReads), 2),
-                          sub: `${fmt(virReads)} reads`,
-                        },
-                        {
-                          label: "Bacteria",
-                          value: fmtPct(pct(bacReads), 2),
-                          sub: `${fmt(bacReads)} reads`,
-                        },
-                        {
-                          label: "Eukaryotes",
-                          value: fmtPct(pct(eukReads), 2),
-                          sub: `${fmt(eukReads)} reads`,
-                        },
-                        {
-                          label: "Archaea",
-                          value: fmtPct(pct(archReads), 2),
-                          sub: `${fmt(archReads)} reads`,
-                        },
-                        {
-                          label: "Other",
-                          value: fmtPct(pct(otherReads), 2),
-                          sub: `${fmt(otherReads)} reads`,
-                        },
-                      ]}
-                    />
-                  </div>
-                );
-              })}
+              {classifiers.map((clf) => (
+                <ClassifierMetricsRow
+                  key={clf.classifier}
+                  clf={clf}
+                  clfQc={qc?.classifiers?.[clf.classifier]}
+                />
+              ))}
             </div>
           </section>
         )}
@@ -516,7 +526,7 @@ export default function SampleDetailContent({
                   Known pathogens detected
                 </p>
                 <span className="text-xs text-red-400">
-                  {detected.length} taxon{detected.length !== 1 ? "a" : ""}
+                  {detected.length} taxon{detected.length === 1 ? "" : "a"}
                 </span>
               </div>
               <table className="w-full text-left border-collapse">
@@ -542,53 +552,33 @@ export default function SampleDetailContent({
                   </tr>
                 </thead>
                 <tbody>
-                  {detected.map((t) => {
-                    const pathogenNotes = (
-                      pathogenMap[t.taxon_id] as { notes?: string | null } | undefined
-                    )?.notes;
-                    return (
-                      <tr key={t.taxon_id} className="border-b border-gray-50">
-                        <td className="px-4 py-3 text-xs italic text-gray-800 font-medium">
-                          {t.name}
-                        </td>
-                        <td className="px-4 py-3 text-xs text-gray-500">{t.superkingdom ?? "—"}</td>
-                        <td className="px-4 py-3 text-xs text-gray-400">
-                          {pathogenNotes ?? <span className="text-gray-300">{"—"}</span>}
-                        </td>
-                        {classifiers.map((clf) => {
-                          const entry = clf.profile?.find((e) => e.taxon_id === t.taxon_id);
-                          return (
-                            <td key={clf.classifier} className="px-4 py-3 text-xs tabular-nums">
-                              {entry ? (
-                                <span className="text-red-600 font-medium">
-                                  {entry.abundance.toLocaleString()}
-                                </span>
-                              ) : (
-                                <span className="text-gray-300">{"—"}</span>
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
+                  {detected.map((t) => (
+                    <PathogenTableRow
+                      key={t.taxon_id}
+                      t={t}
+                      classifiers={classifiers}
+                      pathogenMap={pathogenMap}
+                    />
+                  ))}
                 </tbody>
               </table>
             </section>
           );
         })()}
 
-        {(outbreakError || ntcError) && (
-          <DataWarning
-            message={
-              outbreakError && ntcError
-                ? "Failed to load outbreak and NTC data — outbreak badges and NTC columns may be missing."
-                : outbreakError
-                  ? "Failed to load outbreak data — outbreak badges may be missing."
-                  : "Failed to load NTC data — NTC columns may be missing."
+        {(outbreakError || ntcError) &&
+          (() => {
+            let msg: string;
+            if (outbreakError && ntcError) {
+              msg =
+                "Failed to load outbreak and NTC data — outbreak badges and NTC columns may be missing.";
+            } else if (outbreakError) {
+              msg = "Failed to load outbreak data — outbreak badges may be missing.";
+            } else {
+              msg = "Failed to load NTC data — NTC columns may be missing.";
             }
-          />
-        )}
+            return <DataWarning message={msg} />;
+          })()}
         {classifiers.length > 0 && (
           <section className="bg-white border border-gray-100 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-3">
