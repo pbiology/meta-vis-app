@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getSample, getProfile, getNtcProfiles } from "../api/samples";
 import Badge, { type BadgeType } from "./Badge";
@@ -547,12 +547,14 @@ export default function SampleDetailContent({
                             return (
                               <tr key={r._id} className="border-t border-gray-50 hover:bg-gray-50">
                                 <td className="px-4 py-2.5">
-                                  <Link
-                                    to={`/samples/${sampleId}/metaval/${r._id}`}
+                                  <a
+                                    href={`/samples/${sampleId}/metaval/${r._id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
                                     className="text-xs italic text-gray-700 hover:text-blue-600 underline transition-colors"
                                   >
                                     {taxonName.replace(/^taxid_\d+_/, "").replace(/-/g, " ")}
-                                  </Link>
+                                  </a>
                                 </td>
                               </tr>
                             );

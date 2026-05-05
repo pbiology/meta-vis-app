@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import type { PathogenItem, Sample } from "../../../api/types";
 import Badge from "../../Badge";
 import { fmt } from "../../../utils/format";
@@ -87,15 +86,17 @@ export default function CaseSamplesPanel({
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span>{s.sample_id ?? "—"}</span>
                     {flagged.map((id) => (
-                      <Link
+                      <a
                         key={id}
-                        to={`/taxa/${id}`}
+                        href={`/taxa/${id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         title={pathogenMap[id].taxon_name}
                         onClick={(e) => e.stopPropagation()}
                         className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-red-50 text-red-600 font-medium hover:bg-red-100 transition-colors font-sans not-italic"
                       >
                         {pathogenMap[id].taxon_name}
-                      </Link>
+                      </a>
                     ))}
                   </div>
                 </td>

@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import type { PathogenItem, Sample } from "../../../api/types";
 
 interface CaseTaxaProps {
@@ -47,24 +46,28 @@ export default function CaseTaxa({ samples, pathogenMap }: Readonly<CaseTaxaProp
         <ul className="divide-y divide-gray-50">
           {hits.map((h) => (
             <li key={h.taxonId} className="px-4 py-3 flex items-start gap-3">
-              <Link
-                to={`/taxa/${h.taxonId}`}
+              <a
+                href={`/taxa/${h.taxonId}`}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="flex-1 min-w-0 text-sm italic text-gray-900 hover:underline truncate"
               >
                 {h.pathogen.taxon_name}
-              </Link>
+              </a>
               <span className="text-[11px] text-gray-500">
                 {h.samples.length} sample{h.samples.length === 1 ? "" : "s"}
               </span>
               <div className="flex flex-wrap gap-1.5 max-w-[40%]">
                 {h.samples.slice(0, 4).map((s) => (
-                  <Link
+                  <a
                     key={s._id as string}
-                    to={`/samples/${s._id}/taxa/${h.taxonId}`}
+                    href={`/samples/${s._id}/taxa/${h.taxonId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="font-mono text-[11px] px-1.5 py-0.5 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
                   >
                     {s.sample_id}
-                  </Link>
+                  </a>
                 ))}
                 {h.samples.length > 4 && (
                   <span className="text-[11px] text-gray-400">+{h.samples.length - 4} more</span>
