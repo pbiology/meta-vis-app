@@ -52,9 +52,10 @@ export default function CaseView() {
     document.title = `${caseId} — meta-vis`;
   }, [caseId]);
 
-  useEffect(() => {
+  function handleSectionChange(s: CaseSection) {
+    setSection(s);
     setActiveSampleId(null);
-  }, [section]);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -226,7 +227,7 @@ export default function CaseView() {
       <div className="flex-1 flex min-h-0">
         <CaseSidebar
           active={section}
-          onSelect={setSection}
+          onSelect={handleSectionChange}
           counts={{
             samples: samples.length,
             taxa: taxaCount,
@@ -241,8 +242,12 @@ export default function CaseView() {
               samples={samples}
               notes={notes}
               signals={signals}
-              onJumpToSamples={() => setSection("samples")}
-              onJumpToComments={() => setSection("comments")}
+              onJumpToSamples={() => handleSectionChange("samples")}
+              onJumpToComments={() => handleSectionChange("comments")}
+              onSelectSample={(id) => {
+                setSection("samples");
+                setActiveSampleId(id);
+              }}
             />
           )}
           {section === "samples" && activeSampleId && (

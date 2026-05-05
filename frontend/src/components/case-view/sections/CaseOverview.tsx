@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import type { Case, CaseNote, Sample } from "../../../api/types";
 import SignalPill, { type SignalKind } from "../../SignalPill";
 import { TONE } from "../../palette";
@@ -11,6 +10,7 @@ interface CaseOverviewProps {
   signals: SignalKind[];
   onJumpToSamples: () => void;
   onJumpToComments: () => void;
+  onSelectSample: (sampleId: string) => void;
 }
 
 function relDay(s: string | null | undefined): string {
@@ -46,6 +46,7 @@ export default function CaseOverview({
   signals,
   onJumpToSamples,
   onJumpToComments,
+  onSelectSample,
 }: Readonly<CaseOverviewProps>) {
   const reviewed = (caseData.review as { reviewed?: boolean } | undefined)?.reviewed ?? false;
   const hasPathogen = signals.includes("pathogen");
@@ -162,10 +163,10 @@ export default function CaseOverview({
           </div>
         ) : (
           samplePreview.map((s) => (
-            <Link
+            <button
               key={s._id as string}
-              to={`/samples/${s._id}`}
-              className="grid items-center px-4 py-2.5 border-b border-gray-50 hover:bg-gray-50 transition-colors no-underline"
+              onClick={() => onSelectSample(s._id as string)}
+              className="grid items-center px-4 py-2.5 border-b border-gray-50 hover:bg-gray-50 transition-colors text-left w-full"
               style={{ gridTemplateColumns: "1fr auto auto auto" }}
             >
               <div className="flex items-center gap-2">
@@ -187,7 +188,7 @@ export default function CaseOverview({
                   strokeLinejoin="round"
                 />
               </svg>
-            </Link>
+            </button>
           ))
         )}
       </section>
