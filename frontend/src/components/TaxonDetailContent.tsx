@@ -124,7 +124,7 @@ interface LineageRowProps {
   value?: string | null;
 }
 
-function LineageRow({ label, value }: LineageRowProps) {
+function LineageRow({ label, value }: Readonly<LineageRowProps>) {
   if (!value) return null;
   return (
     <div className="flex items-baseline gap-2 py-1 border-b border-gray-50 last:border-0">
@@ -169,7 +169,7 @@ function ClinicalNotesEditor({
   notesAuthor,
   notesUpdatedAt,
   canEdit,
-}: ClinicalNotesEditorProps) {
+}: Readonly<ClinicalNotesEditorProps>) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState<string>(initialNotes ?? "");
   const [author, setAuthor] = useState<string | null>(notesAuthor ?? null);
@@ -227,7 +227,7 @@ function ClinicalNotesEditor({
         )}
       </div>
       <div className="px-4 py-3">
-        {editing ? (
+        {editing && (
           <div className="flex flex-col gap-2">
             <textarea
               ref={textareaRef}
@@ -254,7 +254,8 @@ function ClinicalNotesEditor({
               </button>
             </div>
           </div>
-        ) : value ? (
+        )}
+        {!editing && value && (
           <div className="flex flex-col gap-2">
             <p className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">{value}</p>
             {author && (
@@ -276,7 +277,8 @@ function ClinicalNotesEditor({
               </p>
             )}
           </div>
-        ) : (
+        )}
+        {!editing && !value && (
           <p className="text-xs text-gray-300 italic">No clinical notes recorded.</p>
         )}
       </div>
@@ -284,7 +286,7 @@ function ClinicalNotesEditor({
   );
 }
 
-function OccurrencesSection({ taxonId }: { taxonId: number }) {
+function OccurrencesSection({ taxonId }: Readonly<{ taxonId: number }>) {
   const [windowDays, setWindowDays] = useState(90);
   const [data, setData] = useState<OccurrencesData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -322,13 +324,13 @@ function OccurrencesSection({ taxonId }: { taxonId: number }) {
         </div>
       </div>
 
-      {loading ? (
-        <div className="px-4 py-8 text-xs text-gray-400 text-center">Loading…</div>
-      ) : !data || data.total_cases === 0 ? (
+      {loading && <div className="px-4 py-8 text-xs text-gray-400 text-center">Loading…</div>}
+      {!loading && (!data || data.total_cases === 0) && (
         <div className="px-4 py-8 text-xs text-gray-300 text-center">
           Not detected in any case in the last {windowDays} days.
         </div>
-      ) : (
+      )}
+      {!loading && data && data.total_cases > 0 && (
         <>
           <div className="px-4 py-2.5 border-b border-gray-50 flex items-center gap-2">
             <span className="text-xs text-gray-400">
@@ -351,11 +353,14 @@ function OccurrencesSection({ taxonId }: { taxonId: number }) {
                 </tr>
               </thead>
               <tbody>
-                {data.cases.map((c, i) => {
+                {data.cases.map((c) => {
                   const classifiers = data.all_classifiers ?? c.classifiers ?? [];
                   const gridCols = `minmax(0, auto) repeat(${classifiers.length}, minmax(0, 1fr))`;
                   return (
-                    <tr key={i} className="border-t border-gray-50 hover:bg-gray-50 align-top">
+                    <tr
+                      key={c.case_id}
+                      className="border-t border-gray-50 hover:bg-gray-50 align-top"
+                    >
                       <td className="px-4 py-2.5">
                         <a
                           href={`/case/${c.case_id}`}
@@ -427,15 +432,13 @@ function OccurrencesSection({ taxonId }: { taxonId: number }) {
   );
 }
 
-function ExternalLinksSection({ taxonId }: { taxonId: number }) {
+function ExternalLinksSection({ taxonId }: Readonly<{ taxonId: number }>) {
   const [links, setLinks] = useState<ExternalLink[] | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     getTaxonExternalLinks(taxonId)
-      .then((data) =>
-        setLinks(((data as { links?: ExternalLink[] }).links ?? []) as ExternalLink[])
-      )
+      .then((data) => setLinks((data as { links?: ExternalLink[] }).links ?? []))
       .catch(() => setLinks([]))
       .finally(() => setLoading(false));
   }, [taxonId]);
@@ -462,9 +465,9 @@ function ExternalLinksSection({ taxonId }: { taxonId: number }) {
         </p>
       </div>
       <div className="px-4 py-3 flex flex-wrap gap-2">
-        {links.map((link, i) => (
+        {links.map((link) => (
           <a
-            key={i}
+            key={link.url}
             href={link.url}
             target="_blank"
             rel="noopener noreferrer"
@@ -487,14 +490,89 @@ function ExternalLinksSection({ taxonId }: { taxonId: number }) {
   );
 }
 
-function LiteratureSection({ taxonId }: { taxonId: number }) {
+interface LiteratureArticleListProps {
+  articles: LiteratureArticle[];
+  maxResults: number;
+  pubmedQuery: string | null;
+  onShowMore: () => void;
+}
+
+function LiteratureArticleList({
+  articles,
+  maxResults,
+  pubmedQuery,
+  onShowMore,
+}: Readonly<LiteratureArticleListProps>) {
+  const [queryVisible, setQueryVisible] = useState(false);
+  return (
+    <>
+      <ul className="divide-y divide-gray-50">
+        {articles.map((a) => (
+          <li key={a.pmid} className="px-4 py-3 flex flex-col gap-0.5">
+            <a
+              href={a.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-blue-600 hover:underline leading-snug"
+            >
+              {a.title}
+            </a>
+            <p className="text-xs text-gray-400">
+              {a.journal}
+              {a.pub_date ? <span className="text-gray-300"> · {a.pub_date}</span> : null}
+            </p>
+          </li>
+        ))}
+      </ul>
+      {maxResults < 20 && (
+        <div className="px-4 py-3 border-t border-gray-50">
+          <button
+            onClick={onShowMore}
+            className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            Show more
+          </button>
+        </div>
+      )}
+      {pubmedQuery && (
+        <div className="px-4 py-3 border-t border-gray-50">
+          <button
+            onClick={() => setQueryVisible((v) => !v)}
+            className="flex items-center gap-1 text-xs text-gray-300 hover:text-gray-500 transition-colors"
+          >
+            <svg
+              className={`w-3 h-3 transition-transform ${queryVisible ? "rotate-90" : ""}`}
+              viewBox="0 0 16 16"
+              fill="none"
+            >
+              <path
+                d="M6 4l4 4-4 4"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            PubMed query
+          </button>
+          {queryVisible && (
+            <pre className="mt-2 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2 whitespace-pre-wrap break-all font-mono leading-relaxed">
+              {pubmedQuery}
+            </pre>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+function LiteratureSection({ taxonId }: Readonly<{ taxonId: number }>) {
   const [articles, setArticles] = useState<LiteratureArticle[]>([]);
   const [pubmedQuery, setPubmedQuery] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [maxResults, setMaxResults] = useState(5);
   const [collapsed, setCollapsed] = useState(false);
-  const [queryVisible, setQueryVisible] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -533,81 +611,34 @@ function LiteratureSection({ taxonId }: { taxonId: number }) {
         </svg>
       </button>
 
-      {!collapsed && loading ? (
-        <div className="px-4 py-8 text-xs text-gray-400 text-center">Loading…</div>
-      ) : !collapsed && error ? (
-        <div className="px-4 py-6 text-xs text-gray-400 text-center">
-          Could not retrieve literature. Check network connectivity.
-        </div>
-      ) : !collapsed && articles.length === 0 ? (
-        <div className="px-4 py-6 text-xs text-gray-300 text-center italic">
-          No case reports or outbreak publications found in PubMed.
-        </div>
-      ) : !collapsed ? (
+      {!collapsed && (
         <>
-          <ul className="divide-y divide-gray-50">
-            {articles.map((a) => (
-              <li key={a.pmid} className="px-4 py-3 flex flex-col gap-0.5">
-                <a
-                  href={a.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-blue-600 hover:underline leading-snug"
-                >
-                  {a.title}
-                </a>
-                <p className="text-xs text-gray-400">
-                  {a.journal}
-                  {a.pub_date ? <span className="text-gray-300"> · {a.pub_date}</span> : null}
-                </p>
-              </li>
-            ))}
-          </ul>
-          {maxResults < 20 && (
-            <div className="px-4 py-3 border-t border-gray-50">
-              <button
-                onClick={() => setMaxResults((n) => Math.min(n + 10, 20))}
-                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                Show more
-              </button>
+          {loading && <div className="px-4 py-8 text-xs text-gray-400 text-center">Loading…</div>}
+          {!loading && error && (
+            <div className="px-4 py-6 text-xs text-gray-400 text-center">
+              Could not retrieve literature. Check network connectivity.
             </div>
           )}
-          {pubmedQuery && (
-            <div className="px-4 py-3 border-t border-gray-50">
-              <button
-                onClick={() => setQueryVisible((v) => !v)}
-                className="flex items-center gap-1 text-xs text-gray-300 hover:text-gray-500 transition-colors"
-              >
-                <svg
-                  className={`w-3 h-3 transition-transform ${queryVisible ? "rotate-90" : ""}`}
-                  viewBox="0 0 16 16"
-                  fill="none"
-                >
-                  <path
-                    d="M6 4l4 4-4 4"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                PubMed query
-              </button>
-              {queryVisible && (
-                <pre className="mt-2 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2 whitespace-pre-wrap break-all font-mono leading-relaxed">
-                  {pubmedQuery}
-                </pre>
-              )}
+          {!loading && !error && articles.length === 0 && (
+            <div className="px-4 py-6 text-xs text-gray-300 text-center italic">
+              No case reports or outbreak publications found in PubMed.
             </div>
+          )}
+          {!loading && !error && articles.length > 0 && (
+            <LiteratureArticleList
+              articles={articles}
+              maxResults={maxResults}
+              pubmedQuery={pubmedQuery}
+              onShowMore={() => setMaxResults((n) => Math.min(n + 10, 20))}
+            />
           )}
         </>
-      ) : null}
+      )}
     </section>
   );
 }
 
-function PubmedLinks({ pmids }: { pmids?: (string | number)[] }) {
+function PubmedLinks({ pmids }: Readonly<{ pmids?: (string | number)[] }>) {
   if (!pmids || pmids.length === 0) return <span className="text-gray-300">—</span>;
   return (
     <div className="flex flex-wrap gap-1">
@@ -626,12 +657,71 @@ function PubmedLinks({ pmids }: { pmids?: (string | number)[] }) {
   );
 }
 
+interface SpecialtyHeaderSummaryProps {
+  loadingSpecialty: boolean;
+  hasSpecialtyData: boolean | null;
+  amrCount: number;
+  vfCount: number;
+}
+
+function SpecialtyHeaderSummary({
+  loadingSpecialty,
+  hasSpecialtyData,
+  amrCount,
+  vfCount,
+}: Readonly<SpecialtyHeaderSummaryProps>) {
+  if (loadingSpecialty) return null;
+  if (!hasSpecialtyData)
+    return <span className="text-xs text-gray-300 italic">No data in BV-BRC</span>;
+  return (
+    <div className="flex items-center gap-2">
+      {amrCount > 0 && (
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-red-600">
+          <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="none">
+            <path
+              d="M8 1.5L2 4v4c0 3.3 2.5 5.8 6 7 3.5-1.2 6-3.7 6-7V4L8 1.5z"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M5.5 8l1.8 1.8L10.5 6"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          {amrCount} AMR {amrCount === 1 ? "gene" : "genes"}
+        </span>
+      )}
+      {vfCount > 0 && (
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600">
+          <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="1.5" stroke="currentColor" strokeWidth="1.4" />
+            <path
+              d="M8 6.5C8 4.6 6.4 3 4.5 3S1 4.6 1 6.5c0 1.4.8 2.6 2 3.2M8 6.5C8 4.6 9.6 3 11.5 3S15 4.6 15 6.5c0 1.4-.8 2.6-2 3.2M5 12.5c.9.5 1.9.8 3 .8s2.1-.3 3-.8"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+            />
+          </svg>
+          {vfCount} virulence {vfCount === 1 ? "factor" : "factors"}
+        </span>
+      )}
+    </div>
+  );
+}
+
 interface SpecialtyGenesSubsectionProps {
   specialty: SpecialtyData | null;
   loadingSpecialty: boolean;
 }
 
-function SpecialtyGenesSubsection({ specialty, loadingSpecialty }: SpecialtyGenesSubsectionProps) {
+function SpecialtyGenesSubsection({
+  specialty,
+  loadingSpecialty,
+}: Readonly<SpecialtyGenesSubsectionProps>) {
   const [sgCollapsed, setSgCollapsed] = useState(true);
 
   const hasSpecialtyData =
@@ -643,50 +733,6 @@ function SpecialtyGenesSubsection({ specialty, loadingSpecialty }: SpecialtyGene
   const amrCount = specialty?.amr_genes?.length ?? 0;
   const vfCount = specialty?.virulence_factors?.length ?? 0;
 
-  function HeaderSummary() {
-    if (loadingSpecialty) return null;
-    if (!hasSpecialtyData)
-      return <span className="text-xs text-gray-300 italic">No data in BV-BRC</span>;
-    return (
-      <div className="flex items-center gap-2">
-        {amrCount > 0 && (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-red-600">
-            <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="none">
-              <path
-                d="M8 1.5L2 4v4c0 3.3 2.5 5.8 6 7 3.5-1.2 6-3.7 6-7V4L8 1.5z"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M5.5 8l1.8 1.8L10.5 6"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            {amrCount} AMR {amrCount === 1 ? "gene" : "genes"}
-          </span>
-        )}
-        {vfCount > 0 && (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600">
-            <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 16 16" fill="none">
-              <circle cx="8" cy="8" r="1.5" stroke="currentColor" strokeWidth="1.4" />
-              <path
-                d="M8 6.5C8 4.6 6.4 3 4.5 3S1 4.6 1 6.5c0 1.4.8 2.6 2 3.2M8 6.5C8 4.6 9.6 3 11.5 3S15 4.6 15 6.5c0 1.4-.8 2.6-2 3.2M5 12.5c.9.5 1.9.8 3 .8s2.1-.3 3-.8"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-              />
-            </svg>
-            {vfCount} virulence {vfCount === 1 ? "factor" : "factors"}
-          </span>
-        )}
-      </div>
-    );
-  }
-
   return (
     <div className="border-t border-gray-50">
       <button
@@ -695,7 +741,12 @@ function SpecialtyGenesSubsection({ specialty, loadingSpecialty }: SpecialtyGene
       >
         <p className="text-xs font-medium text-gray-500 flex-shrink-0">Specialty genes</p>
         <div className="flex-1 flex justify-start">
-          <HeaderSummary />
+          <SpecialtyHeaderSummary
+            loadingSpecialty={loadingSpecialty}
+            hasSpecialtyData={hasSpecialtyData}
+            amrCount={amrCount}
+            vfCount={vfCount}
+          />
         </div>
         <svg
           className={`w-3 h-3 text-gray-300 flex-shrink-0 transition-transform ${sgCollapsed ? "-rotate-90" : ""}`}
@@ -739,7 +790,10 @@ function SpecialtyGenesSubsection({ specialty, loadingSpecialty }: SpecialtyGene
                       </thead>
                       <tbody>
                         {specialty.amr_genes.map((g, i) => (
-                          <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
+                          <tr
+                            key={g.gene ?? i}
+                            className="border-t border-gray-50 hover:bg-gray-50"
+                          >
                             <td className="px-3 py-1.5 text-xs font-mono text-gray-700">
                               {g.gene || "—"}
                             </td>
@@ -784,7 +838,10 @@ function SpecialtyGenesSubsection({ specialty, loadingSpecialty }: SpecialtyGene
                       </thead>
                       <tbody>
                         {specialty.virulence_factors.map((g, i) => (
-                          <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
+                          <tr
+                            key={g.gene ?? i}
+                            className="border-t border-gray-50 hover:bg-gray-50"
+                          >
                             <td className="px-3 py-1.5 text-xs font-mono text-gray-700">
                               {g.gene || "—"}
                             </td>
@@ -823,8 +880,11 @@ function SpecialtyGenesSubsection({ specialty, loadingSpecialty }: SpecialtyGene
                         </tr>
                       </thead>
                       <tbody>
-                        {specialty.amr_phenotypes.map((p, i) => (
-                          <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
+                        {specialty.amr_phenotypes.map((p) => (
+                          <tr
+                            key={p.antibiotic}
+                            className="border-t border-gray-50 hover:bg-gray-50"
+                          >
                             <td className="px-3 py-1.5 text-xs text-gray-700">{p.antibiotic}</td>
                             <td className="px-3 py-1.5 text-xs tabular-nums text-red-600">
                               {p.resistant}
@@ -858,7 +918,7 @@ interface ExternalLinkButtonProps {
   children: React.ReactNode;
 }
 
-function ExternalLinkButton({ href, children }: ExternalLinkButtonProps) {
+function ExternalLinkButton({ href, children }: Readonly<ExternalLinkButtonProps>) {
   return (
     <a
       href={href}
@@ -880,7 +940,7 @@ function ExternalLinkButton({ href, children }: ExternalLinkButtonProps) {
   );
 }
 
-function BvbrcSection({ taxonId }: { taxonId: number }) {
+function BvbrcSection({ taxonId }: Readonly<{ taxonId: number }>) {
   const [genomes, setGenomes] = useState<GenomesData | null>(null);
   const [specialty, setSpecialty] = useState<SpecialtyData | null>(null);
   const [loadingGenomes, setLoadingGenomes] = useState(true);
@@ -929,11 +989,11 @@ function BvbrcSection({ taxonId }: { taxonId: number }) {
         <div className="divide-y divide-gray-50">
           <div className="px-4 py-3">
             <p className="text-xs font-medium text-gray-500 mb-2">Sequenced genomes</p>
-            {loadingGenomes ? (
-              <p className="text-xs text-gray-400">Loading…</p>
-            ) : !hasGenomeData || !genomes ? (
+            {loadingGenomes && <p className="text-xs text-gray-400">Loading…</p>}
+            {!loadingGenomes && (!hasGenomeData || !genomes) && (
               <p className="text-xs text-gray-300 italic">No genome data found in BV-BRC.</p>
-            ) : (
+            )}
+            {!loadingGenomes && hasGenomeData && genomes && (
               <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-2">
                   <span className="text-lg font-semibold text-gray-800 tabular-nums">
@@ -948,8 +1008,8 @@ function BvbrcSection({ taxonId }: { taxonId: number }) {
                     <div>
                       <p className="text-xs text-gray-400 mb-1">Top isolation sources</p>
                       <ul className="space-y-0.5">
-                        {genomes.isolation_sources.map((s, i) => (
-                          <li key={i} className="flex items-baseline justify-between gap-2">
+                        {genomes.isolation_sources.map((s) => (
+                          <li key={s.source} className="flex items-baseline justify-between gap-2">
                             <span className="text-xs text-gray-600 truncate">{s.source}</span>
                             <span className="text-xs text-gray-400 tabular-nums flex-shrink-0">
                               {s.count}
@@ -964,8 +1024,8 @@ function BvbrcSection({ taxonId }: { taxonId: number }) {
                     <div>
                       <p className="text-xs text-gray-400 mb-1">Top countries</p>
                       <ul className="space-y-0.5">
-                        {genomes.countries.map((c, i) => (
-                          <li key={i} className="flex items-baseline justify-between gap-2">
+                        {genomes.countries.map((c) => (
+                          <li key={c.country} className="flex items-baseline justify-between gap-2">
                             <span className="text-xs text-gray-600 truncate">{c.country}</span>
                             <span className="text-xs text-gray-400 tabular-nums flex-shrink-0">
                               {c.count}
@@ -981,9 +1041,9 @@ function BvbrcSection({ taxonId }: { taxonId: number }) {
                   <div>
                     <p className="text-xs text-gray-400 mb-1">Resistant to (genomes count)</p>
                     <div className="flex flex-wrap gap-1.5">
-                      {genomes.amr_phenotypes.map((a, i) => (
+                      {genomes.amr_phenotypes.map((a) => (
                         <span
-                          key={i}
+                          key={a.antibiotic}
                           className="text-xs px-2 py-0.5 bg-red-50 text-red-600 rounded-full"
                           title={`${a.count} genome(s) resistant`}
                         >

@@ -169,14 +169,17 @@ function VerificationDataSection({
                   {TYPE_LABEL[vd.type] ?? vd.type}
                 </td>
                 <td className="px-5 py-2.5 text-xs text-gray-500 tabular-nums">
-                  {vd.count != null
-                    ? vd.type === "raw_reads"
-                      ? `${vd.count.toLocaleString()} × ${vd.file_count ?? 1} (${(vd.file_count ?? 1) > 1 ? "paired-end" : "single-end"})`
-                      : vd.count.toLocaleString()
-                    : "—"}
+                  {(() => {
+                    if (vd.count == null) return "—";
+                    if (vd.type === "raw_reads") {
+                      const fc = vd.file_count ?? 1;
+                      return `${vd.count.toLocaleString()} × ${fc} (${fc > 1 ? "paired-end" : "single-end"})`;
+                    }
+                    return vd.count.toLocaleString();
+                  })()}
                 </td>
                 <td className="px-5 py-2.5 text-xs text-gray-500 tabular-nums">
-                  {vd.avg_length != null ? `${vd.avg_length} bp` : "—"}
+                  {vd.avg_length == null ? "—" : `${vd.avg_length} bp`}
                 </td>
                 <td className="px-5 py-2.5 text-xs text-gray-400">
                   {vd.available ? (
@@ -227,7 +230,8 @@ function BlastTable({
   const [displayCount, setDisplayCount] = useState(10);
   const sortedData = [...rows].sort(
     (a, b) =>
-      parseFloat(String(b.median_bitscore ?? 0)) - parseFloat(String(a.median_bitscore ?? 0))
+      Number.parseFloat(String(b.median_bitscore ?? 0)) -
+      Number.parseFloat(String(a.median_bitscore ?? 0))
   );
   const displayedRows = sortedData.slice(0, displayCount);
   const hasMore = displayCount < sortedData.length;
@@ -281,7 +285,10 @@ function BlastTable({
                 </thead>
                 <tbody>
                   {displayedRows.map((row, i) => (
-                    <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
+                    <tr
+                      key={`${row.qseqid ?? i}-${row.staxid ?? ""}`}
+                      className="border-t border-gray-50 hover:bg-gray-50"
+                    >
                       <td
                         className="px-5 py-2 text-xs font-mono text-gray-600 max-w-48 truncate"
                         title={row.qseqid}
