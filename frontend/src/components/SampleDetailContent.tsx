@@ -351,11 +351,7 @@ export default function SampleDetailContent({
 
   if (activeMetavalId)
     return (
-      <MetavalDetailsContent
-        sampleId={sampleId}
-        metavalId={activeMetavalId}
-        onBack={() => setActiveMetavalId(null)}
-      />
+      <MetavalDetailsContent metavalId={activeMetavalId} onBack={() => setActiveMetavalId(null)} />
     );
 
   if (sampleLoading || profileLoading)

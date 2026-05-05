@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { getMetavalResult, submitBlast, getIgvUrl } from "../api/metaval";
 import { axiosErrorDetail } from "../utils/axiosError";
 import type { MetavalResult } from "../api/types";
+import TaxonDetailContent from "./TaxonDetailContent";
 
 type BlastStatus = "blasting" | "error";
 
@@ -210,8 +211,8 @@ function VerificationDataSection({
 function BlastTable({
   rows,
   program,
-  sampleId,
-}: Readonly<{ rows: BlastHitRow[]; program: string; sampleId: string }>) {
+  onSelectTaxon,
+}: Readonly<{ rows: BlastHitRow[]; program: string; onSelectTaxon: (id: string) => void }>) {
   const COLUMNS: { key: keyof BlastHitRow; label: string }[] = [
     { key: "qseqid", label: "Query" },
     { key: "ssciname", label: "Match" },
@@ -289,14 +290,16 @@ function BlastTable({
                       </td>
                       <td className="px-5 py-2 text-xs italic text-gray-700">
                         {row.staxid ? (
-                          <a
-                            href={`/samples/${sampleId}/taxa/${row.staxid}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="underline text-gray-700 hover:text-gray-900"
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectTaxon(String(row.staxid));
+                            }}
+                            className="underline text-gray-700 hover:text-gray-900 text-left"
                           >
                             {row.ssciname}
-                          </a>
+                          </button>
                         ) : (
                           row.ssciname
                         )}
@@ -335,15 +338,15 @@ function BlastTable({
 
 function BlastResultsSection({
   blast,
-  sampleId,
-}: Readonly<{ blast: BlastResults | undefined; sampleId: string }>) {
+  onSelectTaxon,
+}: Readonly<{ blast: BlastResults | undefined; onSelectTaxon: (id: string) => void }>) {
   return (
     <section className="bg-white border border-gray-100 rounded-xl">
       <div className="px-5 py-3.5 border-b border-gray-100">
         <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">BLAST results</p>
       </div>
-      <BlastTable rows={blast?.blastn ?? []} program="BLASTn" sampleId={sampleId} />
-      <BlastTable rows={blast?.blastx ?? []} program="BLASTx" sampleId={sampleId} />
+      <BlastTable rows={blast?.blastn ?? []} program="BLASTn" onSelectTaxon={onSelectTaxon} />
+      <BlastTable rows={blast?.blastx ?? []} program="BLASTx" onSelectTaxon={onSelectTaxon} />
     </section>
   );
 }
@@ -463,19 +466,18 @@ function CandidateOrganismsSection({
 }
 
 export interface MetavalDetailsContentProps {
-  sampleId: string;
   metavalId: string;
   onBack: () => void;
 }
 
 export default function MetavalDetailsContent({
-  sampleId,
   metavalId,
   onBack,
 }: Readonly<MetavalDetailsContentProps>) {
   const [result, setResult] = useState<MetavalResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTaxonId, setActiveTaxonId] = useState<string | null>(null);
 
   useEffect(() => {
     setResult(null);
@@ -486,6 +488,9 @@ export default function MetavalDetailsContent({
       .catch(() => setError("Failed to load metaval result."))
       .finally(() => setLoading(false));
   }, [metavalId]);
+
+  if (activeTaxonId)
+    return <TaxonDetailContent taxonId={activeTaxonId} onBack={() => setActiveTaxonId(null)} />;
 
   if (loading)
     return (
@@ -542,7 +547,7 @@ export default function MetavalDetailsContent({
       </div>
       <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-5">
         <VerificationDataSection metavalId={metavalId} result={result} />
-        <BlastResultsSection blast={blast} sampleId={sampleId} />
+        <BlastResultsSection blast={blast} onSelectTaxon={setActiveTaxonId} />
         <CandidateOrganismsSection metavalId={metavalId} organisms={organisms} />
       </div>
     </div>
