@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
+import MetavalDetailsContent from "./MetavalDetailsContent";
 import { useQuery } from "@tanstack/react-query";
 import { getSample, getProfile, getNtcProfiles } from "../api/samples";
 import Badge, { type BadgeType } from "./Badge";
@@ -275,6 +276,7 @@ export default function SampleDetailContent({
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [metavalDisplayCount, setMetavalDisplayCount] = useState(10);
+  const [activeMetavalId, setActiveMetavalId] = useState<string | null>(null);
 
   useEffect(() => {
     setMetavalDisplayCount(10);
@@ -346,6 +348,15 @@ export default function SampleDetailContent({
   // Hooks must run on every render before any early return — keep this block
   // above the loading/error guards.
   const reportSelection = useReportSelection(sampleId);
+
+  if (activeMetavalId)
+    return (
+      <MetavalDetailsContent
+        sampleId={sampleId}
+        metavalId={activeMetavalId}
+        onBack={() => setActiveMetavalId(null)}
+      />
+    );
 
   if (sampleLoading || profileLoading)
     return (
@@ -547,14 +558,12 @@ export default function SampleDetailContent({
                             return (
                               <tr key={r._id} className="border-t border-gray-50 hover:bg-gray-50">
                                 <td className="px-4 py-2.5">
-                                  <a
-                                    href={`/samples/${sampleId}/metaval/${r._id}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-xs italic text-gray-700 hover:text-blue-600 underline transition-colors"
+                                  <button
+                                    onClick={() => setActiveMetavalId(r._id)}
+                                    className="text-xs italic text-gray-700 hover:text-blue-600 underline transition-colors text-left"
                                   >
                                     {taxonName.replace(/^taxid_\d+_/, "").replace(/-/g, " ")}
-                                  </a>
+                                  </button>
                                 </td>
                               </tr>
                             );
