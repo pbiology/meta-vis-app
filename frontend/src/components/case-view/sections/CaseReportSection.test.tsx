@@ -5,9 +5,7 @@ import CaseReportSection from "./CaseReportSection";
 import { renderWithProviders } from "../../../test/utils";
 
 function makeSample(id: string): Sample {
-  // CaseSamplesPanel passes the Mongo _id as the selection key, so the report
-  // section keys selections off `_id ?? sample_id` — keep both to mirror reality.
-  return { _id: id, sample_id: id, case_id: "case-1" } as Sample;
+  return { sample_id: id, case_id: "case-1" } as Sample;
 }
 
 describe("CaseReportSection", () => {

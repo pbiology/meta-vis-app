@@ -388,6 +388,51 @@ async def unreview_case(
     return {"case_id": case_id, "reviewed": False}
 
 
+class ReportSelectionsPayload(BaseModel):
+    selections: dict[str, list[int]]
+
+
+@router.patch(
+    "/{case_id}/report",
+    summary="Replace the case's per-sample report taxon selections",
+)
+async def update_case_report(
+    case_id: str,
+    payload: ReportSelectionsPayload,
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    current_user: dict = Depends(require_role("writer", "admin")),
+):
+    case = await db["cases"].find_one({"case_id": case_id}, {"sample_ids": 1})
+    if case is None:
+        raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
+
+    valid = {str(sid) for sid in case.get("sample_ids") or []}
+    unknown = sorted(k for k in payload.selections if k not in valid)
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown sample_id(s) for this case: {unknown}",
+        )
+
+    await db["cases"].update_one(
+        {"case_id": case_id},
+        {"$set": {"report_selections": payload.selections}},
+    )
+    await log_audit_event(
+        db,
+        action="update_case_report",
+        actor=current_user["username"],
+        resource_type="case",
+        resource_id=case_id,
+        outcome="success",
+        detail={
+            "samples": len(payload.selections),
+            "taxa": sum(len(v) for v in payload.selections.values()),
+        },
+    )
+    return {"case_id": case_id, "selections": payload.selections}
+
+
 class NotePayload(BaseModel):
     text: str
 

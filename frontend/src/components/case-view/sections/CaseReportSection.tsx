@@ -7,19 +7,10 @@ interface CaseReportSectionProps {
   samples: Sample[];
 }
 
-// Selections are keyed by the same id CaseSamplesPanel passes to onSelectSample
-// (Mongo _id, falling back to sample_id when _id is absent).
-function selectionKey(s: Sample): string {
-  return (s._id ?? s.sample_id) as string;
-}
-
 export default function CaseReportSection({ samples }: Readonly<CaseReportSectionProps>) {
   const { selectedFor } = useReportBuilder();
-  const samplesWithSelections = samples.filter((s) => selectedFor(selectionKey(s)).length > 0);
-  const totalCount = samplesWithSelections.reduce(
-    (n, s) => n + selectedFor(selectionKey(s)).length,
-    0
-  );
+  const samplesWithSelections = samples.filter((s) => selectedFor(s.sample_id).length > 0);
+  const totalCount = samplesWithSelections.reduce((n, s) => n + selectedFor(s.sample_id).length, 0);
 
   if (samplesWithSelections.length === 0) {
     return (
@@ -61,10 +52,13 @@ export default function CaseReportSection({ samples }: Readonly<CaseReportSectio
         </div>
       </header>
 
-      {samplesWithSelections.map((s) => {
-        const key = selectionKey(s);
-        return <SampleReportCard key={key} sampleId={key} taxonIds={selectedFor(key)} />;
-      })}
+      {samplesWithSelections.map((s) => (
+        <SampleReportCard
+          key={s.sample_id}
+          sampleId={s.sample_id}
+          taxonIds={selectedFor(s.sample_id)}
+        />
+      ))}
     </div>
   );
 }

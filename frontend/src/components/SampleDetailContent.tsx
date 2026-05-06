@@ -7,6 +7,7 @@ import Badge, { type BadgeType } from "./Badge";
 import { MetricStrip } from "./MetricStrip";
 import TaxonomyTable from "./TaxonomyTable";
 import { useReportBuilder } from "../context/ReportBuilderContext";
+import { useAuth } from "../context/AuthContext";
 import { getMetavalForSample } from "../api/metaval";
 import { getOutbreaks, getPathogens } from "../api/alerts";
 import { fmt, fmtPct } from "../utils/format";
@@ -345,7 +346,11 @@ export default function SampleDetailContent({
 
   // Hooks must run on every render before any early return — keep this block
   // above the loading/error guards.
-  const reportSelection = useReportSelection(sampleId);
+  const { role } = useAuth();
+  const baseReportSelection = useReportSelection(sampleId);
+  // Readers see no checkboxes in the taxonomy table; passing `undefined`
+  // makes TaxonomyTable hide both the header and per-row checkbox cells.
+  const reportSelection = role === "reader" ? undefined : baseReportSelection;
 
   if (activeMetavalId)
     return (

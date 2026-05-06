@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   addNote,
   deleteNote,
@@ -6,6 +6,7 @@ import {
   getCaseSamples,
   reviewCase,
   unreviewCase,
+  updateCaseReport,
 } from "../api/cases";
 import { getOutbreaks, getPathogens } from "../api/alerts";
 import { getNtcContaminantCaseIds } from "../api/ntc";
@@ -40,13 +41,20 @@ export default function CaseView() {
   const [reviewing, setReviewing] = useState(false);
   const [unreviewConfirm, setUnreviewConfirm] = useState(false);
 
-  const { selectedFor } = useReportBuilder();
-  // Selections are keyed by the same id CaseSamplesPanel passes to onSelectSample
-  // (Mongo _id, falling back to sample_id when _id is absent).
-  const reportCount = samples.reduce(
-    (n, s) => n + selectedFor((s._id ?? s.sample_id) as string).length,
-    0
+  const { selectedFor, hydrate } = useReportBuilder();
+  const reportCount = samples.reduce((n, s) => n + selectedFor(s.sample_id).length, 0);
+
+  // Snapshot of this case's selections, used for the debounced server save.
+  // Stable string lets useEffect dedupe identical states.
+  const caseSelectionsSnapshot = JSON.stringify(
+    Object.fromEntries(
+      samples
+        .map((s) => [s.sample_id, selectedFor(s.sample_id)] as const)
+        .filter(([, ids]) => ids.length > 0)
+    )
   );
+  const lastSavedRef = useRef<string | null>(null);
+  const canEditReport = role !== "reader";
 
   useEffect(() => {
     document.title = `${caseId} — meta-vis`;
@@ -70,6 +78,15 @@ export default function CaseView() {
         setCaseData(fetchedCase);
         setSamples(samplesData);
         setPathogenMap(Object.fromEntries(pathogens.map((p) => [p.taxon_id, p])));
+        // Seed selections from the persisted server-side draft. Mark this state
+        // as "already saved" so the post-hydration effect doesn't echo it back.
+        const persisted =
+          (fetchedCase as { report_selections?: Record<string, number[]> }).report_selections ?? {};
+        hydrate(persisted);
+        const seed = Object.fromEntries(
+          Object.entries(persisted).filter(([, ids]) => ids.length > 0)
+        );
+        lastSavedRef.current = JSON.stringify(seed);
       } catch {
         if (!cancelled) setError("Failed to load case.");
       } finally {
@@ -80,7 +97,27 @@ export default function CaseView() {
     return () => {
       cancelled = true;
     };
-  }, [caseId]);
+  }, [caseId, hydrate]);
+
+  // Debounced persistence of the per-case selection snapshot. Skips writes
+  // when the snapshot matches what we last sent (covers post-hydration echo
+  // and selections that didn't actually change).
+  useEffect(() => {
+    if (!canEditReport) return;
+    if (lastSavedRef.current === null) return; // case not loaded yet
+    if (lastSavedRef.current === caseSelectionsSnapshot) return;
+    const handle = setTimeout(() => {
+      const payload = JSON.parse(caseSelectionsSnapshot) as Record<string, number[]>;
+      updateCaseReport(caseId, payload)
+        .then(() => {
+          lastSavedRef.current = caseSelectionsSnapshot;
+        })
+        .catch((err) => {
+          console.error("Failed to persist report selections", err);
+        });
+    }, 500);
+    return () => clearTimeout(handle);
+  }, [caseId, caseSelectionsSnapshot, canEditReport]);
 
   // Derive signal pills (pathogen / outbreak / ntc) from cross-cutting endpoints.
   useEffect(() => {

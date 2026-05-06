@@ -22,6 +22,9 @@ interface ReportBuilderContextValue {
   addTaxon: (sampleId: string, taxonId: number) => void;
   removeTaxon: (sampleId: string, taxonId: number) => void;
   clear: (sampleId: string) => void;
+  // Replace selections for the given sample keys in one update. Used by
+  // CaseView to seed state from the persisted server-side draft.
+  hydrate: (entries: Record<string, number[]>) => void;
 }
 
 const ReportBuilderContext = createContext<ReportBuilderContextValue | null>(null);
@@ -92,6 +95,20 @@ export function ReportBuilderProvider({ children }: Readonly<{ children: ReactNo
     });
   }, []);
 
+  const hydrate = useCallback((entries: Record<string, number[]>) => {
+    setSelections((prev) => {
+      const next = { ...prev };
+      for (const [sampleId, taxonIds] of Object.entries(entries)) {
+        if (taxonIds.length === 0) {
+          delete next[sampleId];
+        } else {
+          next[sampleId] = [...taxonIds];
+        }
+      }
+      return next;
+    });
+  }, []);
+
   const clear = useCallback((sampleId: string) => {
     setSelections((prev) => {
       if (!(sampleId in prev)) return prev;
@@ -102,8 +119,8 @@ export function ReportBuilderProvider({ children }: Readonly<{ children: ReactNo
   }, []);
 
   const value = useMemo(
-    () => ({ selectedFor, isSelected, addTaxon, removeTaxon, clear }),
-    [selectedFor, isSelected, addTaxon, removeTaxon, clear]
+    () => ({ selectedFor, isSelected, addTaxon, removeTaxon, clear, hydrate }),
+    [selectedFor, isSelected, addTaxon, removeTaxon, clear, hydrate]
   );
 
   return <ReportBuilderContext.Provider value={value}>{children}</ReportBuilderContext.Provider>;

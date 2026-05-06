@@ -421,3 +421,69 @@ class TestDeleteNotePermissions:
         resp = client.delete(f"/api/v1/cases/testcase/notes/{note_id}")
         assert resp.status_code == 200
         assert resp.json()["deleted"] is True
+
+
+# ---------------------------------------------------------------------------
+# PATCH /cases/{case_id}/report
+# ---------------------------------------------------------------------------
+
+
+async def _insert_case_with_samples(db, case_id="testcase", sample_ids=("S1", "S2")):
+    await insert_case(db, case_id)
+    await db["cases"].update_one(
+        {"case_id": case_id},
+        {"$set": {"sample_ids": list(sample_ids)}},
+    )
+
+
+class TestUpdateReport:
+    async def test_persists_selections(self, client, fake_db):
+        await _insert_case_with_samples(fake_db, "testcase", ("S1", "S2"))
+        resp = client.patch(
+            "/api/v1/cases/testcase/report",
+            json={"selections": {"S1": [11676, 562], "S2": [9606]}},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["selections"] == {"S1": [11676, 562], "S2": [9606]}
+        doc = await fake_db["cases"].find_one({"case_id": "testcase"})
+        assert doc["report_selections"] == {"S1": [11676, 562], "S2": [9606]}
+
+    async def test_replaces_existing_selections(self, client, fake_db):
+        await _insert_case_with_samples(fake_db, "testcase", ("S1", "S2"))
+        client.patch(
+            "/api/v1/cases/testcase/report",
+            json={"selections": {"S1": [1, 2, 3]}},
+        )
+        resp = client.patch(
+            "/api/v1/cases/testcase/report",
+            json={"selections": {"S2": [42]}},
+        )
+        assert resp.status_code == 200
+        doc = await fake_db["cases"].find_one({"case_id": "testcase"})
+        assert doc["report_selections"] == {"S2": [42]}
+
+    async def test_rejects_unknown_sample_id(self, client, fake_db):
+        await _insert_case_with_samples(fake_db, "testcase", ("S1",))
+        resp = client.patch(
+            "/api/v1/cases/testcase/report",
+            json={"selections": {"S1": [1], "S99": [2]}},
+        )
+        assert resp.status_code == 422
+        assert "S99" in resp.json()["detail"]
+
+    async def test_rejects_missing_case(self, client, fake_db):
+        resp = client.patch(
+            "/api/v1/cases/nonexistent/report",
+            json={"selections": {}},
+        )
+        assert resp.status_code == 404
+
+    async def test_reader_forbidden(self, fake_db, fake_blob):
+        app = make_test_app(router, fake_db, fake_blob, role="reader")
+        reader_client = TestClient(app)
+        await _insert_case_with_samples(fake_db, "testcase", ("S1",))
+        resp = reader_client.patch(
+            "/api/v1/cases/testcase/report",
+            json={"selections": {"S1": [1]}},
+        )
+        assert resp.status_code == 403

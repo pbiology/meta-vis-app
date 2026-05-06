@@ -76,7 +76,7 @@ export default function CaseTopBar({
         ))}
       <Badge type={reviewed ? "reviewed" : "pending"} />
       <div className="ml-auto flex gap-2 items-center">
-        <CaseReportPill count={reportCount} onClick={onOpenReport} />
+        {canReview && <CaseReportPill count={reportCount} onClick={onOpenReport} />}
         {!reviewed && canReview && (
           <button
             onClick={onReview}
