@@ -64,9 +64,11 @@ export default function CaseTopBar({
         ) : (
           <span className="text-[11px] text-gray-400">#{ticketId}</span>
         ))}
-      {signals.map((s) => (
-        <SignalPill key={s} kind={s} />
-      ))}
+      {signals
+        .filter((s) => s !== "pathogen")
+        .map((s) => (
+          <SignalPill key={s} kind={s} />
+        ))}
       <Badge type={reviewed ? "reviewed" : "pending"} />
       <div className="ml-auto flex gap-2">
         {!reviewed && canReview && (

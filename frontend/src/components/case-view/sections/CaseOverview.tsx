@@ -1,6 +1,5 @@
 import type { Case, CaseNote, PathogenItem, Sample } from "../../../api/types";
 import SignalPill, { type SignalKind } from "../../SignalPill";
-import { TONE } from "../../palette";
 import Badge from "../../Badge";
 import KnownPathogensPanel from "../../KnownPathogensPanel";
 
@@ -52,7 +51,6 @@ export default function CaseOverview({
   onSelectSample,
 }: Readonly<CaseOverviewProps>) {
   const reviewed = (caseData.review as { reviewed?: boolean } | undefined)?.reviewed ?? false;
-  const hasPathogen = signals.includes("pathogen");
   const orderDate = caseData.order_date as string | undefined;
   const sampleCount =
     (caseData.sample_count as number | undefined) ??
@@ -64,12 +62,6 @@ export default function CaseOverview({
   const analysis = caseData.analysis_type as string | undefined;
   const platform = caseData.sequencing_platform as string | undefined;
   const ticket = caseData.ticket_id as string | undefined;
-
-  const pathogenSample = hasPathogen
-    ? samples.find(
-        (s) => Array.isArray(s.all_taxon_ids) && (s.all_taxon_ids as number[]).length > 0
-      )
-    : null;
 
   const samplePreview = samples.slice(0, 4);
   const noteSlice = notes.slice(-2).reverse();
@@ -95,34 +87,6 @@ export default function CaseOverview({
 
   return (
     <div className="flex flex-col gap-4">
-      {hasPathogen && (
-        <div
-          className={`${TONE.danger.bg} ${TONE.danger.border} border border-l-[3px] rounded-lg px-4 py-3 flex items-center gap-3`}
-          style={{ borderLeftColor: "rgb(220 38 38)" }}
-        >
-          <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none">
-            <circle cx="8" cy="8" r="5" stroke="rgb(185 28 28)" strokeWidth="1.5" />
-            <circle cx="8" cy="8" r="1.8" fill="rgb(185 28 28)" />
-          </svg>
-          <div className="flex-1">
-            <div className={`text-sm font-semibold ${TONE.danger.fg}`}>
-              Pathogen detected — requires review
-            </div>
-            {pathogenSample && (
-              <div className={`text-xs ${TONE.danger.fg} opacity-90`}>
-                in <span className="font-mono">{pathogenSample.sample_id}</span>
-              </div>
-            )}
-          </div>
-          <button
-            onClick={onJumpToSamples}
-            className={`${TONE.danger.fg} bg-white border ${TONE.danger.border} px-3 py-1.5 rounded-md text-xs hover:bg-red-50 transition-colors`}
-          >
-            View samples →
-          </button>
-        </div>
-      )}
-
       <section className="bg-white border border-gray-100 rounded-lg p-5">
         <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-900 mb-3">
           Case summary
