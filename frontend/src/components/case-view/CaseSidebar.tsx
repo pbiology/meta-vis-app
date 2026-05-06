@@ -40,7 +40,9 @@ export default function CaseSidebar({
   const [stats, setStats] = useState<MyStats | null>(null);
 
   useEffect(() => {
-    getMyStats().then(setStats).catch(() => {});
+    getMyStats()
+      .then(setStats)
+      .catch(() => {});
   }, []);
 
   function handleLogout() {

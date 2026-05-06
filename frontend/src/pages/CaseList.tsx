@@ -29,7 +29,7 @@ export default function CaseList() {
   const [pathogenCaseIds, setPathogenCaseIds] = useState<Set<string>>(new Set());
   const [ntcContaminantCaseIds, setNtcContaminantCaseIds] = useState<Set<string>>(new Set());
   const [stats, setStats] = useState<CaseStats>({ total: 0, pending: 0, reviewed: 0 });
-const { role, preferences, preferencesLoaded } = useAuth();
+  const { role, preferences, preferencesLoaded } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const filter = searchParams.get("filter") ?? "all";
   const analysisFilter = searchParams.get("analysis") ?? "all";
@@ -235,7 +235,9 @@ const { role, preferences, preferencesLoaded } = useAuth();
               {cases.map((c) => (
                 <tr
                   key={c.case_id}
-                  onClick={() => window.open(`/cases/${c.case_id}`, "_blank", "noopener,noreferrer")}
+                  onClick={() =>
+                    window.open(`/cases/${c.case_id}`, "_blank", "noopener,noreferrer")
+                  }
                   className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
                 >
                   <td className="px-4 py-3 font-mono text-xs text-gray-700">
