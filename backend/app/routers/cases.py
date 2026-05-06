@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
-from typing import Optional
+from typing import Annotated, Optional
 from app.models.sample import CaseResponse
 
 from app.audit import log_audit_event
@@ -395,12 +395,16 @@ class ReportSelectionsPayload(BaseModel):
 @router.patch(
     "/{case_id}/report",
     summary="Replace the case's per-sample report taxon selections",
+    responses={
+        404: {"description": "Case not found"},
+        422: {"description": "Payload references sample_ids not in this case"},
+    },
 )
 async def update_case_report(
     case_id: str,
     payload: ReportSelectionsPayload,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(require_role("writer", "admin")),
+    db: Annotated[AsyncIOMotorDatabase, Depends(get_db)],
+    current_user: Annotated[dict, Depends(require_role("writer", "admin"))],
 ):
     case = await db["cases"].find_one({"case_id": case_id}, {"sample_ids": 1})
     if case is None:

@@ -471,7 +471,7 @@ class TestUpdateReport:
         assert resp.status_code == 422
         assert "S99" in resp.json()["detail"]
 
-    async def test_rejects_missing_case(self, client, fake_db):
+    def test_rejects_missing_case(self, client):
         resp = client.patch(
             "/api/v1/cases/nonexistent/report",
             json={"selections": {}},
