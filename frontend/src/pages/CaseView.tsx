@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   addNote,
   deleteNote,
@@ -19,7 +19,6 @@ import CaseSamplesPanel from "../components/case-view/sections/CaseSamplesPanel"
 import CaseClassifiers, { type Classifier } from "../components/case-view/sections/CaseClassifiers";
 import CaseProvenance from "../components/case-view/sections/CaseProvenance";
 import CaseComments from "../components/case-view/sections/CaseComments";
-import CaseTaxa from "../components/case-view/sections/CaseTaxa";
 import CaseMultiQC from "../components/case-view/sections/CaseMultiQC";
 import CaseSampleDetail from "../components/case-view/sections/CaseSampleDetail";
 import type { SignalKind } from "../components/SignalPill";
@@ -188,15 +187,6 @@ export default function CaseView() {
   const ticketUrl = caseData?.ticket_url as string | undefined;
   const hasMultiqc = (caseData?.has_multiqc as boolean | undefined) ?? false;
 
-  const taxaCount = useMemo(() => {
-    const ids = new Set<number>();
-    for (const s of samples) {
-      const taxa = (s.all_taxon_ids as number[] | undefined) ?? [];
-      for (const id of taxa) if (id in pathogenMap) ids.add(id);
-    }
-    return ids.size;
-  }, [samples, pathogenMap]);
-
   if (loading)
     return (
       <div className="flex items-center justify-center h-screen text-sm text-gray-400">
@@ -230,7 +220,6 @@ export default function CaseView() {
           onSelect={handleSectionChange}
           counts={{
             samples: samples.length,
-            taxa: taxaCount,
             comments: notes.length,
           }}
           hideMultiqc={!hasMultiqc}
@@ -242,6 +231,7 @@ export default function CaseView() {
               samples={samples}
               notes={notes}
               signals={signals}
+              pathogenMap={pathogenMap}
               onJumpToSamples={() => handleSectionChange("samples")}
               onJumpToComments={() => handleSectionChange("comments")}
               onSelectSample={(id) => {
@@ -269,7 +259,6 @@ export default function CaseView() {
               />
             </>
           )}
-          {section === "taxa" && <CaseTaxa samples={samples} pathogenMap={pathogenMap} />}
           {section === "multiqc" && <CaseMultiQC caseId={caseId} available={hasMultiqc} />}
           {section === "report" && (
             <Placeholder

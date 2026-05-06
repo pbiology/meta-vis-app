@@ -1,11 +1,4 @@
-export type CaseSection =
-  | "overview"
-  | "samples"
-  | "taxa"
-  | "multiqc"
-  | "report"
-  | "comments"
-  | "provenance";
+export type CaseSection = "overview" | "samples" | "multiqc" | "report" | "comments" | "provenance";
 
 interface NavGroup {
   label: string | null;
@@ -45,12 +38,6 @@ export default function CaseSidebar({
       label: "Analysis",
       items: [
         { id: "samples", icon: "vial", label: "Samples", count: counts.samples ?? null },
-        {
-          id: "taxa",
-          icon: "leaf",
-          label: "Taxa of interest",
-          count: counts.taxa ?? null,
-        },
         ...(hideMultiqc
           ? []
           : [{ id: "multiqc" as const, icon: "bars" as const, label: "MultiQC" }]),
