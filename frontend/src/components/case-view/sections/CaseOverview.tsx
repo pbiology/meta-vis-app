@@ -1,13 +1,15 @@
-import type { Case, CaseNote, Sample } from "../../../api/types";
+import type { Case, CaseNote, PathogenItem, Sample } from "../../../api/types";
 import SignalPill, { type SignalKind } from "../../SignalPill";
 import { TONE } from "../../palette";
 import Badge from "../../Badge";
+import KnownPathogensPanel from "../../KnownPathogensPanel";
 
 interface CaseOverviewProps {
   caseData: Case;
   samples: Sample[];
   notes: CaseNote[];
   signals: SignalKind[];
+  pathogenMap: Record<number, PathogenItem>;
   onJumpToSamples: () => void;
   onJumpToComments: () => void;
   onSelectSample: (sampleId: string) => void;
@@ -44,6 +46,7 @@ export default function CaseOverview({
   samples,
   notes,
   signals,
+  pathogenMap,
   onJumpToSamples,
   onJumpToComments,
   onSelectSample,
@@ -233,6 +236,8 @@ export default function CaseOverview({
           ))
         )}
       </section>
+
+      <KnownPathogensPanel samples={samples} pathogenMap={pathogenMap} />
     </div>
   );
 }
