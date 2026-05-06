@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { getCases, deleteCase, getCaseStats, getPathogenCases } from "../api/cases";
 import type { ReviewedFilter } from "../api/cases";
 import Badge from "../components/Badge";
@@ -29,7 +29,6 @@ export default function CaseList() {
   const [pathogenCaseIds, setPathogenCaseIds] = useState<Set<string>>(new Set());
   const [ntcContaminantCaseIds, setNtcContaminantCaseIds] = useState<Set<string>>(new Set());
   const [stats, setStats] = useState<CaseStats>({ total: 0, pending: 0, reviewed: 0 });
-  const navigate = useNavigate();
   const { role, preferences, preferencesLoaded } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const filter = searchParams.get("filter") ?? "all";
@@ -236,7 +235,9 @@ export default function CaseList() {
               {cases.map((c) => (
                 <tr
                   key={c.case_id}
-                  onClick={() => navigate(`/cases/${c.case_id}`)}
+                  onClick={() =>
+                    window.open(`/cases/${c.case_id}`, "_blank", "noopener,noreferrer")
+                  }
                   className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
                 >
                   <td className="px-4 py-3 font-mono text-xs text-gray-700">
