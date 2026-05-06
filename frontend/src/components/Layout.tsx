@@ -1,10 +1,9 @@
-import { Outlet, NavLink, useNavigate, useLocation, useMatch } from "react-router-dom";
+import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { getMyStats } from "../api/users";
 import type { MyStats } from "../api/types";
 import ErrorBoundary from "./ErrorBoundary";
-import ReportCart from "./report/ReportCart";
 
 interface NavItemProps {
   to: string;
@@ -37,16 +36,6 @@ export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [stats, setStats] = useState<MyStats | null>(null);
-
-  // Extract sampleId from any sample-scoped route so the cart persists across navigation.
-  const matchSample = useMatch("/samples/:sampleId");
-  const matchMetaval = useMatch("/samples/:sampleId/metaval/:metavalId");
-  const matchTaxon = useMatch("/samples/:sampleId/taxa/:taxonId");
-  const activeSampleId =
-    matchSample?.params.sampleId ??
-    matchMetaval?.params.sampleId ??
-    matchTaxon?.params.sampleId ??
-    null;
 
   useEffect(() => {
     getMyStats()
@@ -353,7 +342,6 @@ export default function Layout() {
           <Outlet />
         </ErrorBoundary>
       </div>
-      {activeSampleId && <ReportCart sampleId={activeSampleId} />}
     </div>
   );
 }

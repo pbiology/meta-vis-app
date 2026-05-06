@@ -21,16 +21,9 @@ import CaseProvenance from "../components/case-view/sections/CaseProvenance";
 import CaseComments from "../components/case-view/sections/CaseComments";
 import CaseMultiQC from "../components/case-view/sections/CaseMultiQC";
 import CaseSampleDetail from "../components/case-view/sections/CaseSampleDetail";
+import CaseReportSection from "../components/case-view/sections/CaseReportSection";
 import type { SignalKind } from "../components/SignalPill";
-
-function Placeholder({ title, body }: Readonly<{ title: string; body: string }>) {
-  return (
-    <section className="bg-white border border-gray-100 rounded-lg p-10 text-center">
-      <div className="text-sm font-semibold text-gray-700 mb-1">{title}</div>
-      <div className="text-xs text-gray-400">{body}</div>
-    </section>
-  );
-}
+import { useReportBuilder } from "../context/ReportBuilderContext";
 
 export default function CaseView() {
   const caseId = useRequiredParam("caseId");
@@ -46,6 +39,14 @@ export default function CaseView() {
   const [error, setError] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState(false);
   const [unreviewConfirm, setUnreviewConfirm] = useState(false);
+
+  const { selectedFor } = useReportBuilder();
+  // Selections are keyed by the same id CaseSamplesPanel passes to onSelectSample
+  // (Mongo _id, falling back to sample_id when _id is absent).
+  const reportCount = samples.reduce(
+    (n, s) => n + selectedFor((s._id ?? s.sample_id) as string).length,
+    0
+  );
 
   useEffect(() => {
     document.title = `${caseId} — meta-vis`;
@@ -213,6 +214,8 @@ export default function CaseView() {
         onUnreviewRequest={() => setUnreviewConfirm(true)}
         reviewing={reviewing}
         canReview={role !== "reader"}
+        reportCount={reportCount}
+        onOpenReport={() => handleSectionChange("report")}
       />
       <div className="flex-1 flex min-h-0">
         <CaseSidebar
@@ -259,12 +262,7 @@ export default function CaseView() {
             </>
           )}
           {section === "multiqc" && <CaseMultiQC caseId={caseId} available={hasMultiqc} />}
-          {section === "report" && (
-            <Placeholder
-              title="Report builder"
-              body="Open a sample to select taxa for the printable report — selections persist across the case's samples."
-            />
-          )}
+          {section === "report" && <CaseReportSection samples={samples} />}
           {section === "comments" && (
             <CaseComments
               notes={notes}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import MetavalDetailsContent from "./MetavalDetailsContent";
+import TaxonDetailContent from "./TaxonDetailContent";
 import { useQuery } from "@tanstack/react-query";
 import { getSample, getProfile, getNtcProfiles } from "../api/samples";
 import Badge, { type BadgeType } from "./Badge";
@@ -275,6 +276,7 @@ export default function SampleDetailContent({
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [metavalDisplayCount, setMetavalDisplayCount] = useState(10);
   const [activeMetavalId, setActiveMetavalId] = useState<string | null>(null);
+  const [activeTaxonId, setActiveTaxonId] = useState<number | null>(null);
 
   useEffect(() => {
     setMetavalDisplayCount(10);
@@ -348,6 +350,15 @@ export default function SampleDetailContent({
   if (activeMetavalId)
     return (
       <MetavalDetailsContent metavalId={activeMetavalId} onBack={() => setActiveMetavalId(null)} />
+    );
+
+  if (activeTaxonId !== null)
+    return (
+      <TaxonDetailContent
+        taxonId={String(activeTaxonId)}
+        sampleId={sampleId}
+        onBack={() => setActiveTaxonId(null)}
+      />
     );
 
   if (sampleLoading || profileLoading)
@@ -642,6 +653,7 @@ export default function SampleDetailContent({
                     abundanceIsFraction={isTrana}
                     isNtc={sampleType !== "sample"}
                     selection={reportSelection}
+                    onSelectTaxon={setActiveTaxonId}
                   />
                 ) : null
               )}
