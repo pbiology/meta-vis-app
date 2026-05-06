@@ -68,7 +68,7 @@ export default function CaseSidebar({
               <button
                 key={item.id}
                 onClick={() => onSelect(item.id)}
-                className={`w-full flex items-center gap-2.5 px-5 py-1.5 text-left transition-colors text-[12.5px] ${
+                className={`w-full flex items-center gap-2.5 px-5 py-1.5 text-left transition-colors text-sm ${
                   isActive
                     ? "bg-gray-50 text-gray-900 font-medium border-l-2 border-gray-900"
                     : "text-gray-600 hover:bg-gray-50 border-l-2 border-transparent"

@@ -1,7 +1,7 @@
 import type { Case, CaseNote, PathogenItem, Sample } from "../../../api/types";
 import SignalPill, { type SignalKind } from "../../SignalPill";
-import Badge from "../../Badge";
 import KnownPathogensPanel from "../../KnownPathogensPanel";
+import CaseSamplesPanel from "./CaseSamplesPanel";
 
 interface CaseOverviewProps {
   caseData: Case;
@@ -9,7 +9,6 @@ interface CaseOverviewProps {
   notes: CaseNote[];
   signals: SignalKind[];
   pathogenMap: Record<number, PathogenItem>;
-  onJumpToSamples: () => void;
   onJumpToComments: () => void;
   onSelectSample: (sampleId: string) => void;
 }
@@ -46,7 +45,6 @@ export default function CaseOverview({
   notes,
   signals,
   pathogenMap,
-  onJumpToSamples,
   onJumpToComments,
   onSelectSample,
 }: Readonly<CaseOverviewProps>) {
@@ -63,7 +61,6 @@ export default function CaseOverview({
   const platform = caseData.sequencing_platform as string | undefined;
   const ticket = caseData.ticket_id as string | undefined;
 
-  const samplePreview = samples.slice(0, 4);
   const noteSlice = notes.slice(-2).reverse();
   const samplesLabel = controlCount
     ? `${sampleCount} (+${controlCount} ctrl)`
@@ -112,53 +109,11 @@ export default function CaseOverview({
         )}
       </section>
 
-      <section className="bg-white border border-gray-100 rounded-lg overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-100 flex items-center">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-900 m-0">
-            Samples
-          </h3>
-          <button
-            onClick={onJumpToSamples}
-            className="ml-auto text-[11px] text-blue-600 hover:underline"
-          >
-            See all {samples.length} →
-          </button>
-        </div>
-        {samplePreview.length === 0 ? (
-          <div className="px-4 py-6 text-center text-xs text-gray-400">
-            No samples in this case.
-          </div>
-        ) : (
-          samplePreview.map((s) => (
-            <button
-              key={s._id as string}
-              onClick={() => onSelectSample(s._id as string)}
-              className="grid items-center px-4 py-2.5 border-b border-gray-50 hover:bg-gray-50 transition-colors text-left w-full"
-              style={{ gridTemplateColumns: "1fr auto auto auto" }}
-            >
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-xs font-medium text-gray-900">{s.sample_id}</span>
-                <Badge type={(s.sample_type as string | undefined) ?? "sample"} />
-              </div>
-              <span className="text-[11px] text-gray-500 mr-3">
-                {(s.material as string | undefined) ?? "—"}
-              </span>
-              <span className="text-[11px] text-gray-500 mr-3">
-                {(s.sample_source as string | undefined) ?? "—"}
-              </span>
-              <svg className="w-3 h-3 text-gray-300" viewBox="0 0 12 12" fill="none">
-                <path
-                  d="M4 3l3 3-3 3"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          ))
-        )}
-      </section>
+      <CaseSamplesPanel
+        samples={samples}
+        pathogenMap={pathogenMap}
+        onSelectSample={onSelectSample}
+      />
 
       <section className="bg-white border border-gray-100 rounded-lg p-5">
         <div className="flex items-baseline mb-3">

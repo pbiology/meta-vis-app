@@ -232,7 +232,6 @@ export default function CaseView() {
               notes={notes}
               signals={signals}
               pathogenMap={pathogenMap}
-              onJumpToSamples={() => handleSectionChange("samples")}
               onJumpToComments={() => handleSectionChange("comments")}
               onSelectSample={(id) => {
                 setSection("samples");
