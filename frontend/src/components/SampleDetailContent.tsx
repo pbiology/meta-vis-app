@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
 import MetavalDetailsContent from "./MetavalDetailsContent";
 import { useQuery } from "@tanstack/react-query";
 import { getSample, getProfile, getNtcProfiles } from "../api/samples";
@@ -273,7 +272,6 @@ export default function SampleDetailContent({
   sampleId,
   onBack,
 }: Readonly<SampleDetailContentProps>) {
-  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [metavalDisplayCount, setMetavalDisplayCount] = useState(10);
   const [activeMetavalId, setActiveMetavalId] = useState<string | null>(null);
@@ -340,10 +338,8 @@ export default function SampleDetailContent({
     if (!profile?.profiles?.length) return;
     const available = profile.profiles.map((p) => p.classifier);
     if (activeTab && available.includes(activeTab)) return;
-    const requested = searchParams.get("classifier");
-    const match = profile.profiles.find((p) => p.classifier === requested);
-    setActiveTab(match ? match.classifier : profile.profiles[0].classifier);
-  }, [profile, activeTab, searchParams]);
+    setActiveTab(profile.profiles[0].classifier);
+  }, [profile, activeTab]);
 
   // Hooks must run on every render before any early return — keep this block
   // above the loading/error guards.
