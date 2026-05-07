@@ -135,6 +135,25 @@
 }
 
 /* Two-column key/value grid with dotted leaders. */
+.report-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 48px;
+}
+.report-provenance-col-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--report-gray-500);
+  margin: 0 0 6px 0;
+}
+.report-provenance-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
 .report-kv-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

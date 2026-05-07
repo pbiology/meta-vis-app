@@ -204,6 +204,11 @@ function buildTaxa(
   });
 }
 
+function formatReportDate(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function useReportData(
   caseId: string,
   selectionsBySampleId: Record<string, number[]>
@@ -304,7 +309,7 @@ export function useReportData(
 
   return {
     data: {
-      generatedAt: new Date().toISOString(),
+      generatedAt: formatReportDate(new Date()),
       caseDoc,
       samples: sampleRows,
       classifiers,

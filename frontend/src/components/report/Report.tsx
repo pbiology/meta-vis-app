@@ -22,7 +22,11 @@ export default function Report({ data }: Readonly<ReportProps>) {
             <span className="report-mono">{data.caseDoc.case_id}</span>
           </p>
         </header>
-        <OverviewSection caseDoc={data.caseDoc} sampleCount={data.samples.length} />
+        <OverviewSection
+          caseDoc={data.caseDoc}
+          sampleCount={data.samples.length}
+          generatedAt={data.generatedAt}
+        />
         <SubjectsSection subjects={data.subjects} />
         <SamplesListSection samples={data.samples} />
         <CommentsSection caseNotes={data.notes} sampleNote={null} />
@@ -32,11 +36,7 @@ export default function Report({ data }: Readonly<ReportProps>) {
           classifiers={data.classifiers}
         />
       </div>
-      <ProvenanceSection
-        taxprofilerInfo={data.taxprofilerInfo}
-        metavalInfo={data.metavalInfo}
-        generatedAt={data.generatedAt}
-      />
+      <ProvenanceSection taxprofilerInfo={data.taxprofilerInfo} metavalInfo={data.metavalInfo} />
     </div>
   );
 }

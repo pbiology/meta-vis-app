@@ -1,38 +1,52 @@
-import KeyValueGrid, { type KvPair } from "./KeyValueGrid";
 import SectionHeading from "./SectionHeading";
 import type { PipelineConfig } from "../useReportData";
 
 interface ProvenanceSectionProps {
   taxprofilerInfo: PipelineConfig | undefined;
   metavalInfo: PipelineConfig | undefined;
-  generatedAt: string;
 }
 
-function pipelinePairs(info: PipelineConfig | undefined, label: string): KvPair[] {
-  if (!info) return [];
-  return [
-    { label: `${label} pipeline`, value: info.pipeline_name, mono: true },
-    { label: `${label} version`, value: info.pipeline_version, mono: true },
-    { label: "Nextflow", value: info.nextflow, mono: true },
+const DASH = "—";
+
+interface PipelineColumnProps {
+  title: string;
+  info: PipelineConfig | undefined;
+}
+
+function PipelineColumn({ title, info }: Readonly<PipelineColumnProps>) {
+  const rows: Array<{ label: string; value: string | undefined }> = [
+    { label: "Pipeline", value: info?.pipeline_name },
+    { label: "Version", value: info?.pipeline_version },
+    { label: "Nextflow", value: info?.nextflow },
   ];
+
+  return (
+    <div>
+      <p className="report-provenance-col-label">{title}</p>
+      <dl className="report-provenance-col">
+        {rows.map(({ label, value }) => (
+          <div key={label} className="report-kv-row">
+            <dt className="report-kv-label">{label}</dt>
+            <dd className="report-kv-value report-mono">{value ?? DASH}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
 }
 
 export default function ProvenanceSection({
   taxprofilerInfo,
   metavalInfo,
-  generatedAt,
 }: Readonly<ProvenanceSectionProps>) {
-  const pairs: KvPair[] = [
-    ...pipelinePairs(taxprofilerInfo, "taxprofiler"),
-    ...pipelinePairs(metavalInfo, "metaval"),
-    { label: "Report generated", value: generatedAt, mono: true },
-  ];
-
   return (
     <div className="report-page-break">
       <section className="report-section">
         <SectionHeading number={6} title="Provenance" />
-        <KeyValueGrid pairs={pairs} />
+        <div className="report-two-col">
+          <PipelineColumn title="taxprofiler" info={taxprofilerInfo} />
+          <PipelineColumn title="metaval" info={metavalInfo} />
+        </div>
       </section>
     </div>
   );
