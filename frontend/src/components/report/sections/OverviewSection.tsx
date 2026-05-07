@@ -5,6 +5,7 @@ import SectionHeading from "./SectionHeading";
 interface OverviewSectionProps {
   caseDoc: CaseListItem;
   sampleCount: number;
+  generatedAt: string;
 }
 
 function readString(doc: CaseListItem, key: string): string | undefined {
@@ -16,7 +17,11 @@ function readString(doc: CaseListItem, key: string): string | undefined {
 // "Sample information" overview the report previously opened with, but
 // scoped to the case identity + run-level metadata that's shared across
 // every sample in the case.
-export default function OverviewSection({ caseDoc, sampleCount }: Readonly<OverviewSectionProps>) {
+export default function OverviewSection({
+  caseDoc,
+  sampleCount,
+  generatedAt,
+}: Readonly<OverviewSectionProps>) {
   const pairs: KvPair[] = [
     { label: "Case ID", value: caseDoc.case_id, mono: true },
     { label: "Ticket", value: caseDoc.ticket_id ?? undefined, mono: true },
@@ -24,6 +29,7 @@ export default function OverviewSection({ caseDoc, sampleCount }: Readonly<Overv
     { label: "Sequencing platform", value: readString(caseDoc, "sequencing_platform") },
     { label: "Analysis type", value: caseDoc.analysis_type },
     { label: "Samples", value: sampleCount, mono: true },
+    { label: "Report generated", value: generatedAt, mono: true },
   ];
 
   return (
