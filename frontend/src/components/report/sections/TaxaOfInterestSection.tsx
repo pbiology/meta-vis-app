@@ -1,4 +1,4 @@
-import type { ClassifierId, ReportSampleRow, ReportTaxon } from "../useReportData";
+import type { ReportSampleRow, ReportTaxon } from "../useReportData";
 import SectionHeading from "./SectionHeading";
 
 const DASH = "—";
@@ -17,7 +17,7 @@ function fmtPct(value: number | undefined): string {
 interface TaxonReadsMatrixProps {
   taxon: ReportTaxon;
   samples: ReportSampleRow[];
-  classifiers: ClassifierId[];
+  classifiers: string[];
 }
 
 // Per-taxon (sample × classifier) matrix. Sample rows in canonical order
@@ -72,7 +72,7 @@ function TaxonReadsMatrix({ taxon, samples, classifiers }: Readonly<TaxonReadsMa
 interface TaxaOfInterestSectionProps {
   taxa: ReportTaxon[];
   samples: ReportSampleRow[];
-  classifiers: ClassifierId[];
+  classifiers: string[];
 }
 
 export default function TaxaOfInterestSection({
