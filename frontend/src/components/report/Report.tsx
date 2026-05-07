@@ -25,14 +25,18 @@ export default function Report({ data }: Readonly<ReportProps>) {
         <OverviewSection caseDoc={data.caseDoc} sampleCount={data.samples.length} />
         <SubjectsSection subjects={data.subjects} />
         <SamplesListSection samples={data.samples} />
+        <CommentsSection caseNotes={data.notes} sampleNote={null} />
         <TaxaOfInterestSection
           taxa={data.taxa}
           samples={data.samples}
           classifiers={data.classifiers}
         />
-        <CommentsSection caseNotes={data.notes} sampleNote={null} />
       </div>
-      <ProvenanceSection pipelineInfo={data.pipelineInfo} generatedAt={data.generatedAt} />
+      <ProvenanceSection
+        taxprofilerInfo={data.taxprofilerInfo}
+        metavalInfo={data.metavalInfo}
+        generatedAt={data.generatedAt}
+      />
     </div>
   );
 }

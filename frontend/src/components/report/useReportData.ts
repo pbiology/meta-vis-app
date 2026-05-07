@@ -48,6 +48,16 @@ export interface ReportTaxon {
   cells: Record<string, Record<string, ReportTaxonCell>>;
 }
 
+export interface PipelineConfig {
+  pipeline_name?: string;
+  pipeline_version?: string;
+  nextflow?: string;
+}
+
+interface PipelineInfoShape {
+  pipeline_configuration?: PipelineConfig;
+}
+
 export interface ReportData {
   generatedAt: string;
   caseDoc: CaseListItem;
@@ -56,7 +66,8 @@ export interface ReportData {
   subjects: Array<{ sample_id: string; subject: Subject | null }>;
   notes: CaseNote[];
   taxa: ReportTaxon[];
-  pipelineInfo: unknown;
+  taxprofilerInfo: PipelineConfig | undefined;
+  metavalInfo: PipelineConfig | undefined;
 }
 
 interface UseReportDataResult {
@@ -286,9 +297,10 @@ export function useReportData(
   );
 
   const caseDoc = caseQ.data as CaseListItem;
-  const firstSamplePipelineInfo = (
-    orderedSamples[0] as { taxprofiler?: { pipeline_info?: unknown } } | undefined
-  )?.taxprofiler?.pipeline_info;
+  const asPipelineConfig = (raw: unknown): PipelineConfig | undefined => {
+    const info = raw as PipelineInfoShape | undefined;
+    return info?.pipeline_configuration;
+  };
 
   return {
     data: {
@@ -299,7 +311,8 @@ export function useReportData(
       subjects,
       notes: caseDoc.notes ?? [],
       taxa,
-      pipelineInfo: caseDoc.pipeline_info ?? firstSamplePipelineInfo,
+      taxprofilerInfo: asPipelineConfig(caseDoc.pipeline_info),
+      metavalInfo: asPipelineConfig(caseDoc.metaval_pipeline_info),
     },
     isLoading: false,
     isError: false,

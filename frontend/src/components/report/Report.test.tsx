@@ -59,12 +59,12 @@ function makeData(overrides: Partial<ReportData> = {}): ReportData {
         },
       },
     ],
-    pipelineInfo: {
-      pipeline_name: "taxprofiler",
+    taxprofilerInfo: {
+      pipeline_name: "nf-core/taxprofiler",
       pipeline_version: "1.2.3",
-      nextflow_version: "23.10.0",
-      tools: { kraken2: "2.1.3", fastp: "0.23.4" },
+      nextflow: "23.10.0",
     },
+    metavalInfo: undefined,
     ...overrides,
   };
 }
