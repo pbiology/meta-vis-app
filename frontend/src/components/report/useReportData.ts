@@ -10,13 +10,11 @@ import { compareBySampleType } from "../../utils/sampleOrdering";
 // so they can never drift out of sync; rows are keyed by sample_id (unique
 // within a case) rather than sample_type (which isn't, e.g. two DNA samples).
 
-export type ClassifierId = string;
-
 export interface ReportSampleRow {
   sample_id: string;
   sample_type?: string;
   material?: string;
-  classifiersAvailable: ClassifierId[];
+  classifiersAvailable: string[];
   fastp?: {
     total_reads_before_filtering?: number;
     passed_filter_reads?: number;
@@ -47,14 +45,14 @@ export interface ReportTaxon {
   superkingdom?: string | null;
   pathogen: boolean;
   // cells[sample_id][classifier] -> { reads, pct }. Missing keys = no detection.
-  cells: Record<string, Record<ClassifierId, ReportTaxonCell>>;
+  cells: Record<string, Record<string, ReportTaxonCell>>;
 }
 
 export interface ReportData {
   generatedAt: string;
   caseDoc: CaseListItem;
   samples: ReportSampleRow[];
-  classifiers: ClassifierId[];
+  classifiers: string[];
   subjects: Array<{ sample_id: string; subject: Subject | null }>;
   notes: CaseNote[];
   taxa: ReportTaxon[];
@@ -111,10 +109,10 @@ function buildSampleRow(s: Sample, profiles: SampleProfile[]): ReportSampleRow {
 function buildTotals(
   samples: Sample[],
   profilesBySampleId: Map<string, SampleProfile[]>
-): Map<string, Map<ClassifierId, number>> {
-  const totals = new Map<string, Map<ClassifierId, number>>();
+): Map<string, Map<string, number>> {
+  const totals = new Map<string, Map<string, number>>();
   for (const s of samples) {
-    const inner = new Map<ClassifierId, number>();
+    const inner = new Map<string, number>();
     for (const p of profilesBySampleId.get(s.sample_id) ?? []) {
       inner.set(p.classifier, p.profile?.reduce((sum, e) => sum + (e.abundance ?? 0), 0) ?? 0);
     }
@@ -123,12 +121,37 @@ function buildTotals(
   return totals;
 }
 
+type TaxonMeta = { name: string; rank?: string; superkingdom?: string | null };
+
+function collectProfileCells(
+  p: SampleProfile,
+  sampleId: string,
+  total: number,
+  seen: Set<number>,
+  meta: Map<number, TaxonMeta>,
+  cells: Map<number, Record<string, Record<string, ReportTaxonCell>>>
+): void {
+  for (const e of p.profile ?? []) {
+    if (!seen.has(e.taxon_id)) continue;
+    if (!meta.has(e.taxon_id)) {
+      meta.set(e.taxon_id, { name: e.name, rank: e.rank, superkingdom: e.superkingdom ?? null });
+    }
+    const reads = e.abundance ?? 0;
+    const pct = total > 0 ? (reads / total) * 100 : 0;
+    const taxonCells = cells.get(e.taxon_id) ?? {};
+    const sampleCells = taxonCells[sampleId] ?? {};
+    sampleCells[p.classifier] = { reads, pct };
+    taxonCells[sampleId] = sampleCells;
+    cells.set(e.taxon_id, taxonCells);
+  }
+}
+
 function buildTaxa(
   selectionsBySampleId: Record<string, number[]>,
   samples: Sample[],
   profilesBySampleId: Map<string, SampleProfile[]>,
   pathogenIds: Set<number>,
-  totals: Map<string, Map<ClassifierId, number>>
+  totals: Map<string, Map<string, number>>
 ): ReportTaxon[] {
   // Union of all selected taxon_ids in the case. Order is the order the user
   // ticked them, by walking samples in their canonical order then preserving
@@ -148,28 +171,12 @@ function buildTaxa(
   // Resolve metadata (name, rank, ...) lazily — first sighting in any sample's
   // profile wins. This avoids a second metadata fetch and matches the in-app
   // taxonomy table's behaviour.
-  const meta = new Map<number, { name: string; rank?: string; superkingdom?: string | null }>();
-  const cells = new Map<number, Record<string, Record<ClassifierId, ReportTaxonCell>>>();
+  const meta = new Map<number, TaxonMeta>();
+  const cells = new Map<number, Record<string, Record<string, ReportTaxonCell>>>();
   for (const s of samples) {
     for (const p of profilesBySampleId.get(s.sample_id) ?? []) {
       const total = totals.get(s.sample_id)?.get(p.classifier) ?? 0;
-      for (const e of p.profile ?? []) {
-        if (!seen.has(e.taxon_id)) continue;
-        if (!meta.has(e.taxon_id)) {
-          meta.set(e.taxon_id, {
-            name: e.name,
-            rank: e.rank,
-            superkingdom: e.superkingdom ?? null,
-          });
-        }
-        const reads = e.abundance ?? 0;
-        const pct = total > 0 ? (reads / total) * 100 : 0;
-        const taxonCells = cells.get(e.taxon_id) ?? {};
-        const sampleCells = taxonCells[s.sample_id] ?? {};
-        sampleCells[p.classifier] = { reads, pct };
-        taxonCells[s.sample_id] = sampleCells;
-        cells.set(e.taxon_id, taxonCells);
-      }
+      collectProfileCells(p, s.sample_id, total, seen, meta, cells);
     }
   }
 
@@ -248,7 +255,7 @@ export function useReportData(
 
   // Canonical column order for the whole report — union of all classifiers
   // observed across the case, alphabetical so columns don't shift card-to-card.
-  const classifierSet = new Set<ClassifierId>();
+  const classifierSet = new Set<string>();
   for (const profiles of profilesBySampleId.values()) {
     for (const p of profiles) classifierSet.add(p.classifier);
   }
