@@ -55,7 +55,10 @@ export default function CaseReportSection({ samples }: Readonly<CaseReportSectio
       {samplesWithSelections.map((s) => (
         <SampleReportCard
           key={s.sample_id}
-          sampleId={s.sample_id}
+          // Mongo _id is what the samples API expects; sample_id is shown to the
+          // user when assembly fails.
+          apiSampleId={(s._id as string | undefined) ?? s.sample_id}
+          displaySampleId={s.sample_id}
           taxonIds={selectedFor(s.sample_id)}
         />
       ))}
@@ -64,20 +67,25 @@ export default function CaseReportSection({ samples }: Readonly<CaseReportSectio
 }
 
 interface SampleReportCardProps {
-  sampleId: string;
+  apiSampleId: string;
+  displaySampleId: string;
   taxonIds: number[];
 }
 
-function SampleReportCard({ sampleId, taxonIds }: Readonly<SampleReportCardProps>) {
-  const { data, isLoading, isError } = useReportData(sampleId, taxonIds);
+function SampleReportCard({
+  apiSampleId,
+  displaySampleId,
+  taxonIds,
+}: Readonly<SampleReportCardProps>) {
+  const { data, isLoading, isError } = useReportData(apiSampleId, taxonIds);
   return (
     <section className="bg-white border border-gray-100 rounded-lg p-4">
       {isLoading && (
-        <p className="text-xs text-gray-500 py-4 text-center m-0">Loading {sampleId}…</p>
+        <p className="text-xs text-gray-500 py-4 text-center m-0">Loading {displaySampleId}…</p>
       )}
       {isError && (
         <p className="text-xs text-red-600 py-4 text-center m-0">
-          Failed to assemble report data for {sampleId}.
+          Failed to assemble report data for {displaySampleId}.
         </p>
       )}
       {data && <Report data={data} />}

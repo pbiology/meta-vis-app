@@ -242,8 +242,8 @@ export default function CaseClassifiers({
 
             return (
               <tr
-                key={s.sample_id}
-                onClick={() => onSelectSample(s.sample_id)}
+                key={s._id as string}
+                onClick={() => onSelectSample(s._id as string)}
                 className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
               >
                 <td className="px-4 py-1.5 font-mono text-xs text-gray-700">

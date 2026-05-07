@@ -280,7 +280,11 @@ export default function CaseView() {
             />
           )}
           {section === "samples" && activeSampleId && (
-            <CaseSampleDetail sampleId={activeSampleId} onBack={() => setActiveSampleId(null)} />
+            <CaseSampleDetail
+              sampleId={activeSampleId}
+              selectionKey={samples.find((s) => (s._id as string) === activeSampleId)?.sample_id}
+              onBack={() => setActiveSampleId(null)}
+            />
           )}
           {section === "samples" && !activeSampleId && (
             <>

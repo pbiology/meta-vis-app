@@ -267,13 +267,19 @@ function useReportSelection(sampleId: string) {
 
 interface SampleDetailContentProps {
   sampleId: string;
+  // Optional human-readable key used for report-builder selections; defaults
+  // to `sampleId` when not provided. CaseView passes the canonical sample_id
+  // here while keeping `sampleId` as the Mongo _id used for API calls.
+  selectionKey?: string;
   onBack: () => void;
 }
 
 export default function SampleDetailContent({
   sampleId,
+  selectionKey,
   onBack,
 }: Readonly<SampleDetailContentProps>) {
+  const reportKey = selectionKey ?? sampleId;
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [metavalDisplayCount, setMetavalDisplayCount] = useState(10);
   const [activeMetavalId, setActiveMetavalId] = useState<string | null>(null);
@@ -347,7 +353,7 @@ export default function SampleDetailContent({
   // Hooks must run on every render before any early return — keep this block
   // above the loading/error guards.
   const { role } = useAuth();
-  const baseReportSelection = useReportSelection(sampleId);
+  const baseReportSelection = useReportSelection(reportKey);
   // Readers see no checkboxes in the taxonomy table; passing `undefined`
   // makes TaxonomyTable hide both the header and per-row checkbox cells.
   const reportSelection = role === "reader" ? undefined : baseReportSelection;
@@ -361,7 +367,7 @@ export default function SampleDetailContent({
     return (
       <TaxonDetailContent
         taxonId={String(activeTaxonId)}
-        sampleId={sampleId}
+        sampleId={reportKey}
         onBack={() => setActiveTaxonId(null)}
       />
     );

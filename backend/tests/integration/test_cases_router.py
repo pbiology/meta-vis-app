@@ -430,10 +430,15 @@ class TestDeleteNotePermissions:
 
 async def _insert_case_with_samples(db, case_id="testcase", sample_ids=("S1", "S2")):
     await insert_case(db, case_id)
-    await db["cases"].update_one(
-        {"case_id": case_id},
-        {"$set": {"sample_ids": list(sample_ids)}},
-    )
+    for sid in sample_ids:
+        await db["samples"].insert_one(
+            {
+                "case_id": case_id,
+                "sample_id": sid,
+                "sample_type": "sample",
+                "ingested_at": datetime.now(timezone.utc),
+            }
+        )
 
 
 class TestUpdateReport:

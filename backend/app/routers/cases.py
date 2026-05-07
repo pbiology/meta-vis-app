@@ -406,11 +406,15 @@ async def update_case_report(
     db: Annotated[AsyncIOMotorDatabase, Depends(get_db)],
     current_user: Annotated[dict, Depends(require_role("writer", "admin"))],
 ):
-    case = await db["cases"].find_one({"case_id": case_id}, {"sample_ids": 1})
+    case = await db["cases"].find_one({"case_id": case_id}, {"_id": 1})
     if case is None:
         raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
 
-    valid = {str(sid) for sid in case.get("sample_ids") or []}
+    # case.sample_ids stores Mongo _ids; the persistence key is the canonical
+    # human-readable sample_id, so query the samples collection for the
+    # authoritative set.
+    valid_cursor = db["samples"].find({"case_id": case_id}, {"sample_id": 1})
+    valid = {doc["sample_id"] async for doc in valid_cursor if "sample_id" in doc}
     unknown = sorted(k for k in payload.selections if k not in valid)
     if unknown:
         raise HTTPException(
