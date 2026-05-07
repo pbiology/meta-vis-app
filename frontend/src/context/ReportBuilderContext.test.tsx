@@ -78,6 +78,32 @@ describe("ReportBuilderContext", () => {
     expect(JSON.parse(sessionStorage.getItem(STORAGE_KEY)!)).toEqual({ S1: [11676] });
   });
 
+  it("hydrate replaces selections for the given sample keys", () => {
+    const { result } = renderHook(() => useReportBuilder(), { wrapper });
+    act(() => {
+      result.current.addTaxon("S1", 1);
+      result.current.addTaxon("S2", 2);
+    });
+    act(() => {
+      result.current.hydrate({ S1: [10, 20], S3: [30] });
+    });
+    // S1 replaced, S3 added, S2 untouched.
+    expect(result.current.selectedFor("S1")).toEqual([10, 20]);
+    expect(result.current.selectedFor("S2")).toEqual([2]);
+    expect(result.current.selectedFor("S3")).toEqual([30]);
+  });
+
+  it("hydrate with empty list drops the sample key", () => {
+    const { result } = renderHook(() => useReportBuilder(), { wrapper });
+    act(() => {
+      result.current.addTaxon("S1", 1);
+      result.current.hydrate({ S1: [] });
+    });
+    expect(result.current.selectedFor("S1")).toEqual([]);
+    const stored = JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? "{}");
+    expect(stored).not.toHaveProperty("S1");
+  });
+
   it("rehydrates from sessionStorage on mount", () => {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ S1: [11676, 9606] }));
     const { result } = renderHook(() => useReportBuilder(), { wrapper });

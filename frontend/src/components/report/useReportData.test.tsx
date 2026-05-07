@@ -17,117 +17,160 @@ function makeWrapper() {
   };
 }
 
-describe("useReportData", () => {
-  it("assembles report data from sample, profile, case, pathogens, subject", async () => {
-    server.use(
-      http.get(`${API}/samples/sample-1`, () =>
-        HttpResponse.json({
-          sample_id: "sample-1",
+// A two-sample case (DNA + RNA) with two classifiers in DNA and one in RNA.
+// HIV-1 (taxon 11676) is in the kraken2 profile of both samples; E. coli (562)
+// is only in the DNA sample's kraken2 profile.
+function seedTwoSampleCase() {
+  server.use(
+    http.get(`${API}/cases/case-1`, () =>
+      HttpResponse.json({
+        case_id: "case-1",
+        notes: [{ id: "n1", text: "A note", author: "a", created_at: "2026-04-29" }],
+      })
+    ),
+    http.get(`${API}/cases/case-1/samples`, () =>
+      HttpResponse.json([
+        // RNA listed first to verify ordering reshuffles to DNA-before-RNA.
+        {
+          _id: "mongo-rna",
+          sample_id: "S001-RNA",
           case_id: "case-1",
+          sample_type: "RNA",
+          material: "RNA",
           subject_id: "subj-1",
-          sample_type: "sample",
-          material: "DNA",
-        })
-      ),
-      http.get(`${API}/samples/sample-1/profile`, () =>
-        HttpResponse.json({
-          profiles: [
-            {
-              classifier: "kraken2",
-              classifier_db: "k2-standard",
-              profile: [
-                {
-                  taxon_id: 11676,
-                  name: "HIV-1",
-                  rank: "species",
-                  superkingdom: "Viruses",
-                  abundance: 100,
-                },
-                {
-                  taxon_id: 562,
-                  name: "Escherichia coli",
-                  rank: "species",
-                  superkingdom: "Bacteria",
-                  abundance: 900,
-                },
-              ],
-            },
-          ],
-        })
-      ),
-      http.get(`${API}/cases/case-1`, () =>
-        HttpResponse.json({
+        },
+        {
+          _id: "mongo-dna",
+          sample_id: "S001-DNA",
           case_id: "case-1",
-          notes: [{ id: "n1", text: "A note", author: "a", created_at: "2026-04-29" }],
-        })
-      ),
-      http.get(`${API}/alerts/pathogens`, () =>
-        HttpResponse.json([{ taxon_id: 11676, taxon_name: "HIV-1", reason: null }])
-      ),
-      http.get(`${API}/subjects/subj-1`, () =>
-        HttpResponse.json({ subject_id: "subj-1", sex: "F" })
-      )
-    );
+          sample_type: "DNA",
+          material: "DNA",
+          subject_id: "subj-1",
+        },
+      ])
+    ),
+    http.get(`${API}/samples/mongo-dna/profile`, () =>
+      HttpResponse.json({
+        profiles: [
+          {
+            classifier: "kraken2",
+            profile: [
+              {
+                taxon_id: 11676,
+                name: "HIV-1",
+                rank: "species",
+                superkingdom: "Viruses",
+                abundance: 100,
+              },
+              {
+                taxon_id: 562,
+                name: "Escherichia coli",
+                rank: "species",
+                superkingdom: "Bacteria",
+                abundance: 900,
+              },
+            ],
+          },
+          {
+            classifier: "bracken",
+            profile: [
+              {
+                taxon_id: 11676,
+                name: "HIV-1",
+                rank: "species",
+                superkingdom: "Viruses",
+                abundance: 50,
+              },
+            ],
+          },
+        ],
+      })
+    ),
+    http.get(`${API}/samples/mongo-rna/profile`, () =>
+      HttpResponse.json({
+        profiles: [
+          {
+            classifier: "kraken2",
+            profile: [
+              {
+                taxon_id: 11676,
+                name: "HIV-1",
+                rank: "species",
+                superkingdom: "Viruses",
+                abundance: 30,
+              },
+            ],
+          },
+        ],
+      })
+    ),
+    http.get(`${API}/alerts/pathogens`, () =>
+      HttpResponse.json([{ taxon_id: 11676, taxon_name: "HIV-1", reason: null }])
+    ),
+    http.get(`${API}/subjects/subj-1`, () => HttpResponse.json({ subject_id: "subj-1", sex: "F" }))
+  );
+}
 
-    const { result } = renderHook(() => useReportData("sample-1", [11676]), {
+describe("useReportData (case-scoped)", () => {
+  it("orders samples DNA-before-RNA regardless of API order", async () => {
+    seedTwoSampleCase();
+    const { result } = renderHook(
+      () => useReportData("case-1", { "S001-DNA": [11676], "S001-RNA": [11676] }),
+      { wrapper: makeWrapper() }
+    );
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data!.samples.map((s) => s.sample_id)).toEqual(["S001-DNA", "S001-RNA"]);
+  });
+
+  it("collects classifiers from all samples, alphabetically", async () => {
+    seedTwoSampleCase();
+    const { result } = renderHook(() => useReportData("case-1", { "S001-DNA": [11676] }), {
+      wrapper: makeWrapper(),
+    });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data!.classifiers).toEqual(["bracken", "kraken2"]);
+  });
+
+  it("builds per-(sample, classifier) cells with reads + pct, omitting missing detections", async () => {
+    seedTwoSampleCase();
+    const { result } = renderHook(
+      () => useReportData("case-1", { "S001-DNA": [11676, 562], "S001-RNA": [11676] }),
+      { wrapper: makeWrapper() }
+    );
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    const data = result.current.data!;
+
+    const hiv = data.taxa.find((t) => t.taxon_id === 11676)!;
+    // DNA sample: kraken2 100 / (100+900) = 10%; bracken 50 / 50 = 100%
+    expect(hiv.cells["S001-DNA"].kraken2).toEqual({ reads: 100, pct: 10 });
+    expect(hiv.cells["S001-DNA"].bracken).toEqual({ reads: 50, pct: 100 });
+    // RNA sample: kraken2 30 / 30 = 100%; bracken absent → key missing
+    expect(hiv.cells["S001-RNA"].kraken2).toEqual({ reads: 30, pct: 100 });
+    expect(hiv.cells["S001-RNA"].bracken).toBeUndefined();
+
+    const ecoli = data.taxa.find((t) => t.taxon_id === 562)!;
+    expect(ecoli.cells["S001-DNA"].kraken2).toEqual({ reads: 900, pct: 90 });
+    expect(ecoli.cells["S001-RNA"]).toBeUndefined();
+  });
+
+  it("flags pathogens and resolves a single shared subject", async () => {
+    seedTwoSampleCase();
+    const { result } = renderHook(() => useReportData("case-1", { "S001-DNA": [11676] }), {
       wrapper: makeWrapper(),
     });
     await waitFor(() => expect(result.current.data).toBeDefined());
     const data = result.current.data!;
-
-    expect(data.sample.sample_id).toBe("sample-1");
-    expect(data.subject?.subject_id).toBe("subj-1");
-    expect(data.notes).toHaveLength(1);
-    expect(data.taxa).toHaveLength(1);
-    expect(data.taxa[0].name).toBe("HIV-1");
     expect(data.taxa[0].pathogen).toBe(true);
-    expect(data.taxa[0].abundance.kraken2).toBe(100);
-    // 100 / (100 + 900) = 10%
-    expect(data.taxa[0].pct.kraken2).toBeCloseTo(10, 5);
+    expect(data.subjects.length).toBe(2);
+    expect(data.subjects.every((s) => s.subject?.subject_id === "subj-1")).toBe(true);
   });
 
-  it("returns subject = null when sample has no subject_id", async () => {
-    server.use(
-      http.get(`${API}/samples/sample-2`, () =>
-        HttpResponse.json({ sample_id: "sample-2", case_id: "case-2", sample_type: "sample" })
-      ),
-      http.get(`${API}/samples/sample-2/profile`, () => HttpResponse.json({ profiles: [] })),
-      http.get(`${API}/cases/case-2`, () => HttpResponse.json({ case_id: "case-2" }))
-    );
-
-    const { result } = renderHook(() => useReportData("sample-2", []), {
+  it("returns no taxa when selections are empty", async () => {
+    seedTwoSampleCase();
+    const { result } = renderHook(() => useReportData("case-1", {}), {
       wrapper: makeWrapper(),
     });
     await waitFor(() => expect(result.current.data).toBeDefined());
-    expect(result.current.data!.subject).toBeNull();
     expect(result.current.data!.taxa).toEqual([]);
-  });
-
-  it("preserves the order of taxonIds passed in", async () => {
-    server.use(
-      http.get(`${API}/samples/s/profile`, () =>
-        HttpResponse.json({
-          profiles: [
-            {
-              classifier: "k",
-              classifier_db: "d",
-              profile: [
-                { taxon_id: 1, name: "first", abundance: 10 },
-                { taxon_id: 2, name: "second", abundance: 20 },
-                { taxon_id: 3, name: "third", abundance: 30 },
-              ],
-            },
-          ],
-        })
-      ),
-      http.get(`${API}/samples/s`, () => HttpResponse.json({ sample_id: "s", case_id: "c" })),
-      http.get(`${API}/cases/c`, () => HttpResponse.json({ case_id: "c" }))
-    );
-
-    const { result } = renderHook(() => useReportData("s", [3, 1, 2]), {
-      wrapper: makeWrapper(),
-    });
-    await waitFor(() => expect(result.current.data).toBeDefined());
-    expect(result.current.data!.taxa.map((t) => t.taxon_id)).toEqual([3, 1, 2]);
   });
 });

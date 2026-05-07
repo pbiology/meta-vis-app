@@ -85,6 +85,21 @@ export async function getCaseStats(): Promise<CaseStats> {
   return res.data;
 }
 
+export interface UpdateCaseReportResponse {
+  case_id: string;
+  selections: Record<string, number[]>;
+}
+
+export async function updateCaseReport(
+  caseId: string,
+  selections: Record<string, number[]>
+): Promise<UpdateCaseReportResponse> {
+  const res = await client.patch<UpdateCaseReportResponse>(`/cases/${caseId}/report`, {
+    selections,
+  });
+  return res.data;
+}
+
 export async function getPathogenCases(): Promise<{ case_ids: string[] }> {
   const res = await client.get<{ case_ids: string[] }>("/cases/pathogen_cases");
   return res.data;

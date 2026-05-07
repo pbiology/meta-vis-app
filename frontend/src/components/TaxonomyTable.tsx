@@ -75,6 +75,9 @@ interface TaxonomyTableProps {
   abundanceIsFraction?: boolean;
   isNtc?: boolean;
   selection?: TaxonomySelection;
+  // When provided, taxon-name clicks call this instead of navigating, so the
+  // taxon detail can be rendered inline (used inside CaseView).
+  onSelectTaxon?: (taxonId: number) => void;
 }
 
 type SortCol = "name" | "rank" | "superkingdom" | "abundance" | "ntc" | "concordance";
@@ -129,6 +132,7 @@ export default function TaxonomyTable({
   abundanceIsFraction = false,
   isNtc = false,
   selection,
+  onSelectTaxon,
 }: TaxonomyTableProps) {
   const { sessionKingdoms, setSessionKingdoms } = useAuth();
   const { hostTaxonIds } = useAppConfig();
@@ -475,12 +479,22 @@ export default function TaxonomyTable({
                     )}
                     <td className="py-2 pr-3 text-xs text-gray-700">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <Link
-                          to={`/samples/${sampleId}/taxa/${t.taxon_id}`}
-                          className="italic truncate hover:text-blue-600 hover:underline transition-colors"
-                        >
-                          {t.name}
-                        </Link>
+                        {onSelectTaxon ? (
+                          <button
+                            type="button"
+                            onClick={() => onSelectTaxon(t.taxon_id)}
+                            className="italic truncate hover:text-blue-600 hover:underline transition-colors bg-transparent border-0 p-0 text-left cursor-pointer"
+                          >
+                            {t.name}
+                          </button>
+                        ) : (
+                          <Link
+                            to={`/samples/${sampleId}/taxa/${t.taxon_id}`}
+                            className="italic truncate hover:text-blue-600 hover:underline transition-colors"
+                          >
+                            {t.name}
+                          </Link>
+                        )}
                         {mv && (
                           <Link
                             to={`/samples/${sampleId}/metaval/${mv._id}`}

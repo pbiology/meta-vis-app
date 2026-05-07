@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import Badge from "../Badge";
 import SignalPill, { type SignalKind } from "../SignalPill";
+import CaseReportPill from "./CaseReportPill";
 
 interface CaseTopBarProps {
   caseId: string;
@@ -13,6 +14,8 @@ interface CaseTopBarProps {
   onUnreviewRequest: () => void;
   reviewing: boolean;
   canReview: boolean;
+  reportCount: number;
+  onOpenReport: () => void;
 }
 
 // Top bar shown above the case-specific sidebar. Mimics the design's breadcrumb
@@ -29,6 +32,8 @@ export default function CaseTopBar({
   onUnreviewRequest,
   reviewing,
   canReview,
+  reportCount,
+  onOpenReport,
 }: Readonly<CaseTopBarProps>) {
   return (
     <header className="bg-white border-b border-gray-100 px-6 py-3 flex items-center gap-3 flex-shrink-0">
@@ -70,7 +75,8 @@ export default function CaseTopBar({
           <SignalPill key={s} kind={s} />
         ))}
       <Badge type={reviewed ? "reviewed" : "pending"} />
-      <div className="ml-auto flex gap-2">
+      <div className="ml-auto flex gap-2 items-center">
+        {canReview && <CaseReportPill count={reportCount} onClick={onOpenReport} />}
         {!reviewed && canReview && (
           <button
             onClick={onReview}

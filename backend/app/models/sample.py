@@ -3,7 +3,7 @@
 from datetime import datetime, date
 from enum import Enum
 from typing import Optional, List, Literal, Dict
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.ingestor.models import (
     NanoPlotStats as NanoPlotStats,
@@ -209,6 +209,7 @@ class CaseResponse(_Base):
     review: ReviewStatus = ReviewStatus()
     notes: List[CaseNote] = []
     sample_ids: List[str] = []
+    report_selections: dict[str, list[int]] = Field(default_factory=dict)
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 

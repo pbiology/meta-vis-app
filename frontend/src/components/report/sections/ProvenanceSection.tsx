@@ -1,74 +1,52 @@
-import KeyValueGrid, { type KvPair } from "./KeyValueGrid";
 import SectionHeading from "./SectionHeading";
+import type { PipelineConfig } from "../useReportData";
 
 interface ProvenanceSectionProps {
-  pipelineInfo: unknown;
-  generatedAt: string;
+  taxprofilerInfo: PipelineConfig | undefined;
+  metavalInfo: PipelineConfig | undefined;
 }
 
-function pickString(obj: unknown, key: string): string | undefined {
-  if (!obj || typeof obj !== "object") return undefined;
-  const v = (obj as Record<string, unknown>)[key];
-  return typeof v === "string" ? v : undefined;
+const DASH = "—";
+
+interface PipelineColumnProps {
+  title: string;
+  info: PipelineConfig | undefined;
 }
 
-function pickStringMap(obj: unknown, key: string): Record<string, string> | undefined {
-  if (!obj || typeof obj !== "object") return undefined;
-  const v = (obj as Record<string, unknown>)[key];
-  if (!v || typeof v !== "object") return undefined;
-  const out: Record<string, string> = {};
-  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
-    if (typeof val === "string") out[k] = val;
-  }
-  return Object.keys(out).length > 0 ? out : undefined;
-}
-
-export default function ProvenanceSection({
-  pipelineInfo,
-  generatedAt,
-}: Readonly<ProvenanceSectionProps>) {
-  // PipelineInfoOutput in the backend is a permissive document. We pull a few
-  // common fields and render the rest as a tools table when present.
-  const pipelineName =
-    pickString(pipelineInfo, "pipeline_name") ?? pickString(pipelineInfo, "name");
-  const pipelineVersion =
-    pickString(pipelineInfo, "pipeline_version") ?? pickString(pipelineInfo, "version");
-  const nextflow = pickString(pipelineInfo, "nextflow_version");
-  const tools =
-    pickStringMap(pipelineInfo, "tools") ?? pickStringMap(pipelineInfo, "tool_versions");
-
-  const pairs: KvPair[] = [
-    { label: "Pipeline", value: pipelineName, mono: true },
-    { label: "Pipeline version", value: pipelineVersion, mono: true },
-    { label: "Nextflow", value: nextflow, mono: true },
-    { label: "Report generated", value: generatedAt, mono: true },
+function PipelineColumn({ title, info }: Readonly<PipelineColumnProps>) {
+  const rows: Array<{ label: string; value: string | undefined }> = [
+    { label: "Pipeline", value: info?.pipeline_name },
+    { label: "Version", value: info?.pipeline_version },
+    { label: "Nextflow", value: info?.nextflow },
   ];
 
   return (
+    <div>
+      <p className="report-provenance-col-label">{title}</p>
+      <dl className="report-provenance-col">
+        {rows.map(({ label, value }) => (
+          <div key={label} className="report-kv-row">
+            <dt className="report-kv-label">{label}</dt>
+            <dd className="report-kv-value report-mono">{value ?? DASH}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+export default function ProvenanceSection({
+  taxprofilerInfo,
+  metavalInfo,
+}: Readonly<ProvenanceSectionProps>) {
+  return (
     <div className="report-page-break">
       <section className="report-section">
-        <SectionHeading number={5} title="Provenance" />
-        <KeyValueGrid pairs={pairs} />
-        {tools && (
-          <table className="report-tools">
-            <thead>
-              <tr>
-                <th>Tool</th>
-                <th>Version</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(tools)
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([name, version]) => (
-                  <tr key={name}>
-                    <td className="report-mono">{name}</td>
-                    <td className="report-mono">{version}</td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        )}
+        <SectionHeading number={6} title="Provenance" />
+        <div className="report-two-col">
+          <PipelineColumn title="taxprofiler" info={taxprofilerInfo} />
+          <PipelineColumn title="metaval" info={metavalInfo} />
+        </div>
       </section>
     </div>
   );

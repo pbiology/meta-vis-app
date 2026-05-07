@@ -10,7 +10,7 @@ export default function CommentsSection({ caseNotes, sampleNote }: Readonly<Comm
   const empty = caseNotes.length === 0 && !sampleNote;
   return (
     <section className="report-section">
-      <SectionHeading number={4} title="Comments" />
+      <SectionHeading number={5} title="Comments" />
       {empty ? (
         <p className="report-soft">No comments.</p>
       ) : (

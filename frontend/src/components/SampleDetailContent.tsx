@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo } from "react";
 import MetavalDetailsContent from "./MetavalDetailsContent";
+import TaxonDetailContent from "./TaxonDetailContent";
 import { useQuery } from "@tanstack/react-query";
 import { getSample, getProfile, getNtcProfiles } from "../api/samples";
 import Badge, { type BadgeType } from "./Badge";
 import { MetricStrip } from "./MetricStrip";
 import TaxonomyTable from "./TaxonomyTable";
 import { useReportBuilder } from "../context/ReportBuilderContext";
+import { useAuth } from "../context/AuthContext";
 import { getMetavalForSample } from "../api/metaval";
 import { getOutbreaks, getPathogens } from "../api/alerts";
 import { fmt, fmtPct } from "../utils/format";
@@ -265,16 +267,23 @@ function useReportSelection(sampleId: string) {
 
 interface SampleDetailContentProps {
   sampleId: string;
+  // Optional human-readable key used for report-builder selections; defaults
+  // to `sampleId` when not provided. CaseView passes the canonical sample_id
+  // here while keeping `sampleId` as the Mongo _id used for API calls.
+  selectionKey?: string;
   onBack: () => void;
 }
 
 export default function SampleDetailContent({
   sampleId,
+  selectionKey,
   onBack,
 }: Readonly<SampleDetailContentProps>) {
+  const reportKey = selectionKey ?? sampleId;
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [metavalDisplayCount, setMetavalDisplayCount] = useState(10);
   const [activeMetavalId, setActiveMetavalId] = useState<string | null>(null);
+  const [activeTaxonId, setActiveTaxonId] = useState<number | null>(null);
 
   useEffect(() => {
     setMetavalDisplayCount(10);
@@ -343,11 +352,24 @@ export default function SampleDetailContent({
 
   // Hooks must run on every render before any early return — keep this block
   // above the loading/error guards.
-  const reportSelection = useReportSelection(sampleId);
+  const { role } = useAuth();
+  const baseReportSelection = useReportSelection(reportKey);
+  // Readers see no checkboxes in the taxonomy table; passing `undefined`
+  // makes TaxonomyTable hide both the header and per-row checkbox cells.
+  const reportSelection = role === "reader" ? undefined : baseReportSelection;
 
   if (activeMetavalId)
     return (
       <MetavalDetailsContent metavalId={activeMetavalId} onBack={() => setActiveMetavalId(null)} />
+    );
+
+  if (activeTaxonId !== null)
+    return (
+      <TaxonDetailContent
+        taxonId={String(activeTaxonId)}
+        sampleId={reportKey}
+        onBack={() => setActiveTaxonId(null)}
+      />
     );
 
   if (sampleLoading || profileLoading)
@@ -642,6 +664,7 @@ export default function SampleDetailContent({
                     abundanceIsFraction={isTrana}
                     isNtc={sampleType !== "sample"}
                     selection={reportSelection}
+                    onSelectTaxon={setActiveTaxonId}
                   />
                 ) : null
               )}

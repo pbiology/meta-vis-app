@@ -1146,6 +1146,7 @@ export default function TaxonDetailContent({
           taxid:{taxon.taxon_id}
         </a>
         {sampleId &&
+          canEdit &&
           (() => {
             const selected = isSelected(sampleId, taxon.taxon_id);
             return (

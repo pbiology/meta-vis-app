@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
-from typing import Optional
+from typing import Annotated, Optional
 from app.models.sample import CaseResponse
 
 from app.audit import log_audit_event
@@ -386,6 +386,59 @@ async def unreview_case(
         outcome="success",
     )
     return {"case_id": case_id, "reviewed": False}
+
+
+class ReportSelectionsPayload(BaseModel):
+    selections: dict[str, list[int]]
+
+
+@router.patch(
+    "/{case_id}/report",
+    summary="Replace the case's per-sample report taxon selections",
+    responses={
+        404: {"description": "Case not found"},
+        422: {"description": "Payload references sample_ids not in this case"},
+    },
+)
+async def update_case_report(
+    case_id: str,
+    payload: ReportSelectionsPayload,
+    db: Annotated[AsyncIOMotorDatabase, Depends(get_db)],
+    current_user: Annotated[dict, Depends(require_role("writer", "admin"))],
+):
+    case = await db["cases"].find_one({"case_id": case_id}, {"_id": 1})
+    if case is None:
+        raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
+
+    # case.sample_ids stores Mongo _ids; the persistence key is the canonical
+    # human-readable sample_id, so query the samples collection for the
+    # authoritative set.
+    valid_cursor = db["samples"].find({"case_id": case_id}, {"sample_id": 1})
+    valid = {doc["sample_id"] async for doc in valid_cursor if "sample_id" in doc}
+    unknown = sorted(k for k in payload.selections if k not in valid)
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown sample_id(s) for this case: {unknown}",
+        )
+
+    await db["cases"].update_one(
+        {"case_id": case_id},
+        {"$set": {"report_selections": payload.selections}},
+    )
+    await log_audit_event(
+        db,
+        action="update_case_report",
+        actor=current_user["username"],
+        resource_type="case",
+        resource_id=case_id,
+        outcome="success",
+        detail={
+            "samples": len(payload.selections),
+            "taxa": sum(len(v) for v in payload.selections.values()),
+        },
+    )
+    return {"case_id": case_id, "selections": payload.selections}
 
 
 class NotePayload(BaseModel):

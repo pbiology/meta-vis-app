@@ -60,6 +60,7 @@ export interface CaseListItem extends Case {
   ticket_url?: string | null;
   review?: CaseReview;
   notes?: CaseNote[];
+  report_selections?: Record<string, number[]>;
 }
 
 export interface CasesResponse {
