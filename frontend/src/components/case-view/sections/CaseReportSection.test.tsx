@@ -10,14 +10,17 @@ function makeSample(id: string): Sample {
 
 describe("CaseReportSection", () => {
   it("shows empty state when nothing is selected", () => {
-    renderWithProviders(<CaseReportSection samples={[makeSample("sample-1")]} />);
+    renderWithProviders(<CaseReportSection caseId="case-1" samples={[makeSample("sample-1")]} />);
     expect(screen.getByText(/Report builder/i)).toBeInTheDocument();
     expect(screen.getByText(/No taxa selected/i)).toBeInTheDocument();
   });
 
   it("renders the preview header with totals when selections exist", () => {
     renderWithProviders(
-      <CaseReportSection samples={[makeSample("sample-1"), makeSample("sample-2")]} />,
+      <CaseReportSection
+        caseId="case-1"
+        samples={[makeSample("sample-1"), makeSample("sample-2")]}
+      />,
       {
         sessionStorage: {
           "report-builder": { "sample-1": [11676, 562], "sample-2": [9606] },

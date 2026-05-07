@@ -303,7 +303,7 @@ export default function CaseView() {
             </>
           )}
           {section === "multiqc" && <CaseMultiQC caseId={caseId} available={hasMultiqc} />}
-          {section === "report" && <CaseReportSection samples={samples} />}
+          {section === "report" && <CaseReportSection caseId={caseId} samples={samples} />}
           {section === "comments" && (
             <CaseComments
               notes={notes}

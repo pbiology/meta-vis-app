@@ -6,12 +6,17 @@ import type { ReportData } from "./useReportData";
 function makeData(overrides: Partial<ReportData> = {}): ReportData {
   return {
     generatedAt: "2026-04-29T10:00:00Z",
-    sample: {
-      sample_id: "S001",
-      case_id: "C001",
-      sample_type: "sample",
-      material: "DNA",
-      taxprofiler: {
+    caseDoc: {
+      case_id: "lovelypanther",
+      sample_count: 2,
+      notes: [{ id: "n1", author: "alice", created_at: "2026-04-28", text: "Looks suspicious" }],
+    },
+    samples: [
+      {
+        sample_id: "S001-DNA",
+        sample_type: "DNA",
+        material: "DNA",
+        classifiersAvailable: ["bracken", "kraken2"],
         fastp: {
           total_reads_before_filtering: 1000000,
           passed_filter_reads: 950000,
@@ -19,8 +24,16 @@ function makeData(overrides: Partial<ReportData> = {}): ReportData {
           q30_rate: 0.93,
         },
       },
-    },
-    subject: { subject_id: "SUB-1", sex: "F" },
+      {
+        sample_id: "S001-RNA",
+        sample_type: "RNA",
+        material: "RNA",
+        classifiersAvailable: ["kraken2"],
+      },
+    ],
+    classifiers: ["bracken", "kraken2"],
+    subjects: [{ sample_id: "S001-DNA", subject: { subject_id: "SUB-1", sex: "F" } }],
+    notes: [{ id: "n1", author: "alice", created_at: "2026-04-28", text: "Looks suspicious" }],
     taxa: [
       {
         taxon_id: 11676,
@@ -28,8 +41,12 @@ function makeData(overrides: Partial<ReportData> = {}): ReportData {
         rank: "species",
         superkingdom: "Viruses",
         pathogen: true,
-        abundance: { kraken2: 1234 },
-        pct: { kraken2: 0.123 },
+        cells: {
+          "S001-DNA": {
+            kraken2: { reads: 1234, pct: 0.123 },
+            bracken: { reads: 1100, pct: 0.11 },
+          },
+        },
       },
       {
         taxon_id: 562,
@@ -37,12 +54,11 @@ function makeData(overrides: Partial<ReportData> = {}): ReportData {
         rank: "species",
         superkingdom: "Bacteria",
         pathogen: false,
-        abundance: { kraken2: 50 },
-        pct: { kraken2: 0.005 },
+        cells: {
+          "S001-DNA": { kraken2: { reads: 50, pct: 0.005 } },
+        },
       },
     ],
-    notes: [{ id: "n1", author: "alice", created_at: "2026-04-28", text: "Looks suspicious" }],
-    sampleNote: "Followup ordered",
     pipelineInfo: {
       pipeline_name: "taxprofiler",
       pipeline_version: "1.2.3",
@@ -54,13 +70,26 @@ function makeData(overrides: Partial<ReportData> = {}): ReportData {
 }
 
 describe("Report", () => {
-  it("renders all five sections from a populated fixture", () => {
+  it("renders the case-scoped header", () => {
     render(<Report data={makeData()} />);
-    expect(screen.getByText("Sample information")).toBeInTheDocument();
-    expect(screen.getByText("Subject")).toBeInTheDocument();
-    expect(screen.getByText("Taxa of interest")).toBeInTheDocument();
-    expect(screen.getByText("Comments")).toBeInTheDocument();
-    expect(screen.getByText("Provenance")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Case report" })).toBeInTheDocument();
+    // case_id appears in both the header subtitle and the Overview section.
+    expect(screen.getAllByText("lovelypanther").length).toBeGreaterThan(0);
+  });
+
+  it("renders all six body sections", () => {
+    render(<Report data={makeData()} />);
+    for (const title of ["Overview", "Subject", "Taxa of interest", "Comments", "Provenance"]) {
+      expect(screen.getByRole("heading", { level: 2, name: title })).toBeInTheDocument();
+    }
+    // "Samples" also appears as a table column header, so match the section heading.
+    expect(screen.getByRole("heading", { level: 2, name: "Samples" })).toBeInTheDocument();
+  });
+
+  it("shows the taxon id in each taxon header", () => {
+    render(<Report data={makeData()} />);
+    expect(screen.getByText("taxid:11676")).toBeInTheDocument();
+    expect(screen.getByText("taxid:562")).toBeInTheDocument();
   });
 
   it("flags pathogen taxa with the pathogen modifier class", () => {
@@ -71,8 +100,8 @@ describe("Report", () => {
     expect(ecoliItem.className).not.toContain("report-taxon-pathogen");
   });
 
-  it("renders 'Not linked' when subject is null", () => {
-    render(<Report data={makeData({ subject: null })} />);
+  it("renders 'Not linked' when no subject is linked to any sample", () => {
+    render(<Report data={makeData({ subjects: [{ sample_id: "S001-DNA", subject: null }] })} />);
     expect(screen.getByText("Not linked")).toBeInTheDocument();
   });
 
@@ -80,16 +109,27 @@ describe("Report", () => {
     const { container } = render(<Report data={makeData()} />);
     const wrapper = container.querySelector(".report-page-break");
     expect(wrapper).not.toBeNull();
-    // Provenance heading is inside the wrapper, not the body page.
     expect(within(wrapper as HTMLElement).getByText("Provenance")).toBeInTheDocument();
   });
 
-  it("renders em-dash for missing sample fields", () => {
-    const data = makeData({
-      sample: { sample_id: "S001", case_id: "C001", sample_type: "sample", material: "DNA" },
-    });
-    render(<Report data={data} />);
-    // At least one em-dash should appear because order_date / received_at etc. are absent.
+  it("renders em-dash for missing per-sample fields", () => {
+    render(<Report data={makeData()} />);
+    // S001-RNA has no fastp / order_date / etc → many DASHes in its row.
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  it("taxon matrix renders one row per sample × one column per classifier with — for missing cells", () => {
+    render(<Report data={makeData()} />);
+    // HIV-1 has data only for S001-DNA; the S001-RNA row should show DASHes
+    // for both classifier columns.
+    const hivCard = screen.getByText("HIV-1").closest("li")!;
+    const rows = within(hivCard).getAllByRole("row");
+    // 1 header row + 2 sample rows
+    expect(rows.length).toBe(3);
+    // Find the RNA row by its sample_id label.
+    const rnaRow = within(hivCard).getByText("S001-RNA").closest("tr")!;
+    const rnaCells = within(rnaRow).getAllByText("—");
+    // Two classifier columns × (reads + pct) = 4 DASHes
+    expect(rnaCells.length).toBe(4);
   });
 });

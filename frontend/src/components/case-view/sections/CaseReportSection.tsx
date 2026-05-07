@@ -4,13 +4,22 @@ import Report from "../../report/Report";
 import { useReportData } from "../../report/useReportData";
 
 interface CaseReportSectionProps {
+  caseId: string;
   samples: Sample[];
 }
 
-export default function CaseReportSection({ samples }: Readonly<CaseReportSectionProps>) {
+export default function CaseReportSection({ caseId, samples }: Readonly<CaseReportSectionProps>) {
   const { selectedFor } = useReportBuilder();
+
   const samplesWithSelections = samples.filter((s) => selectedFor(s.sample_id).length > 0);
   const totalCount = samplesWithSelections.reduce((n, s) => n + selectedFor(s.sample_id).length, 0);
+
+  const selectionsBySampleId: Record<string, number[]> = {};
+  for (const s of samplesWithSelections) {
+    selectionsBySampleId[s.sample_id] = selectedFor(s.sample_id);
+  }
+
+  const { data, isLoading, isError } = useReportData(caseId, selectionsBySampleId);
 
   if (samplesWithSelections.length === 0) {
     return (
@@ -52,43 +61,15 @@ export default function CaseReportSection({ samples }: Readonly<CaseReportSectio
         </div>
       </header>
 
-      {samplesWithSelections.map((s) => (
-        <SampleReportCard
-          key={s.sample_id}
-          // Mongo _id is what the samples API expects; sample_id is shown to the
-          // user when assembly fails.
-          apiSampleId={(s._id as string | undefined) ?? s.sample_id}
-          displaySampleId={s.sample_id}
-          taxonIds={selectedFor(s.sample_id)}
-        />
-      ))}
+      <section className="bg-white border border-gray-100 rounded-lg p-4">
+        {isLoading && <p className="text-xs text-gray-500 py-4 text-center m-0">Loading report…</p>}
+        {isError && (
+          <p className="text-xs text-red-600 py-4 text-center m-0">
+            Failed to assemble case report data.
+          </p>
+        )}
+        {data && <Report data={data} />}
+      </section>
     </div>
-  );
-}
-
-interface SampleReportCardProps {
-  apiSampleId: string;
-  displaySampleId: string;
-  taxonIds: number[];
-}
-
-function SampleReportCard({
-  apiSampleId,
-  displaySampleId,
-  taxonIds,
-}: Readonly<SampleReportCardProps>) {
-  const { data, isLoading, isError } = useReportData(apiSampleId, taxonIds);
-  return (
-    <section className="bg-white border border-gray-100 rounded-lg p-4">
-      {isLoading && (
-        <p className="text-xs text-gray-500 py-4 text-center m-0">Loading {displaySampleId}…</p>
-      )}
-      {isError && (
-        <p className="text-xs text-red-600 py-4 text-center m-0">
-          Failed to assemble report data for {displaySampleId}.
-        </p>
-      )}
-      {data && <Report data={data} />}
-    </section>
   );
 }

@@ -47,7 +47,7 @@ export default function ProvenanceSection({
   return (
     <div className="report-page-break">
       <section className="report-section">
-        <SectionHeading number={5} title="Provenance" />
+        <SectionHeading number={6} title="Provenance" />
         <KeyValueGrid pairs={pairs} />
         {tools && (
           <table className="report-tools">
