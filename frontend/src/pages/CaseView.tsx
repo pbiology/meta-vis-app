@@ -1,16 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  addNote,
-  deleteNote,
-  getCase,
-  getCaseSamples,
-  reviewCase,
-  unreviewCase,
-  updateCaseReport,
-} from "../api/cases";
-import { getOutbreaks, getPathogens } from "../api/alerts";
-import { getNtcContaminantCaseIds } from "../api/ntc";
-import type { Case, CaseNote, PathogenItem, Sample } from "../api/types";
+  useAddCaseNote,
+  useCase,
+  useCaseSamples,
+  useDeleteCaseNote,
+  useReviewCase,
+  useUnreviewCase,
+  useUpdateCaseReport,
+} from "../hooks/queries/useCases";
+import { useOutbreaks, usePathogens } from "../hooks/queries/useAlerts";
+import { useNtcContaminantCaseIds } from "../hooks/queries/useNtc";
+import type { Case, CaseNote } from "../api/types";
 import { useAuth } from "../context/AuthContext";
 import { useRequiredParam } from "../utils/routeParams";
 import CaseTopBar from "../components/case-view/CaseTopBar";
@@ -30,22 +30,34 @@ export default function CaseView() {
   const caseId = useRequiredParam("caseId");
   const { role, user } = useAuth();
 
-  const [caseData, setCaseData] = useState<Case | null>(null);
-  const [samples, setSamples] = useState<Sample[]>([]);
-  const [pathogenMap, setPathogenMap] = useState<Record<number, PathogenItem>>({});
-  const [signals, setSignals] = useState<SignalKind[]>([]);
+  const caseQ = useCase(caseId);
+  const samplesQ = useCaseSamples(caseId);
+  const pathogensQ = usePathogens();
+  const outbreaksQ = useOutbreaks(14);
+  const ntcCaseIdsQ = useNtcContaminantCaseIds();
+
+  const reviewMutation = useReviewCase();
+  const unreviewMutation = useUnreviewCase();
+  const addNoteMutation = useAddCaseNote();
+  const deleteNoteMutation = useDeleteCaseNote();
+  const updateReportMutation = useUpdateCaseReport();
+
+  const caseData = caseQ.data ?? null;
+  const samples = useMemo(() => samplesQ.data ?? [], [samplesQ.data]);
+  const pathogenMap = useMemo(
+    () => Object.fromEntries((pathogensQ.data ?? []).map((p) => [p.taxon_id, p])),
+    [pathogensQ.data]
+  );
+
   const [section, setSection] = useState<CaseSection>("overview");
   const [activeSampleId, setActiveSampleId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [reviewing, setReviewing] = useState(false);
   const [unreviewConfirm, setUnreviewConfirm] = useState(false);
 
   const { selectedFor, hydrate } = useReportBuilder();
   const reportCount = samples.reduce((n, s) => n + selectedFor(s.sample_id).length, 0);
 
   // Snapshot of this case's selections, used for the debounced server save.
-  // Stable string lets useEffect dedupe identical states.
+  // Stable string lets the effect dedupe identical states.
   const caseSelectionsSnapshot = JSON.stringify(
     Object.fromEntries(
       samples
@@ -65,39 +77,17 @@ export default function CaseView() {
     setActiveSampleId(null);
   }
 
+  // Seed selections from the persisted server-side draft when the case loads.
+  // Marking the snapshot as "already saved" prevents the post-hydration effect
+  // from echoing it back to the server.
   useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const [fetchedCase, samplesData, pathogens] = await Promise.all([
-          getCase(caseId),
-          getCaseSamples(caseId),
-          getPathogens(),
-        ]);
-        if (cancelled) return;
-        setCaseData(fetchedCase);
-        setSamples(samplesData);
-        setPathogenMap(Object.fromEntries(pathogens.map((p) => [p.taxon_id, p])));
-        // Seed selections from the persisted server-side draft. Mark this state
-        // as "already saved" so the post-hydration effect doesn't echo it back.
-        const persisted =
-          (fetchedCase as { report_selections?: Record<string, number[]> }).report_selections ?? {};
-        hydrate(persisted);
-        const seed = Object.fromEntries(
-          Object.entries(persisted).filter(([, ids]) => ids.length > 0)
-        );
-        lastSavedRef.current = JSON.stringify(seed);
-      } catch {
-        if (!cancelled) setError("Failed to load case.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [caseId, hydrate]);
+    if (!caseData) return;
+    const persisted =
+      (caseData as { report_selections?: Record<string, number[]> }).report_selections ?? {};
+    hydrate(persisted);
+    const seed = Object.fromEntries(Object.entries(persisted).filter(([, ids]) => ids.length > 0));
+    lastSavedRef.current = JSON.stringify(seed);
+  }, [caseData, hydrate]);
 
   // Debounced persistence of the per-case selection snapshot. Skips writes
   // when the snapshot matches what we last sent (covers post-hydration echo
@@ -108,113 +98,62 @@ export default function CaseView() {
     if (lastSavedRef.current === caseSelectionsSnapshot) return;
     const handle = setTimeout(() => {
       const payload = JSON.parse(caseSelectionsSnapshot) as Record<string, number[]>;
-      updateCaseReport(caseId, payload)
-        .then(() => {
-          lastSavedRef.current = caseSelectionsSnapshot;
-        })
-        .catch((err) => {
-          console.error("Failed to persist report selections", err);
-        });
+      updateReportMutation.mutate(
+        { caseId, selections: payload },
+        {
+          onSuccess: () => {
+            lastSavedRef.current = caseSelectionsSnapshot;
+          },
+          onError: (err) => {
+            console.error("Failed to persist report selections", err);
+          },
+        }
+      );
     }, 500);
     return () => clearTimeout(handle);
-  }, [caseId, caseSelectionsSnapshot, canEditReport]);
+  }, [caseId, caseSelectionsSnapshot, canEditReport, updateReportMutation]);
 
-  // Derive signal pills (pathogen / outbreak / ntc) from cross-cutting endpoints.
-  useEffect(() => {
-    let cancelled = false;
-    async function loadSignals() {
-      const detected: SignalKind[] = [];
-      try {
-        const outbreaks = await getOutbreaks(14);
-        if (outbreaks.outbreaks.some((o) => o.case_ids.includes(caseId))) {
-          detected.push("outbreak");
-        }
-      } catch {
-        /* noop */
-      }
-      try {
-        const ntc = await getNtcContaminantCaseIds();
-        if (ntc.case_ids.includes(caseId)) detected.push("ntc");
-      } catch {
-        /* noop */
-      }
-      // Pathogen presence is derivable from samples + pathogenMap once loaded;
-      // resolved below in a separate effect when those are populated.
-      if (!cancelled) setSignals((prev) => Array.from(new Set([...prev, ...detected])));
+  // Derived signal pills (pathogen / outbreak / ntc) computed from the
+  // cross-cutting endpoints + the case's own samples.
+  const signals = useMemo<SignalKind[]>(() => {
+    const detected = new Set<SignalKind>();
+    if (outbreaksQ.data?.outbreaks.some((o) => o.case_ids.includes(caseId))) {
+      detected.add("outbreak");
     }
-    loadSignals();
-    return () => {
-      cancelled = true;
-    };
-  }, [caseId]);
-
-  useEffect(() => {
+    if (ntcCaseIdsQ.data?.case_ids.includes(caseId)) {
+      detected.add("ntc");
+    }
     const hasPathogen = samples.some((s) => {
       const ids = (s.all_taxon_ids as number[] | undefined) ?? [];
       return ids.some((id) => id in pathogenMap);
     });
-    setSignals((prev) => {
-      const next = new Set(prev);
-      if (hasPathogen) next.add("pathogen");
-      else next.delete("pathogen");
-      return Array.from(next);
-    });
-  }, [samples, pathogenMap]);
+    if (hasPathogen) detected.add("pathogen");
+    return Array.from(detected);
+  }, [outbreaksQ.data, ntcCaseIdsQ.data, samples, pathogenMap, caseId]);
 
   async function handleReview() {
-    setReviewing(true);
     try {
-      const result = (await reviewCase(caseId)) as Case & { reviewed_by?: string };
-      setCaseData((prev) => {
-        if (!prev) return prev;
-        const prevReview = (prev.review as Record<string, unknown>) ?? {};
-        return {
-          ...prev,
-          review: { ...prevReview, reviewed: true, reviewed_by: result.reviewed_by },
-        } as Case;
-      });
+      await reviewMutation.mutateAsync({ caseId });
     } catch {
       alert("Failed to mark as reviewed.");
-    } finally {
-      setReviewing(false);
     }
   }
 
   async function handleUnreview() {
     setUnreviewConfirm(false);
-    setReviewing(true);
     try {
-      await unreviewCase(caseId);
-      setCaseData((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          review: { reviewed: false, reviewed_by: null, reviewed_at: null, notes: null },
-        } as Case;
-      });
+      await unreviewMutation.mutateAsync(caseId);
     } catch {
       alert("Failed to remove review.");
-    } finally {
-      setReviewing(false);
     }
   }
 
   async function handleAddNote(text: string) {
-    const note = await addNote(caseId, text);
-    setCaseData((prev) => {
-      if (!prev) return prev;
-      const prevNotes = (prev.notes as CaseNote[] | undefined) ?? [];
-      return { ...prev, notes: [...prevNotes, note as unknown as CaseNote] } as Case;
-    });
+    await addNoteMutation.mutateAsync({ caseId, text });
   }
 
   async function handleDeleteNote(noteId: string) {
-    await deleteNote(caseId, noteId);
-    setCaseData((prev) => {
-      if (!prev) return prev;
-      const prevNotes = (prev.notes as CaseNote[] | undefined) ?? [];
-      return { ...prev, notes: prevNotes.filter((n) => n.id !== noteId) } as Case;
-    });
+    await deleteNoteMutation.mutateAsync({ caseId, noteId });
   }
 
   const review = caseData?.review as { reviewed?: boolean; reviewed_by?: string } | undefined;
@@ -225,18 +164,23 @@ export default function CaseView() {
   const ticketUrl = caseData?.ticket_url as string | undefined;
   const hasMultiqc = (caseData?.has_multiqc as boolean | undefined) ?? false;
 
-  if (loading)
+  const isLoading = caseQ.isLoading || samplesQ.isLoading;
+  const isError = caseQ.isError || samplesQ.isError;
+
+  if (isLoading)
     return (
       <div className="flex items-center justify-center h-screen text-sm text-gray-400">
         Loading…
       </div>
     );
-  if (error || !caseData)
+  if (isError || !caseData)
     return (
       <div className="flex items-center justify-center h-screen text-sm text-red-500">
-        {error ?? "Case not found."}
+        Failed to load case.
       </div>
     );
+
+  const reviewing = reviewMutation.isPending || unreviewMutation.isPending;
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -267,7 +211,7 @@ export default function CaseView() {
         <main className="flex-1 overflow-y-auto px-8 py-6 min-w-0">
           {section === "overview" && (
             <CaseOverview
-              caseData={caseData}
+              caseData={caseData as Case}
               samples={samples}
               notes={notes}
               signals={signals}
@@ -313,7 +257,7 @@ export default function CaseView() {
               onDelete={handleDeleteNote}
             />
           )}
-          {section === "provenance" && <CaseProvenance caseData={caseData} />}
+          {section === "provenance" && <CaseProvenance caseData={caseData as Case} />}
         </main>
       </div>
 

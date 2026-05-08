@@ -53,6 +53,9 @@ export function useNtcProfiles(sampleId: string, opts: UseSampleOptions = {}) {
   });
 }
 
+// Returns a blob URL; callers must revoke on unmount. `gcTime: 0` ensures the
+// cache drops the URL when no observers remain so a stale (revoked) URL is
+// never re-served.
 export function useSampleKronaUrl(
   sampleId: string,
   classifier = "kraken2",
@@ -62,5 +65,6 @@ export function useSampleKronaUrl(
     queryKey: sampleKeys.krona(sampleId, classifier),
     queryFn: () => getKronaUrl(sampleId, classifier),
     enabled: (opts.enabled ?? true) && Boolean(sampleId),
+    gcTime: 0,
   });
 }

@@ -1,8 +1,6 @@
-import { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { getMyStats } from "../../api/users";
-import type { MyStats } from "../../api/types";
+import { useMyStats } from "../../hooks/queries/useUsers";
 
 export type CaseSection = "overview" | "samples" | "multiqc" | "report" | "comments" | "provenance";
 
@@ -37,13 +35,7 @@ export default function CaseSidebar({
 }: Readonly<CaseSidebarProps>) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [stats, setStats] = useState<MyStats | null>(null);
-
-  useEffect(() => {
-    getMyStats()
-      .then(setStats)
-      .catch(() => {});
-  }, []);
+  const { data: stats } = useMyStats();
 
   function handleLogout() {
     logout();

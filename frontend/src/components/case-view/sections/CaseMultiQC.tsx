@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getCaseMultiQCUrl } from "../../../api/cases";
+import { useCaseMultiQCUrl } from "../../../hooks/queries/useCases";
 
 interface CaseMultiQCProps {
   caseId: string;
@@ -7,21 +7,16 @@ interface CaseMultiQCProps {
 }
 
 export default function CaseMultiQC({ caseId, available }: Readonly<CaseMultiQCProps>) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [errored, setErrored] = useState(false);
+  const { data: url, isLoading, isError } = useCaseMultiQCUrl(available ? caseId : "");
   const [iframeHeight, setIframeHeight] = useState<number>(600);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  // Blob URLs leak unless explicitly revoked. Tied to the data identity so the
+  // URL is revoked exactly once when the component unmounts or the URL changes.
   useEffect(() => {
-    if (!available) return;
-    setLoading(true);
-    setErrored(false);
-    getCaseMultiQCUrl(caseId)
-      .then(setUrl)
-      .catch(() => setErrored(true))
-      .finally(() => setLoading(false));
-  }, [available, caseId]);
+    if (!url) return;
+    return () => URL.revokeObjectURL(url);
+  }, [url]);
 
   if (!available) {
     return (
@@ -54,7 +49,7 @@ export default function CaseMultiQC({ caseId, available }: Readonly<CaseMultiQCP
           <p className="text-xs text-gray-500 mt-1 m-0">
             Aggregated QC metrics across all samples in this case.
           </p>
-          {errored && <p className="text-xs text-red-500 mt-1">Failed to load report.</p>}
+          {isError && <p className="text-xs text-red-500 mt-1">Failed to load report.</p>}
         </div>
         <button
           onClick={handleDownload}
@@ -65,8 +60,8 @@ export default function CaseMultiQC({ caseId, available }: Readonly<CaseMultiQCP
         </button>
       </div>
 
-      {loading && <div className="h-24 animate-pulse bg-gray-50 rounded" />}
-      {url && !loading && (
+      {isLoading && <div className="h-24 animate-pulse bg-gray-50 rounded" />}
+      {url && !isLoading && (
         <iframe
           ref={iframeRef}
           src={url}

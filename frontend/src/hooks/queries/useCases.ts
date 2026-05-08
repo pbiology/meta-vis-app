@@ -70,11 +70,15 @@ export function usePathogenCases() {
   });
 }
 
+// Krona / MultiQC fetches return blob URLs; callers must revoke on unmount.
+// `gcTime: 0` makes the cache drop the URL the moment no observers remain, so
+// stale (revoked) blob URLs can't be re-served on a later mount.
 export function useCaseKronaUrl(caseId: string, classifier = "kraken2") {
   return useQuery({
     queryKey: caseKeys.krona(caseId, classifier),
     queryFn: () => getCaseKronaUrl(caseId, classifier),
     enabled: Boolean(caseId),
+    gcTime: 0,
   });
 }
 
@@ -83,6 +87,7 @@ export function useCaseMultiQCUrl(caseId: string) {
     queryKey: caseKeys.multiqc(caseId),
     queryFn: () => getCaseMultiQCUrl(caseId),
     enabled: Boolean(caseId),
+    gcTime: 0,
   });
 }
 
