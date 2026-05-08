@@ -1,17 +1,17 @@
-import { useMemo, useRef, useState } from "react";
-import { scaleLinear, scaleOrdinal, scaleTime } from "@visx/scale";
+import { useMemo } from "react";
+import { scaleLinear, scaleOrdinal } from "@visx/scale";
 import { Circle, LinePath } from "@visx/shape";
 import { Group } from "@visx/group";
 import { curveMonotoneX } from "@visx/curve";
 import type { NtcRecurringTaxon, NtcTaxonOccurrence } from "../../api/types";
-import { CHART_MARGIN, TAXON_COLOURS } from "./chartUtils";
+import { CHART_MARGIN, TAXON_COLOURS, useDateScale, usePointerTooltip } from "./chartUtils";
 import ChartAxes from "./ChartAxes";
 
-interface RecurringTooltip {
-  x: number;
-  y: number;
-  data: NtcTaxonOccurrence & { taxon_name: string; taxon_id: number; colour: string };
-}
+type RecurringTooltipData = NtcTaxonOccurrence & {
+  taxon_name: string;
+  taxon_id: number;
+  colour: string;
+};
 
 interface RecurringTaxaChartProps {
   taxa: NtcRecurringTaxon[];
@@ -26,23 +26,11 @@ export default function RecurringTaxaChart({
   height = 240,
   isFraction = false,
 }: Readonly<RecurringTaxaChartProps>) {
-  const [tooltip, setTooltip] = useState<RecurringTooltip | null>(null);
-  const svgRef = useRef<SVGSVGElement | null>(null);
-
   const allPoints = taxa.flatMap((t) => t.occurrences);
   const innerWidth = width - CHART_MARGIN.left - CHART_MARGIN.right;
   const innerHeight = height - CHART_MARGIN.top - CHART_MARGIN.bottom;
 
-  const xScale = useMemo(() => {
-    const dates = allPoints.map((d) => new Date(d.order_date).getTime());
-    const minDate = dates.length ? Math.min(...dates) : Date.now() - 86400000;
-    const maxDate = dates.length ? Math.max(...dates) : Date.now();
-    return scaleTime({
-      domain: [new Date(minDate - 86400000), new Date(maxDate + 86400000)],
-      range: [0, innerWidth],
-      nice: true,
-    });
-  }, [allPoints, innerWidth]);
+  const xScale = useDateScale(allPoints, innerWidth);
 
   const yScale = useMemo(() => {
     const maxVal = allPoints.length ? Math.max(...allPoints.map((d) => d.abundance)) : 10;
@@ -58,6 +46,8 @@ export default function RecurringTaxaChart({
     range: TAXON_COLOURS,
   });
 
+  const { tooltip, svgRef, onPointerMove, clear } = usePointerTooltip<RecurringTooltipData>();
+
   if (taxa.length === 0) {
     return (
       <p className="text-xs text-gray-400 text-center py-8">
@@ -66,25 +56,9 @@ export default function RecurringTaxaChart({
     );
   }
 
-  function handleMouseMove(
-    e: React.MouseEvent,
-    d: NtcTaxonOccurrence,
-    taxon_name: string,
-    taxon_id: number,
-    colour: string
-  ) {
-    if (!svgRef.current) return;
-    const rect = svgRef.current.getBoundingClientRect();
-    setTooltip({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-      data: { ...d, taxon_name, taxon_id, colour },
-    });
-  }
-
   return (
     <div className="relative">
-      <svg ref={svgRef} width={width} height={height} onMouseLeave={() => setTooltip(null)}>
+      <svg ref={svgRef} width={width} height={height} onMouseLeave={clear}>
         <Group left={CHART_MARGIN.left} top={CHART_MARGIN.top}>
           <ChartAxes
             xScale={xScale}
@@ -115,7 +89,12 @@ export default function RecurringTaxaChart({
                     fillOpacity={0.85}
                     style={{ cursor: "pointer" }}
                     onMouseMove={(e) =>
-                      handleMouseMove(e, d, taxon.taxon_name, taxon.taxon_id, colour)
+                      onPointerMove(e, {
+                        ...d,
+                        taxon_name: taxon.taxon_name,
+                        taxon_id: taxon.taxon_id,
+                        colour,
+                      })
                     }
                   />
                 ))}

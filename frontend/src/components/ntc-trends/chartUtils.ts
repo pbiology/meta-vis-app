@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { scaleTime } from "@visx/scale";
 
 export const CHART_MARGIN = { top: 16, right: 24, bottom: 48, left: 72 } as const;
 
@@ -74,3 +75,47 @@ export const AXIS_TICK_LABEL_PROPS = {
   fill: "#a1a1aa",
   fontFamily: "DM Mono, monospace",
 } as const;
+
+// Builds a time scale spanning the dates in `points` (each carrying `order_date`),
+// padded by ±1 day so the first/last points don't sit on the axis edge. Falls back
+// to a 1-day window around `now` when there are no points.
+export function useDateScale(points: ReadonlyArray<{ order_date: string }>, innerWidth: number) {
+  return useMemo(() => {
+    const dates = points.map((d) => new Date(d.order_date).getTime());
+    const minDate = dates.length ? Math.min(...dates) : Date.now() - 86400000;
+    const maxDate = dates.length ? Math.max(...dates) : Date.now();
+    return scaleTime({
+      domain: [new Date(minDate - 86400000), new Date(maxDate + 86400000)],
+      range: [0, innerWidth],
+      nice: true,
+    });
+  }, [points, innerWidth]);
+}
+
+export interface PointerTooltipState<T> {
+  x: number;
+  y: number;
+  data: T;
+}
+
+// Tracks pointer-driven tooltip state for a chart. Returns the SVG ref to attach,
+// a position-tracking move handler, and a clear function for `onMouseLeave`.
+export function usePointerTooltip<T>(): {
+  tooltip: PointerTooltipState<T> | null;
+  svgRef: MutableRefObject<SVGSVGElement | null>;
+  onPointerMove: (e: React.MouseEvent, data: T) => void;
+  clear: () => void;
+} {
+  const [tooltip, setTooltip] = useState<PointerTooltipState<T> | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+
+  const onPointerMove = useCallback((e: React.MouseEvent, data: T) => {
+    if (!svgRef.current) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    setTooltip({ x: e.clientX - rect.left, y: e.clientY - rect.top, data });
+  }, []);
+
+  const clear = useCallback(() => setTooltip(null), []);
+
+  return { tooltip, svgRef, onPointerMove, clear };
+}

@@ -1,15 +1,15 @@
-import { useMemo, useRef, useState } from "react";
-import { scaleLinear, scaleTime } from "@visx/scale";
+import { useMemo } from "react";
+import { scaleLinear } from "@visx/scale";
 import { Group } from "@visx/group";
 import type { NtcKingdomPoint } from "../../api/types";
-import { CHART_MARGIN, KINGDOMS, KINGDOM_COLOURS } from "./chartUtils";
+import {
+  CHART_MARGIN,
+  KINGDOMS,
+  KINGDOM_COLOURS,
+  useDateScale,
+  usePointerTooltip,
+} from "./chartUtils";
 import ChartAxes from "./ChartAxes";
-
-interface KingdomTooltip {
-  x: number;
-  y: number;
-  data: NtcKingdomPoint;
-}
 
 interface KingdomBreakdownChartProps {
   data: NtcKingdomPoint[];
@@ -22,23 +22,11 @@ export default function KingdomBreakdownChart({
   width = 600,
   height = 220,
 }: Readonly<KingdomBreakdownChartProps>) {
-  const [tooltip, setTooltip] = useState<KingdomTooltip | null>(null);
-  const svgRef = useRef<SVGSVGElement | null>(null);
-
   const points = data.filter((d) => d.order_date);
   const innerWidth = width - CHART_MARGIN.left - CHART_MARGIN.right;
   const innerHeight = height - CHART_MARGIN.top - CHART_MARGIN.bottom;
 
-  const xScale = useMemo(() => {
-    const dates = points.map((d) => new Date(d.order_date).getTime());
-    const minDate = dates.length ? Math.min(...dates) : Date.now() - 86400000;
-    const maxDate = dates.length ? Math.max(...dates) : Date.now();
-    return scaleTime({
-      domain: [new Date(minDate - 86400000), new Date(maxDate + 86400000)],
-      range: [0, innerWidth],
-      nice: true,
-    });
-  }, [points, innerWidth]);
+  const xScale = useDateScale(points, innerWidth);
 
   const yScale = useMemo(() => {
     const maxTotal = points.length
@@ -53,25 +41,17 @@ export default function KingdomBreakdownChart({
 
   const BAR_HALF = Math.max(2, Math.min(8, innerWidth / (points.length * 4)));
 
+  const { tooltip, svgRef, onPointerMove, clear } = usePointerTooltip<NtcKingdomPoint>();
+
   if (points.length === 0) {
     return (
       <p className="text-xs text-gray-400 text-center py-8">No kingdom data in this window.</p>
     );
   }
 
-  function handleMouseMove(e: React.MouseEvent, d: NtcKingdomPoint) {
-    if (!svgRef.current) return;
-    const rect = svgRef.current.getBoundingClientRect();
-    setTooltip({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-      data: d,
-    });
-  }
-
   return (
     <div className="relative">
-      <svg ref={svgRef} width={width} height={height} onMouseLeave={() => setTooltip(null)}>
+      <svg ref={svgRef} width={width} height={height} onMouseLeave={clear}>
         <Group left={CHART_MARGIN.left} top={CHART_MARGIN.top}>
           <ChartAxes
             xScale={xScale}
@@ -83,7 +63,7 @@ export default function KingdomBreakdownChart({
             const x = xScale(new Date(d.order_date));
             let yOffset = innerHeight;
             return (
-              <g key={`${d.sample_id}-${d.order_date}`} onMouseMove={(e) => handleMouseMove(e, d)}>
+              <g key={`${d.sample_id}-${d.order_date}`} onMouseMove={(e) => onPointerMove(e, d)}>
                 {KINGDOMS.map((kingdom) => {
                   const val = d[kingdom] ?? 0;
                   if (val === 0) return null;
