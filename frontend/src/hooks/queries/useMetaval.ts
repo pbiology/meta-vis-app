@@ -29,11 +29,15 @@ export function useMetavalResult(metavalId: string, opts: UseMetavalOptions = {}
   });
 }
 
+// Returns a blob URL; callers must revoke on unmount. `gcTime: 0` ensures the
+// cache drops the URL when no observers remain so a stale (revoked) URL is
+// never re-served.
 export function useIgvUrl(metavalId: string, organismName: string, opts: UseMetavalOptions = {}) {
   return useQuery({
     queryKey: metavalKeys.igv(metavalId, organismName),
     queryFn: () => getIgvUrl(metavalId, organismName),
     enabled: (opts.enabled ?? true) && Boolean(metavalId) && Boolean(organismName),
+    gcTime: 0,
   });
 }
 
