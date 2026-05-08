@@ -20,7 +20,7 @@ export default function NtcContaminantBanner({ alerts }: Readonly<NtcContaminant
           <circle cx="8" cy="10.5" r="0.75" fill="currentColor" />
         </svg>
         <span className="text-xs font-medium text-orange-700">
-          Known contaminant{alerts.length !== 1 ? "s" : ""} detected in NTCs
+          Known contaminant{alerts.length === 1 ? "" : "s"} detected in NTCs
         </span>
         <Link
           to="/ntc/lists"
@@ -34,7 +34,7 @@ export default function NtcContaminantBanner({ alerts }: Readonly<NtcContaminant
           <span className="italic">{alert.taxon_name.replace(/-/g, " ")}</span>
           <span className="text-orange-400">·</span>
           <span className="text-orange-500">
-            {alert.case_count} case{alert.case_count !== 1 ? "s" : ""}
+            {alert.case_count} case{alert.case_count === 1 ? "" : "s"}
           </span>
           <span className="text-orange-400">·</span>
           <span className="text-orange-400">&gt; {alert.min_reads} reads threshold</span>

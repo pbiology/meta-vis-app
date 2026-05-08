@@ -1,19 +1,11 @@
 import { useMemo, useRef, useState } from "react";
 import { scaleLinear, scaleOrdinal, scaleTime } from "@visx/scale";
 import { Circle, LinePath } from "@visx/shape";
-import { AxisBottom, AxisLeft } from "@visx/axis";
-import { GridRows } from "@visx/grid";
 import { Group } from "@visx/group";
 import { curveMonotoneX } from "@visx/curve";
 import type { NtcRecurringTaxon, NtcTaxonOccurrence } from "../../api/types";
-import {
-  AXIS_TICK_LABEL_PROPS,
-  CHART_MARGIN,
-  TAXON_COLOURS,
-  formatCount,
-  isoWeek,
-  weekTicks,
-} from "./chartUtils";
+import { CHART_MARGIN, TAXON_COLOURS } from "./chartUtils";
+import ChartAxes from "./ChartAxes";
 
 interface RecurringTooltip {
   x: number;
@@ -94,12 +86,11 @@ export default function RecurringTaxaChart({
     <div className="relative">
       <svg ref={svgRef} width={width} height={height} onMouseLeave={() => setTooltip(null)}>
         <Group left={CHART_MARGIN.left} top={CHART_MARGIN.top}>
-          <GridRows
-            scale={yScale}
-            width={innerWidth}
-            stroke="#f4f4f5"
-            strokeDasharray="3,3"
-            numTicks={4}
+          <ChartAxes
+            xScale={xScale}
+            yScale={yScale}
+            innerWidth={innerWidth}
+            innerHeight={innerHeight}
           />
           {taxa.map((taxon) => {
             const colour = colourScale(taxon.taxon_id);
@@ -114,9 +105,9 @@ export default function RecurringTaxaChart({
                   strokeOpacity={0.8}
                   curve={curveMonotoneX}
                 />
-                {taxon.occurrences.map((d, i) => (
+                {taxon.occurrences.map((d) => (
                   <Circle
-                    key={i}
+                    key={`${d.order_date}-${d.case_id ?? ""}`}
                     cx={xScale(new Date(d.order_date))}
                     cy={yScale(d.abundance)}
                     r={3.5}
@@ -131,23 +122,6 @@ export default function RecurringTaxaChart({
               </g>
             );
           })}
-          <AxisBottom
-            top={innerHeight}
-            scale={xScale}
-            tickValues={weekTicks(xScale.domain()[0], xScale.domain()[1])}
-            tickFormat={(d) => `W${isoWeek(d as Date)}`}
-            tickStroke="#d1d1d6"
-            stroke="#d1d1d6"
-            tickLabelProps={{ ...AXIS_TICK_LABEL_PROPS, textAnchor: "middle" }}
-          />
-          <AxisLeft
-            scale={yScale}
-            numTicks={4}
-            tickFormat={(d) => formatCount(d as number)}
-            tickStroke="#d1d1d6"
-            stroke="#d1d1d6"
-            tickLabelProps={{ ...AXIS_TICK_LABEL_PROPS, textAnchor: "end", dx: -4, dy: 3 }}
-          />
         </Group>
       </svg>
 

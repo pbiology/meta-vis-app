@@ -95,7 +95,7 @@ export default function NtcTrendsContent() {
 
             <p className="text-xs text-gray-400">
               {data.total_ntcs} {material} NTC
-              {data.total_ntcs !== 1 ? "s" : ""} in the last {windowDays} days
+              {data.total_ntcs === 1 ? "" : "s"} in the last {windowDays} days
               {data.recurring_taxa.length > 0 ? (
                 <span className="text-amber-500 font-medium ml-1">
                   · {data.recurring_taxa.length} recurring{" "}

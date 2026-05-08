@@ -1,18 +1,9 @@
 import { useMemo, useRef, useState } from "react";
 import { scaleLinear, scaleTime } from "@visx/scale";
-import { AxisBottom, AxisLeft } from "@visx/axis";
-import { GridRows } from "@visx/grid";
 import { Group } from "@visx/group";
 import type { NtcKingdomPoint } from "../../api/types";
-import {
-  AXIS_TICK_LABEL_PROPS,
-  CHART_MARGIN,
-  KINGDOMS,
-  KINGDOM_COLOURS,
-  formatCount,
-  isoWeek,
-  weekTicks,
-} from "./chartUtils";
+import { CHART_MARGIN, KINGDOMS, KINGDOM_COLOURS } from "./chartUtils";
+import ChartAxes from "./ChartAxes";
 
 interface KingdomTooltip {
   x: number;
@@ -51,11 +42,7 @@ export default function KingdomBreakdownChart({
 
   const yScale = useMemo(() => {
     const maxTotal = points.length
-      ? Math.max(
-          ...points.map((d) =>
-            KINGDOMS.reduce((s, k) => s + ((d[k] as number | undefined) ?? 0), 0)
-          )
-        )
+      ? Math.max(...points.map((d) => KINGDOMS.reduce((s, k) => s + (d[k] ?? 0), 0)))
       : 10;
     return scaleLinear({
       domain: [0, maxTotal * 1.1 || 10],
@@ -86,20 +73,19 @@ export default function KingdomBreakdownChart({
     <div className="relative">
       <svg ref={svgRef} width={width} height={height} onMouseLeave={() => setTooltip(null)}>
         <Group left={CHART_MARGIN.left} top={CHART_MARGIN.top}>
-          <GridRows
-            scale={yScale}
-            width={innerWidth}
-            stroke="#f4f4f5"
-            strokeDasharray="3,3"
-            numTicks={4}
+          <ChartAxes
+            xScale={xScale}
+            yScale={yScale}
+            innerWidth={innerWidth}
+            innerHeight={innerHeight}
           />
-          {points.map((d, i) => {
+          {points.map((d) => {
             const x = xScale(new Date(d.order_date));
             let yOffset = innerHeight;
             return (
-              <g key={i} onMouseMove={(e) => handleMouseMove(e, d)}>
+              <g key={`${d.sample_id}-${d.order_date}`} onMouseMove={(e) => handleMouseMove(e, d)}>
                 {KINGDOMS.map((kingdom) => {
-                  const val = (d[kingdom] as number | undefined) ?? 0;
+                  const val = d[kingdom] ?? 0;
                   if (val === 0) return null;
                   const barHeight = innerHeight - yScale(val);
                   yOffset -= barHeight;
@@ -118,23 +104,6 @@ export default function KingdomBreakdownChart({
               </g>
             );
           })}
-          <AxisBottom
-            top={innerHeight}
-            scale={xScale}
-            tickValues={weekTicks(xScale.domain()[0], xScale.domain()[1])}
-            tickFormat={(d) => `W${isoWeek(d as Date)}`}
-            tickStroke="#d1d1d6"
-            stroke="#d1d1d6"
-            tickLabelProps={{ ...AXIS_TICK_LABEL_PROPS, textAnchor: "middle" }}
-          />
-          <AxisLeft
-            scale={yScale}
-            numTicks={4}
-            tickFormat={(d) => formatCount(d as number)}
-            tickStroke="#d1d1d6"
-            stroke="#d1d1d6"
-            tickLabelProps={{ ...AXIS_TICK_LABEL_PROPS, textAnchor: "end", dx: -4, dy: 3 }}
-          />
         </Group>
       </svg>
 
@@ -158,7 +127,7 @@ export default function KingdomBreakdownChart({
           <div className="font-medium">{tooltip.data.sample_id}</div>
           <div className="text-gray-400 mb-1">{tooltip.data.order_date}</div>
           {KINGDOMS.map((k) => {
-            const v = (tooltip.data[k] as number | undefined) ?? 0;
+            const v = tooltip.data[k] ?? 0;
             return v > 0 ? (
               <div key={k} className="flex items-center gap-1.5">
                 <span
