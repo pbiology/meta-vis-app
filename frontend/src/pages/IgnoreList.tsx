@@ -1,31 +1,29 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getIgnorelist, removeFromIgnorelist, updateIgnorelistNote } from "../api/alerts";
+import {
+  useIgnorelist,
+  useRemoveFromIgnorelist,
+  useUpdateIgnorelistNote,
+} from "../hooks/queries/useAlerts";
 import { useAuth } from "../context/AuthContext";
 import type { IgnorelistItem } from "../api/types";
 
 export default function IgnoreList() {
   const navigate = useNavigate();
   const { role } = useAuth();
-  const [items, setItems] = useState<IgnorelistItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [filter, setFilter] = useState<string | null>(null);
 
-  useEffect(() => {
-    getIgnorelist(filter)
-      .then(setItems)
-      .catch(() => setError("Failed to load ignorelist."))
-      .finally(() => setLoading(false));
-  }, [filter]);
+  const ignorelistQ = useIgnorelist(filter);
+  const removeMutation = useRemoveFromIgnorelist();
+  const updateNoteMutation = useUpdateIgnorelistNote();
+
+  const items = ignorelistQ.data ?? [];
 
   async function handleRemove(taxonId: number) {
     try {
-      await removeFromIgnorelist(taxonId);
-      setItems((prev) => prev.filter((i) => i.taxon_id !== taxonId));
+      await removeMutation.mutateAsync(taxonId);
     } catch {
       alert("Failed to remove taxon.");
     }
@@ -37,17 +35,14 @@ export default function IgnoreList() {
   }
 
   async function saveEdit(taxonId: number) {
-    setSaving(true);
     try {
-      await updateIgnorelistNote(taxonId, editText.trim() || null);
-      setItems((prev) =>
-        prev.map((i) => (i.taxon_id === taxonId ? { ...i, reason: editText.trim() || null } : i))
-      );
+      await updateNoteMutation.mutateAsync({
+        taxonId,
+        reason: editText.trim() || null,
+      });
       setEditingId(null);
     } catch {
       alert("Failed to save note.");
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -107,15 +102,17 @@ export default function IgnoreList() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-5">
-        {loading && (
+        {ignorelistQ.isLoading && (
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">
             Loading…
           </div>
         )}
-        {error && (
-          <div className="flex items-center justify-center h-40 text-sm text-red-500">{error}</div>
+        {ignorelistQ.isError && (
+          <div className="flex items-center justify-center h-40 text-sm text-red-500">
+            Failed to load ignorelist.
+          </div>
         )}
-        {!loading && !error && (
+        {!ignorelistQ.isLoading && !ignorelistQ.isError && (
           <section className="bg-white border border-gray-100 rounded-xl">
             {items.length === 0 ? (
               <p className="px-4 py-10 text-center text-sm text-gray-400">
@@ -176,7 +173,7 @@ export default function IgnoreList() {
                             />
                             <button
                               onClick={() => saveEdit(item.taxon_id)}
-                              disabled={saving}
+                              disabled={updateNoteMutation.isPending}
                               className="text-xs text-blue-500 hover:text-blue-700 transition-colors disabled:opacity-50"
                             >
                               Save
