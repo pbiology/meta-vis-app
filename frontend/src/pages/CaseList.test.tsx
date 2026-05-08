@@ -105,6 +105,12 @@ describe("CaseList", () => {
     expect(await screen.findByText(/no cases found/i)).toBeInTheDocument();
   });
 
+  it("renders an error message when the cases endpoint 500s", async () => {
+    server.use(http.get(`${API}/cases`, () => new HttpResponse(null, { status: 500 })));
+    renderWithProviders(<CaseList />, { route: "/cases" });
+    expect(await screen.findByText(/failed to load cases/i)).toBeInTheDocument();
+  });
+
   it("polls every 30s — verified by advancing fake timers", async () => {
     vi.useFakeTimers();
     let calls = 0;

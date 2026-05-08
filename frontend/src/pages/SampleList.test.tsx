@@ -67,4 +67,10 @@ describe("SampleList", () => {
     renderWithProviders(<SampleList />, { route: "/samples" });
     expect(await screen.findByText(/no samples match this filter/i)).toBeInTheDocument();
   });
+
+  it("renders an error message when the samples endpoint 500s", async () => {
+    server.use(http.get(`${API}/samples`, () => new HttpResponse(null, { status: 500 })));
+    renderWithProviders(<SampleList />, { route: "/samples" });
+    expect(await screen.findByText(/failed to load samples/i)).toBeInTheDocument();
+  });
 });

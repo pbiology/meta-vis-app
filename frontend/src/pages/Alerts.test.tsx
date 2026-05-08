@@ -76,4 +76,10 @@ describe("Alerts", () => {
     renderWithProviders(<Alerts />, { route: "/alerts" });
     expect(await screen.findByText(/no outbreak signals detected/i)).toBeInTheDocument();
   });
+
+  it("renders an error message when outbreaks endpoint 500s", async () => {
+    server.use(http.get(`${API}/alerts/outbreaks`, () => new HttpResponse(null, { status: 500 })));
+    renderWithProviders(<Alerts />, { route: "/alerts" });
+    expect(await screen.findByText(/failed to load outbreak alerts/i)).toBeInTheDocument();
+  });
 });

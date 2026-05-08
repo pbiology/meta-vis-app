@@ -27,10 +27,15 @@ export const caseKeys = {
   multiqc: (caseId: string) => ["cases", caseId, "multiqc"] as const,
 };
 
-export function useCases(params: GetCasesParams = {}) {
+interface PollOptions {
+  refetchInterval?: number;
+}
+
+export function useCases(params: GetCasesParams = {}, opts: PollOptions = {}) {
   return useQuery({
     queryKey: caseKeys.list(params),
     queryFn: () => getCases(params),
+    refetchInterval: opts.refetchInterval,
   });
 }
 
@@ -50,10 +55,11 @@ export function useCaseSamples(caseId: string, type: string | null = null) {
   });
 }
 
-export function useCaseStats() {
+export function useCaseStats(opts: PollOptions = {}) {
   return useQuery({
     queryKey: caseKeys.stats(),
     queryFn: () => getCaseStats(),
+    refetchInterval: opts.refetchInterval,
   });
 }
 

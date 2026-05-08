@@ -1,97 +1,47 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { getCases, deleteCase, getCaseStats, getPathogenCases } from "../api/cases";
+import { useCases, useCaseStats, useDeleteCase, usePathogenCases } from "../hooks/queries/useCases";
+import { useOutbreaks } from "../hooks/queries/useAlerts";
+import { useNtcContaminantCaseIds } from "../hooks/queries/useNtc";
 import type { ReviewedFilter } from "../api/cases";
 import Badge from "../components/Badge";
-import { getOutbreaks } from "../api/alerts";
-import { getNtcContaminantCaseIds } from "../api/ntc";
 import { useAuth } from "../context/AuthContext";
 import { singleAnalysisFilter } from "../lib/analysisPreference";
-import type { CaseStats, CasesResponse } from "../api/types";
 
-const EMPTY: CasesResponse = {
-  items: [],
-  total: 0,
-  pages: 1,
-  ticket_links_enabled: false,
-};
+const POLL_MS = 30_000;
 
 export default function CaseList() {
-  const [data, setData] = useState<CasesResponse>(EMPTY);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [outbreakCaseIds, setOutbreakCaseIds] = useState<Set<string>>(new Set());
-  const [pathogenCaseIds, setPathogenCaseIds] = useState<Set<string>>(new Set());
-  const [ntcContaminantCaseIds, setNtcContaminantCaseIds] = useState<Set<string>>(new Set());
-  const [stats, setStats] = useState<CaseStats>({ total: 0, pending: 0, reviewed: 0 });
   const { role, preferences, preferencesLoaded } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const filter = searchParams.get("filter") ?? "all";
   const analysisFilter = searchParams.get("analysis") ?? "all";
   const visibleAnalysis = preferences?.visible_analysis_types;
+  const effectiveAnalysis = singleAnalysisFilter(visibleAnalysis, analysisFilter) ?? "all";
 
-  const load = useCallback(
-    async (silent = false) => {
-      if (!preferencesLoaded) return;
-      if (!silent) setLoading(true);
-      setError(null);
-      try {
-        const effective = singleAnalysisFilter(visibleAnalysis, analysisFilter);
-        const result = await getCases({
-          page,
-          search,
-          reviewed: filter as ReviewedFilter,
-          analysisType: effective ?? "all",
-        });
-        setData(result);
-        getOutbreaks(14)
-          .then((d) => setOutbreakCaseIds(new Set(d.outbreaks.flatMap((o) => o.case_ids))))
-          .catch(() => {});
-        getPathogenCases()
-          .then((d) => setPathogenCaseIds(new Set(d.case_ids)))
-          .catch(() => {});
-        getNtcContaminantCaseIds()
-          .then((d) => setNtcContaminantCaseIds(new Set(d.case_ids)))
-          .catch(() => {});
-      } catch {
-        setError("Failed to load cases.");
-      } finally {
-        getPathogenCases()
-          .then((d) => setPathogenCaseIds(new Set(d.case_ids)))
-          .catch(() => {});
-        getNtcContaminantCaseIds()
-          .then((d) => setNtcContaminantCaseIds(new Set(d.case_ids)))
-          .catch(() => {});
-        setLoading(false);
-      }
+  const casesQ = useCases(
+    {
+      page,
+      search,
+      reviewed: filter as ReviewedFilter,
+      analysisType: effectiveAnalysis,
     },
-    [page, search, filter, analysisFilter, visibleAnalysis, preferencesLoaded]
+    { refetchInterval: preferencesLoaded ? POLL_MS : undefined }
   );
+  const statsQ = useCaseStats({ refetchInterval: POLL_MS });
+  const outbreaksQ = useOutbreaks(14);
+  const pathogenCasesQ = usePathogenCases();
+  const ntcCaseIdsQ = useNtcContaminantCaseIds();
+  const deleteMutation = useDeleteCase();
 
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  useEffect(() => {
-    getCaseStats()
-      .then(setStats)
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      load(true);
-      getCaseStats()
-        .then(setStats)
-        .catch(() => {});
-    }, 30_000);
-    return () => clearInterval(interval);
-  }, [load]);
+  const data = casesQ.data ?? { items: [], total: 0, pages: 1, ticket_links_enabled: false };
+  const stats = statsQ.data ?? { total: 0, pending: 0, reviewed: 0 };
+  const outbreakCaseIds = new Set(outbreaksQ.data?.outbreaks.flatMap((o) => o.case_ids) ?? []);
+  const pathogenCaseIds = new Set(pathogenCasesQ.data?.case_ids ?? []);
+  const ntcContaminantCaseIds = new Set(ntcCaseIdsQ.data?.case_ids ?? []);
 
   function handleSearch(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -101,23 +51,18 @@ export default function CaseList() {
 
   async function handleDelete() {
     if (!deleteTarget) return;
-    setDeleting(true);
     try {
-      await deleteCase(deleteTarget);
+      await deleteMutation.mutateAsync(deleteTarget);
       setDeleteTarget(null);
-      load();
-      getCaseStats()
-        .then(setStats)
-        .catch(() => {});
     } catch {
       alert("Failed to delete case.");
-    } finally {
-      setDeleting(false);
     }
   }
 
   const cases = data.items ?? [];
   const ticketLinksEnabled = data.ticket_links_enabled ?? false;
+  const isLoading = casesQ.isLoading;
+  const isError = casesQ.isError;
 
   return (
     <div className="flex flex-col h-full">
@@ -198,15 +143,17 @@ export default function CaseList() {
       </div>
 
       <div className="flex-1 overflow-auto">
-        {loading && (
+        {isLoading && (
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">
             Loading…
           </div>
         )}
-        {error && (
-          <div className="flex items-center justify-center h-40 text-sm text-red-500">{error}</div>
+        {isError && (
+          <div className="flex items-center justify-center h-40 text-sm text-red-500">
+            Failed to load cases.
+          </div>
         )}
-        {!loading && !error && (
+        {!isLoading && !isError && (
           <table className="w-full text-left border-collapse">
             <thead className="sticky top-0 bg-white z-10">
               <tr>
@@ -417,10 +364,10 @@ export default function CaseList() {
               </button>
               <button
                 onClick={handleDelete}
-                disabled={deleting}
+                disabled={deleteMutation.isPending}
                 className="px-3 py-1.5 text-xs font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
               >
-                {deleting ? "Deleting…" : "Delete case"}
+                {deleteMutation.isPending ? "Deleting…" : "Delete case"}
               </button>
             </div>
           </div>

@@ -1,23 +1,17 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getSamples } from "../api/samples";
+import { useSamples } from "../hooks/queries/useSamples";
 import Badge from "../components/Badge";
 import { fmt, fmtPct } from "../utils/format";
 import { useAuth } from "../context/AuthContext";
 import { singleAnalysisFilter } from "../lib/analysisPreference";
-import type { PaginatedResponse, Sample } from "../api/types";
 
 const FILTERS = ["All", "Samples", "Controls"] as const;
 type Filter = (typeof FILTERS)[number];
 
-const EMPTY: PaginatedResponse<Sample> = { items: [], total: 0, pages: 1, page: 1 };
-
 export default function SampleList() {
-  const { preferences, preferencesLoaded } = useAuth();
+  const { preferences } = useAuth();
   const visibleAnalysis = preferences?.visible_analysis_types;
-  const [data, setData] = useState<PaginatedResponse<Sample>>(EMPTY);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<Filter>("All");
   const [search, setSearch] = useState("");
@@ -25,30 +19,18 @@ export default function SampleList() {
   const navigate = useNavigate();
 
   const filterParam = filter === "Samples" ? "sample" : filter === "Controls" ? "controls" : "";
+  const analysisType = singleAnalysisFilter(visibleAnalysis);
 
-  const load = useCallback(async () => {
-    if (!preferencesLoaded) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const analysisType = singleAnalysisFilter(visibleAnalysis);
-      const result = await getSamples({
-        page,
-        search,
-        filter: filterParam,
-        analysisType,
-      });
-      setData(result);
-    } catch {
-      setError("Failed to load samples.");
-    } finally {
-      setLoading(false);
-    }
-  }, [page, search, filterParam, visibleAnalysis, preferencesLoaded]);
+  const samplesQ = useSamples({
+    page,
+    search,
+    filter: filterParam,
+    analysisType,
+  });
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const data = samplesQ.data ?? { items: [], total: 0, pages: 1, page: 1 };
+  const isLoading = samplesQ.isLoading;
+  const isError = samplesQ.isError;
 
   function handleSearch(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -106,15 +88,17 @@ export default function SampleList() {
       </div>
 
       <div className="flex-1 overflow-auto">
-        {loading && (
+        {isLoading && (
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">
             Loading…
           </div>
         )}
-        {error && (
-          <div className="flex items-center justify-center h-40 text-sm text-red-500">{error}</div>
+        {isError && (
+          <div className="flex items-center justify-center h-40 text-sm text-red-500">
+            Failed to load samples.
+          </div>
         )}
-        {!loading && !error && (
+        {!isLoading && !isError && (
           <table className="w-full text-left border-collapse">
             <thead className="sticky top-0 bg-white z-10">
               <tr>
