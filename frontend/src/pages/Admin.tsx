@@ -1,6 +1,11 @@
-import { useState, useEffect } from "react";
-import { getUsers, createUser, updateUserRole, deleteUser } from "../api/users";
-import type { AdminUser, Role } from "../api/types";
+import { useState } from "react";
+import {
+  useCreateUser,
+  useDeleteUser,
+  useUpdateUserRole,
+  useUsers,
+} from "../hooks/queries/useUsers";
+import type { Role } from "../api/types";
 import { axiosErrorDetail } from "../utils/axiosError";
 
 const ROLES: Role[] = ["reader", "writer", "admin"];
@@ -12,31 +17,24 @@ const ROLE_STYLES: Record<Role, string> = {
 };
 
 export default function Admin() {
-  const [users, setUsers] = useState<AdminUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const usersQ = useUsers();
+  const updateRoleMutation = useUpdateUserRole();
+  const createMutation = useCreateUser();
+  const deleteMutation = useDeleteUser();
 
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState("");
   const [newPass, setNewPass] = useState("");
   const [newRole, setNewRole] = useState<Role>("reader");
-  const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
-    getUsers()
-      .then(setUsers)
-      .catch(() => setError("Failed to load users."))
-      .finally(() => setLoading(false));
-  }, []);
+  const users = usersQ.data ?? [];
 
   async function handleRoleChange(username: string, role: Role) {
     try {
-      await updateUserRole(username, role);
-      setUsers((prev) => prev.map((u) => (u.username === username ? { ...u, role } : u)));
+      await updateRoleMutation.mutateAsync({ username, role });
     } catch {
       alert("Failed to update role.");
     }
@@ -44,33 +42,29 @@ export default function Admin() {
 
   async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setAdding(true);
     setAddError(null);
     try {
-      const created = await createUser(newName.trim(), newPass, newRole);
-      setUsers((prev) => [...prev, created]);
+      await createMutation.mutateAsync({
+        username: newName.trim(),
+        password: newPass,
+        role: newRole,
+      });
       setNewName("");
       setNewPass("");
       setNewRole("reader");
       setShowAdd(false);
     } catch (err) {
       setAddError(axiosErrorDetail(err, "Failed to create user."));
-    } finally {
-      setAdding(false);
     }
   }
 
   async function handleDelete() {
     if (!deleteTarget) return;
-    setDeleting(true);
     try {
-      await deleteUser(deleteTarget);
-      setUsers((prev) => prev.filter((u) => u.username !== deleteTarget));
+      await deleteMutation.mutateAsync(deleteTarget);
       setDeleteTarget(null);
     } catch {
       alert("Failed to delete user.");
-    } finally {
-      setDeleting(false);
     }
   }
 
@@ -84,15 +78,17 @@ export default function Admin() {
       </div>
 
       <div className="flex-1 overflow-auto">
-        {loading && (
+        {usersQ.isLoading && (
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">
             Loading…
           </div>
         )}
-        {error && (
-          <div className="flex items-center justify-center h-40 text-sm text-red-500">{error}</div>
+        {usersQ.isError && (
+          <div className="flex items-center justify-center h-40 text-sm text-red-500">
+            Failed to load users.
+          </div>
         )}
-        {!loading && !error && (
+        {!usersQ.isLoading && !usersQ.isError && (
           <table className="w-full text-left border-collapse">
             <thead className="sticky top-0 bg-white z-10">
               <tr>
@@ -191,8 +187,12 @@ export default function Admin() {
                 >
                   Cancel
                 </button>
-                <button type="submit" disabled={adding} className="btn-primary disabled:opacity-50">
-                  {adding ? "Adding…" : "Add user"}
+                <button
+                  type="submit"
+                  disabled={createMutation.isPending}
+                  className="btn-primary disabled:opacity-50"
+                >
+                  {createMutation.isPending ? "Adding…" : "Add user"}
                 </button>
               </div>
             </form>
@@ -214,10 +214,10 @@ export default function Admin() {
               </button>
               <button
                 onClick={handleDelete}
-                disabled={deleting}
+                disabled={deleteMutation.isPending}
                 className="btn-primary disabled:opacity-50"
               >
-                {deleting ? "Removing…" : "Remove user"}
+                {deleteMutation.isPending ? "Removing…" : "Remove user"}
               </button>
             </div>
           </div>
