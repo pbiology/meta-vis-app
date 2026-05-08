@@ -1,47 +1,27 @@
 import { describe, it, expect } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Routes, Route, Link } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render } from "@testing-library/react";
+import { Routes, Route, Link } from "react-router-dom";
 import { http, HttpResponse } from "msw";
 import { server } from "../test/server";
 import { taxprofilerProfile, tranaProfile } from "../test/fixtures/samples";
-import { AuthProvider } from "../context/AuthContext";
-import { ReportBuilderProvider } from "../context/ReportBuilderContext";
+import { renderWithProviders } from "../test/utils";
 import SampleDetail from "./SampleDetail";
 
 const API = "*/api/v1";
 
-function seedAuth() {
-  localStorage.setItem("username", "tester");
-  localStorage.setItem("role", "admin");
-}
-
 function renderTwoSamples(initial: string) {
-  seedAuth();
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
-  });
-  return render(
-    <QueryClientProvider client={client}>
-      <AuthProvider>
-        <ReportBuilderProvider>
-          <MemoryRouter
-            initialEntries={[initial]}
-            future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-          >
-            <nav>
-              <Link to="/samples/A">go-A</Link>
-              <Link to="/samples/B">go-B</Link>
-            </nav>
-            <Routes>
-              <Route path="/samples/:sampleId" element={<SampleDetail />} />
-            </Routes>
-          </MemoryRouter>
-        </ReportBuilderProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+  return renderWithProviders(
+    <>
+      <nav>
+        <Link to="/samples/A">go-A</Link>
+        <Link to="/samples/B">go-B</Link>
+      </nav>
+      <Routes>
+        <Route path="/samples/:sampleId" element={<SampleDetail />} />
+      </Routes>
+    </>,
+    { route: initial }
   );
 }
 

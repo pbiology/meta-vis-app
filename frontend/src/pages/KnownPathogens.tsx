@@ -1,26 +1,20 @@
-import { useState, useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { getPathogens, addToPathogens, removeFromPathogens } from "../api/alerts";
+import { useState } from "react";
+import {
+  useAddToPathogens,
+  usePathogens,
+  useRemoveFromPathogens,
+} from "../hooks/queries/useAlerts";
 import { useAuth } from "../context/AuthContext";
 import type { PathogenItem } from "../api/types";
 import AddTaxonModal from "../components/AddTaxonModal";
 
 export default function KnownPathogens() {
   const { role } = useAuth();
-  const queryClient = useQueryClient();
-  const [items, setItems] = useState<PathogenItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: items = [], isLoading, isError } = usePathogens();
+  const addMutation = useAddToPathogens();
+  const removeMutation = useRemoveFromPathogens();
   const [removeTarget, setRemoveTarget] = useState<PathogenItem | null>(null);
-  const [removing, setRemoving] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-
-  useEffect(() => {
-    getPathogens()
-      .then(setItems)
-      .catch(() => setError("Failed to load pathogens list."))
-      .finally(() => setLoading(false));
-  }, []);
 
   async function handleAdd(
     id: number,
@@ -28,23 +22,21 @@ export default function KnownPathogens() {
     superkingdom: string | null,
     notes: string | null
   ) {
-    const doc = await addToPathogens(id, name, superkingdom ?? "Viruses", notes);
-    setItems((prev) => [doc, ...prev]);
-    void queryClient.invalidateQueries({ queryKey: ["pathogens"] });
+    await addMutation.mutateAsync({
+      taxonId: id,
+      taxonName: name,
+      superkingdom: superkingdom ?? "Viruses",
+      notes,
+    });
   }
 
   async function handleRemove() {
     if (!removeTarget) return;
-    setRemoving(true);
     try {
-      await removeFromPathogens(removeTarget.taxon_id);
-      setItems((prev) => prev.filter((i) => i.taxon_id !== removeTarget.taxon_id));
+      await removeMutation.mutateAsync(removeTarget.taxon_id);
       setRemoveTarget(null);
-      void queryClient.invalidateQueries({ queryKey: ["pathogens"] });
     } catch {
       alert("Failed to remove taxon.");
-    } finally {
-      setRemoving(false);
     }
   }
 
@@ -60,15 +52,17 @@ export default function KnownPathogens() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-5">
-        {loading && (
+        {isLoading && (
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">
             Loading…
           </div>
         )}
-        {error && (
-          <div className="flex items-center justify-center h-40 text-sm text-red-500">{error}</div>
+        {isError && (
+          <div className="flex items-center justify-center h-40 text-sm text-red-500">
+            Failed to load pathogens list.
+          </div>
         )}
-        {!loading && !error && (
+        {!isLoading && !isError && (
           <section className="bg-white border border-gray-100 rounded-xl">
             {items.length === 0 ? (
               <p className="px-4 py-10 text-center text-sm text-gray-400">
@@ -163,10 +157,10 @@ export default function KnownPathogens() {
               </button>
               <button
                 onClick={handleRemove}
-                disabled={removing}
+                disabled={removeMutation.isPending}
                 className="px-3 py-1.5 text-xs font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
               >
-                {removing ? "Removing…" : "Remove"}
+                {removeMutation.isPending ? "Removing…" : "Remove"}
               </button>
             </div>
           </div>
