@@ -36,6 +36,27 @@ Object.defineProperty(globalThis, "sessionStorage", {
   configurable: true,
 });
 
+// jsdom does not implement ResizeObserver, but charts in components/ntc-trends
+// use it via useContainerWidth. Provide a no-op polyfill so component renders
+// don't throw during tests.
+class NoopResizeObserver implements ResizeObserver {
+  observe() {
+    /* no-op: tests don't react to size changes */
+  }
+  unobserve() {
+    /* no-op */
+  }
+  disconnect() {
+    /* no-op */
+  }
+}
+if (globalThis.ResizeObserver === undefined) {
+  Object.defineProperty(globalThis, "ResizeObserver", {
+    value: NoopResizeObserver,
+    configurable: true,
+  });
+}
+
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => {
   cleanup();
