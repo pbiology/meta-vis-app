@@ -1,8 +1,6 @@
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
-import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
-import { getMyStats } from "../api/users";
-import type { MyStats } from "../api/types";
+import { useMyStats } from "../hooks/queries/useUsers";
 import ErrorBoundary from "./ErrorBoundary";
 
 interface NavItemProps {
@@ -35,13 +33,7 @@ export default function Layout() {
   const { user, role, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [stats, setStats] = useState<MyStats | null>(null);
-
-  useEffect(() => {
-    getMyStats()
-      .then(setStats)
-      .catch(() => {});
-  }, []);
+  const { data: stats } = useMyStats();
 
   function handleLogout() {
     logout();
