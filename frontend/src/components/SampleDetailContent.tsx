@@ -1,15 +1,14 @@
 import { useState, useEffect, useMemo } from "react";
 import MetavalDetailsContent from "./MetavalDetailsContent";
 import TaxonDetailContent from "./TaxonDetailContent";
-import { useQuery } from "@tanstack/react-query";
-import { getSample, getProfile, getNtcProfiles } from "../api/samples";
 import Badge, { type BadgeType } from "./Badge";
 import { MetricStrip } from "./MetricStrip";
 import TaxonomyTable from "./TaxonomyTable";
 import { useReportBuilder } from "../context/ReportBuilderContext";
 import { useAuth } from "../context/AuthContext";
-import { getMetavalForSample } from "../api/metaval";
-import { getOutbreaks, getPathogens } from "../api/alerts";
+import { useNtcProfiles, useSample, useSampleProfile } from "../hooks/queries/useSamples";
+import { useMetavalForSample } from "../hooks/queries/useMetaval";
+import { useOutbreaks, usePathogens } from "../hooks/queries/useAlerts";
 import { fmt, fmtPct } from "../utils/format";
 import { TAXON_ID_HUMAN } from "../utils/taxonomy";
 import type { PathogenItem, SampleProfile, SampleProfileEntry } from "../api/types";
@@ -289,47 +288,27 @@ export default function SampleDetailContent({
     setMetavalDisplayCount(10);
   }, [activeTab]);
 
-  const {
-    data: sample,
-    isLoading: sampleLoading,
-    isError: sampleError,
-  } = useQuery({
-    queryKey: ["sample", sampleId],
-    queryFn: () => getSample(sampleId),
-  });
+  const { data: sample, isLoading: sampleLoading, isError: sampleError } = useSample(sampleId);
 
   const {
     data: profile,
     isLoading: profileLoading,
     isError: profileError,
-  } = useQuery({
-    queryKey: ["profile", sampleId],
-    queryFn: () => getProfile(sampleId),
-  });
+  } = useSampleProfile(sampleId);
 
-  const { data: metavalResults = [], isError: metavalError } = useQuery({
-    queryKey: ["metaval", sampleId],
-    queryFn: () => getMetavalForSample(sampleId),
+  const { data: metavalResults = [], isError: metavalError } = useMetavalForSample(sampleId, {
     enabled: !!sample,
   });
 
-  const { data: ntcData, isError: ntcError } = useQuery({
-    queryKey: ["ntcProfiles", sampleId],
-    queryFn: () => getNtcProfiles(sampleId),
+  const { data: ntcData, isError: ntcError } = useNtcProfiles(sampleId, {
     enabled: !!sample,
   });
   const ntcProfiles = ntcData?.profiles ?? [];
   const contaminantConfig = ntcData?.contaminant_config ?? null;
 
-  const { data: outbreakData, isError: outbreakError } = useQuery({
-    queryKey: ["outbreaks", { windowDays: 14 }],
-    queryFn: () => getOutbreaks(14),
-  });
+  const { data: outbreakData, isError: outbreakError } = useOutbreaks(14);
 
-  const { data: pathogenList = [], isError: pathogenError } = useQuery({
-    queryKey: ["pathogens"],
-    queryFn: () => getPathogens(),
-  });
+  const { data: pathogenList = [], isError: pathogenError } = usePathogens();
 
   const outbreakTaxonIds = useMemo(
     () => new Set(outbreakData?.outbreaks?.map((o) => o.taxon_id) ?? []),

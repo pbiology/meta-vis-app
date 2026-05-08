@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useQuery } from "@tanstack/react-query";
 import {
   getTaxon,
   getTaxonOccurrences,
@@ -9,7 +8,7 @@ import {
   getBvbrcGenomes,
   getBvbrcSpecialtyGenes,
 } from "../api/taxa";
-import { getPathogens } from "../api/alerts";
+import { usePathogens } from "../hooks/queries/useAlerts";
 import { useAuth } from "../context/AuthContext";
 import { useReportBuilder } from "../context/ReportBuilderContext";
 import { fmt } from "../utils/format";
@@ -1084,10 +1083,7 @@ export default function TaxonDetailContent({
 
   const canEdit = role === "writer" || role === "admin";
 
-  const { data: pathogenList = [] } = useQuery({
-    queryKey: ["pathogens"],
-    queryFn: () => getPathogens(),
-  });
+  const { data: pathogenList = [] } = usePathogens();
 
   useEffect(() => {
     setTaxon(null);

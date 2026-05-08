@@ -1,8 +1,10 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
-import { getCase, getCaseSamples } from "../../api/cases";
+import { useQueries } from "@tanstack/react-query";
 import { getProfile } from "../../api/samples";
-import { getPathogens } from "../../api/alerts";
 import { getSubject, type Subject } from "../../api/subjects";
+import { useCase, useCaseSamples } from "../../hooks/queries/useCases";
+import { usePathogens } from "../../hooks/queries/useAlerts";
+import { sampleKeys } from "../../hooks/queries/useSamples";
+import { subjectKeys } from "../../hooks/queries/useSubjects";
 import type { CaseListItem, CaseNote, Sample, SampleProfile } from "../../api/types";
 import { compareBySampleType } from "../../utils/sampleOrdering";
 
@@ -213,21 +215,21 @@ export function useReportData(
   caseId: string,
   selectionsBySampleId: Record<string, number[]>
 ): UseReportDataResult {
-  const caseQ = useQuery({ queryKey: ["case", caseId], queryFn: () => getCase(caseId) });
-  const samplesQ = useQuery({
-    queryKey: ["caseSamples", caseId],
-    queryFn: () => getCaseSamples(caseId),
-  });
-  const pathogensQ = useQuery({ queryKey: ["pathogens"], queryFn: getPathogens });
+  const caseQ = useCase(caseId);
+  const samplesQ = useCaseSamples(caseId);
+  const pathogensQ = usePathogens();
 
   const samples = samplesQ.data ?? [];
 
   const profileQueries = useQueries({
-    queries: samples.map((s) => ({
-      queryKey: ["profile", s._id ?? s.sample_id],
-      queryFn: () => getProfile((s._id ?? s.sample_id) as string),
-      enabled: Boolean(s._id ?? s.sample_id),
-    })),
+    queries: samples.map((s) => {
+      const id = (s._id ?? s.sample_id) as string;
+      return {
+        queryKey: sampleKeys.profile(id),
+        queryFn: () => getProfile(id),
+        enabled: Boolean(id),
+      };
+    }),
   });
 
   const subjectIds = Array.from(
@@ -235,7 +237,7 @@ export function useReportData(
   );
   const subjectQueries = useQueries({
     queries: subjectIds.map((id) => ({
-      queryKey: ["subject", id],
+      queryKey: subjectKeys.detail(id),
       queryFn: () => getSubject(id),
     })),
   });
