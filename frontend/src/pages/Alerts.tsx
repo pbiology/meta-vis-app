@@ -1,41 +1,29 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
-import { getOutbreaks, getIgnorelist, addToIgnorelist } from "../api/alerts";
+import { useAddToIgnorelist, useIgnorelist, useOutbreaks } from "../hooks/queries/useAlerts";
 import { useAuth } from "../context/AuthContext";
 import { multiAnalysisFilter } from "../lib/analysisPreference";
-import type { IgnorelistItem, Outbreak, OutbreaksResponse } from "../api/types";
+import type { Outbreak } from "../api/types";
 
 export default function Alerts() {
   const navigate = useNavigate();
-  const { role, preferences, preferencesLoaded } = useAuth();
+  const { role, preferences } = useAuth();
   const location = useLocation();
   const visibleAnalysis = preferences?.visible_analysis_types;
 
-  const [data, setData] = useState<OutbreaksResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [windowDays, setWindowDays] = useState(14);
-  const [ignorelist, setIgnorelist] = useState<IgnorelistItem[]>([]);
-  const [ignoring, setIgnoring] = useState<number | null>(null);
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
   const sectionRefs = useRef<Record<number, HTMLElement | null>>({});
 
-  function load() {
-    if (!preferencesLoaded) return;
-    setLoading(true);
-    const analysisTypes = multiAnalysisFilter(visibleAnalysis);
-    Promise.all([getOutbreaks(windowDays, analysisTypes), getIgnorelist()])
-      .then(([outbreakData, ignoreData]) => {
-        setData(outbreakData);
-        setIgnorelist(ignoreData);
-      })
-      .catch(() => setError("Failed to load outbreak alerts."))
-      .finally(() => setLoading(false));
-  }
+  const analysisTypes = multiAnalysisFilter(visibleAnalysis);
+  const outbreaksQ = useOutbreaks(windowDays, analysisTypes);
+  const ignorelistQ = useIgnorelist();
+  const addToIgnoreMutation = useAddToIgnorelist();
 
-  useEffect(() => {
-    load();
-  }, [windowDays, visibleAnalysis, preferencesLoaded]);
+  const data = outbreaksQ.data ?? null;
+  const ignorelist = ignorelistQ.data ?? [];
+  const isLoading = outbreaksQ.isLoading || ignorelistQ.isLoading;
+  const isError = outbreaksQ.isError || ignorelistQ.isError;
 
   useEffect(() => {
     if (!data || !location.hash) return;
@@ -49,20 +37,23 @@ export default function Alerts() {
   }, [data, location.hash]);
 
   async function handleIgnore(outbreak: Outbreak) {
-    setIgnoring(outbreak.taxon_id);
     try {
       const superkingdom = outbreak.superkingdoms?.[0] || "Viruses";
-      await addToIgnorelist(outbreak.taxon_id, outbreak.taxon_name, superkingdom);
-      load();
+      await addToIgnoreMutation.mutateAsync({
+        taxonId: outbreak.taxon_id,
+        taxonName: outbreak.taxon_name,
+        superkingdom,
+      });
     } catch {
       alert("Failed to add taxon to ignorelist.");
-    } finally {
-      setIgnoring(null);
     }
   }
 
   const outbreaks = data?.outbreaks || [];
   const ignored = new Set(ignorelist.map((i) => i.taxon_id));
+  const ignoringTaxonId = addToIgnoreMutation.isPending
+    ? (addToIgnoreMutation.variables?.taxonId ?? null)
+    : null;
 
   return (
     <div className="flex flex-col h-full">
@@ -102,15 +93,17 @@ export default function Alerts() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4">
-        {loading && (
+        {isLoading && (
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">
             Loading…
           </div>
         )}
-        {error && (
-          <div className="flex items-center justify-center h-40 text-sm text-red-500">{error}</div>
+        {isError && (
+          <div className="flex items-center justify-center h-40 text-sm text-red-500">
+            Failed to load outbreak alerts.
+          </div>
         )}
-        {!loading && !error && outbreaks.length === 0 && (
+        {!isLoading && !isError && outbreaks.length === 0 && (
           <div className="flex flex-col items-center justify-center h-40 gap-2">
             <svg className="w-8 h-8 text-green-300" viewBox="0 0 24 24" fill="none">
               <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
@@ -128,8 +121,8 @@ export default function Alerts() {
           </div>
         )}
 
-        {!loading &&
-          !error &&
+        {!isLoading &&
+          !isError &&
           outbreaks.map((outbreak) => (
             <section
               key={`${outbreak.taxon_id}-${outbreak.config_name}`}
@@ -174,10 +167,12 @@ export default function Alerts() {
                 {role !== "reader" && (
                   <button
                     onClick={() => handleIgnore(outbreak)}
-                    disabled={ignoring === outbreak.taxon_id || ignored.has(outbreak.taxon_id)}
+                    disabled={
+                      ignoringTaxonId === outbreak.taxon_id || ignored.has(outbreak.taxon_id)
+                    }
                     className="text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-50"
                   >
-                    {ignoring === outbreak.taxon_id
+                    {ignoringTaxonId === outbreak.taxon_id
                       ? "Ignoring…"
                       : ignored.has(outbreak.taxon_id)
                         ? "Ignored"

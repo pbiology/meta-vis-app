@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { getCases, getCaseStats, getPathogenCases } from "../api/cases";
-import { getOutbreaks } from "../api/alerts";
-import { getNtcContaminantCaseIds } from "../api/ntc";
-import type { CaseListItem, CaseStats } from "../api/types";
+import { useCases, useCaseStats, usePathogenCases } from "../hooks/queries/useCases";
+import { useOutbreaks } from "../hooks/queries/useAlerts";
+import { useNtcContaminantCaseIds } from "../hooks/queries/useNtc";
 import StatCard from "../components/dashboard/StatCard";
 import VolumeChart from "../components/dashboard/VolumeChart";
 import CaseRow from "../components/dashboard/CaseRow";
@@ -28,29 +27,23 @@ function todayLabel(): string {
 }
 
 export default function Dashboard() {
-  const [stats, setStats] = useState<CaseStats>({ total: 0, pending: 0, reviewed: 0 });
-  const [recent, setRecent] = useState<CaseListItem[]>([]);
-  const [outbreakIds, setOutbreakIds] = useState<Set<string>>(new Set());
-  const [pathogenIds, setPathogenIds] = useState<Set<string>>(new Set());
-  const [ntcIds, setNtcIds] = useState<Set<string>>(new Set());
+  const statsQ = useCaseStats();
+  const casesQ = useCases({ page: 1 });
+  const outbreaksQ = useOutbreaks(14);
+  const pathogenCasesQ = usePathogenCases();
+  const ntcCaseIdsQ = useNtcContaminantCaseIds();
 
-  useEffect(() => {
-    getCaseStats()
-      .then(setStats)
-      .catch(() => {});
-    getCases({ page: 1 })
-      .then((r) => setRecent(r.items.slice(0, 6)))
-      .catch(() => {});
-    getOutbreaks(14)
-      .then((d) => setOutbreakIds(new Set(d.outbreaks.flatMap((o) => o.case_ids))))
-      .catch(() => {});
-    getPathogenCases()
-      .then((d) => setPathogenIds(new Set(d.case_ids)))
-      .catch(() => {});
-    getNtcContaminantCaseIds()
-      .then((d) => setNtcIds(new Set(d.case_ids)))
-      .catch(() => {});
-  }, []);
+  const stats = statsQ.data ?? { total: 0, pending: 0, reviewed: 0 };
+  const recent = useMemo(() => casesQ.data?.items?.slice(0, 6) ?? [], [casesQ.data]);
+  const outbreakIds = useMemo(
+    () => new Set(outbreaksQ.data?.outbreaks.flatMap((o) => o.case_ids) ?? []),
+    [outbreaksQ.data]
+  );
+  const pathogenIds = useMemo(
+    () => new Set(pathogenCasesQ.data?.case_ids ?? []),
+    [pathogenCasesQ.data]
+  );
+  const ntcIds = useMemo(() => new Set(ntcCaseIdsQ.data?.case_ids ?? []), [ntcCaseIdsQ.data]);
 
   const signalsFor = useMemo(() => {
     return (caseId: string): SignalKind[] => {
@@ -61,6 +54,13 @@ export default function Dashboard() {
       return out;
     };
   }, [outbreakIds, pathogenIds, ntcIds]);
+
+  const hasError =
+    statsQ.isError ||
+    casesQ.isError ||
+    outbreaksQ.isError ||
+    pathogenCasesQ.isError ||
+    ntcCaseIdsQ.isError;
 
   const pending = (stats.pending as number | undefined) ?? 0;
   const pathogenFlags = pathogenIds.size;
@@ -85,6 +85,12 @@ export default function Dashboard() {
           </Link>
         </div>
       </header>
+
+      {hasError && (
+        <div className="px-6 py-2 bg-amber-50 border-b border-amber-200 text-xs text-amber-700 flex-shrink-0">
+          Some dashboard data failed to load — counts and signals may be incomplete.
+        </div>
+      )}
 
       <div
         className="flex-1 overflow-y-auto p-5 grid gap-3"
