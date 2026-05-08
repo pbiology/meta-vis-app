@@ -105,7 +105,7 @@ export default function CaseClassifierKrona({
             .map((s) => (
               <button
                 key={s._id as string}
-                onClick={() => setKronaSelectedSample(s._id as string)}
+                onClick={() => setKronaSelectedSample(s._id ?? null)}
                 className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
                   kronaSelectedSample === s._id
                     ? "bg-gray-900 text-white font-medium"
