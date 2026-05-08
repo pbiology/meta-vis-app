@@ -8,6 +8,13 @@ import {
 import type { NtcContaminantItem } from "../../api/types";
 import AddTaxonModal from "../AddTaxonModal";
 import RemoveTaxonModal from "./RemoveTaxonModal";
+import {
+  EditPencilButton,
+  NtcPanelCard,
+  NtcPanelStatus,
+  NtcTableHeaderRow,
+  NtcTaxonCells,
+} from "./NtcListChrome";
 
 interface NtcContaminantsPanelProps {
   canEdit: boolean;
@@ -57,52 +64,34 @@ export default function NtcContaminantsPanel({
     );
   }
 
+  const headers = [
+    "Taxon",
+    "Kingdom",
+    "Tax ID",
+    "Alert threshold",
+    "Notes",
+    "Added by",
+    "Date added",
+    ...(canEdit ? [""] : []),
+  ];
+
   function renderBody() {
-    if (contaminantsQ.isLoading) {
-      return <p className="px-4 py-8 text-center text-xs text-gray-400">Loading…</p>;
-    }
-    if (items.length === 0) {
-      return (
-        <p className="px-4 py-8 text-center text-xs text-gray-400">
-          No known contaminants on the list.
-        </p>
-      );
-    }
+    if (contaminantsQ.isLoading) return <NtcPanelStatus message="Loading…" />;
+    if (items.length === 0) return <NtcPanelStatus message="No known contaminants on the list." />;
     return (
       <table className="w-full text-left border-collapse">
         <thead>
-          <tr>
-            {[
-              "Taxon",
-              "Kingdom",
-              "Tax ID",
-              "Alert threshold",
-              "Notes",
-              "Added by",
-              "Date added",
-              ...(canEdit ? [""] : []),
-            ].map((h) => (
-              <th
-                key={h}
-                className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-50 whitespace-nowrap"
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
+          <NtcTableHeaderRow headers={headers} />
         </thead>
         <tbody>
           {items.map((item) => (
             <tr key={item.taxon_id} className="border-b border-gray-50">
-              <td className="px-4 py-3 text-xs text-gray-700 italic">
-                {item.taxon_name.replace(/-/g, " ")}
-              </td>
-              <td className="px-4 py-3 text-xs">
-                <span className="bg-orange-50 text-orange-700 px-2 py-0.5 rounded text-xs">
-                  {item.superkingdom ?? "—"}
-                </span>
-              </td>
-              <td className="px-4 py-3 text-xs font-mono text-gray-400">{item.taxon_id}</td>
+              <NtcTaxonCells
+                taxonName={item.taxon_name}
+                superkingdom={item.superkingdom}
+                taxonId={item.taxon_id}
+                kingdomTone="orange"
+              />
               <td className="px-4 py-3 text-xs text-gray-600">
                 {editingId === item.taxon_id ? (
                   <div className="flex items-center gap-2">
@@ -136,22 +125,12 @@ export default function NtcContaminantsPanel({
                   <div className="flex items-center gap-2 group">
                     <span className="font-mono">&gt; {item.min_reads} reads</span>
                     {canEdit && (
-                      <button
+                      <EditPencilButton
                         onClick={() => {
                           setEditingId(item.taxon_id);
                           setEditMinReads(item.min_reads);
                         }}
-                        className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-gray-500 transition-all"
-                      >
-                        <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none">
-                          <path
-                            d="M11 2l3 3-8 8H3v-3l8-8z"
-                            stroke="currentColor"
-                            strokeWidth="1.3"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </button>
+                      />
                     )}
                   </div>
                 )}
@@ -184,23 +163,19 @@ export default function NtcContaminantsPanel({
 
   return (
     <>
-      <section className="bg-white border border-gray-100 rounded-xl">
-        <div className="flex items-center px-4 py-3 border-b border-gray-50">
-          <div className="flex-1">
-            <h2 className="text-xs font-medium text-gray-700">Known contaminants</h2>
-            <p className="text-xs text-gray-400 mt-0.5">
-              Triggers an alert on the NTC trends page and case list when detected in any NTC above
-              the threshold.
-            </p>
-          </div>
-          {canEdit && (
+      <NtcPanelCard
+        title="Known contaminants"
+        description="Triggers an alert on the NTC trends page and case list when detected in any NTC above the threshold."
+        action={
+          canEdit && (
             <button onClick={() => setAddOpen(true)} className="btn-primary">
               + Add taxon
             </button>
-          )}
-        </div>
+          )
+        }
+      >
         {renderBody()}
-      </section>
+      </NtcPanelCard>
 
       {addOpen && (
         <AddTaxonModal
