@@ -38,6 +38,13 @@ class Settings(BaseSettings):
     # at serialisation time. Leave unset to disable the ticket link in the UI.
     freshdesk_base_url: Optional[str] = None
 
+    # Ingest upload bundle limits. The CLI uploads a tar.gz bundle to
+    # /api/v1/ingest/* — these caps protect the server from tar bombs and
+    # accidental huge uploads. Compressed: rejected before extraction starts.
+    # Uncompressed: enforced incrementally as members are extracted.
+    ingest_upload_max_compressed_bytes: int = 2 * 1024 * 1024 * 1024  # 2 GiB
+    ingest_upload_max_uncompressed_bytes: int = 8 * 1024 * 1024 * 1024  # 8 GiB
+
     # Object storage — optional, falls back to MongoDB if not set
     object_storage_endpoint: Optional[str] = None
     object_storage_access_key: Optional[str] = None
