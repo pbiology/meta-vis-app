@@ -622,7 +622,7 @@ async def ingest_case(
 # ---------------------------------------------------------------------------
 
 
-async def _prepare_trana_ingest(
+def _prepare_trana_ingest(
     meta: TranaIngestMeta, inputs: TranaIngestInputs, now: datetime
 ) -> _PreparedIngest:
     pipeline_info = inputs.pipeline_info
@@ -764,7 +764,7 @@ async def ingest_trana_case(
             f"Delete the existing case first, or use a unique case_id."
         )
 
-    prepared = await _prepare_trana_ingest(meta, inputs, now)
+    prepared = _prepare_trana_ingest(meta, inputs, now)
 
     subject_map: dict[str, ObjectId] = {}
     if prepared.subject_refs:
