@@ -2,6 +2,7 @@ import logging
 import tempfile
 import time
 from pathlib import Path
+from typing import Annotated, Any, Awaitable, Callable
 
 from fastapi import APIRouter, Depends, File, HTTPException, Header, UploadFile
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -23,6 +24,17 @@ from app.routers import alerts, ntc
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+# Shared OpenAPI response declarations for the two ingest endpoints. Keeps the
+# schema accurate (every HTTPException status code in the handler appears here)
+# and saves duplicating the dict on each route.
+_INGEST_RESPONSES: dict[int | str, dict[str, Any]] = {
+    400: {"description": "Bundle is malformed (bad tar, manifest/bundle mismatch)"},
+    413: {"description": "Bundle exceeds configured size cap"},
+    422: {"description": "Manifest validation failed or business-rule rejection"},
+    500: {"description": "Unexpected error during ingest"},
+}
 
 
 def _check_content_length(declared_content_length: int | None) -> None:
@@ -61,13 +73,108 @@ async def _invalidate_caches(db: AsyncIOMotorDatabase) -> None:
     await bump_cache_version(db)
 
 
-@router.post("/ingest/taxprofiler")
+# Type for the closure that runs the actual ingest. Takes a path to a tempdir
+# and returns (case_id, result_dict). Raises BundleError / BundleTooLargeError
+# / ValidationError / ValueError / Exception as appropriate.
+_RunIngest = Callable[[Path], Awaitable[tuple[str, dict]]]
+
+
+async def _run_with_error_handling(
+    *,
+    action: str,
+    tmp_prefix: str,
+    db: AsyncIOMotorDatabase,
+    username: str,
+    content_length: int | None,
+    run: _RunIngest,
+) -> dict:
+    """Drive one ingest request: tempdir lifecycle, content-length check,
+    structured error mapping, audit logging, cache invalidation.
+
+    The two ingest endpoints differ only in which loader/orchestrator they
+    use; both share this exact error ladder. Keeping it in one place ensures
+    the audit + HTTP behaviour stay consistent between taxprofiler and trana.
+    """
+    case_id: str | None = None
+    with tempfile.TemporaryDirectory(prefix=tmp_prefix) as tmp:
+        extract_dir = Path(tmp)
+        try:
+            _check_content_length(content_length)
+            case_id, result = await run(extract_dir)
+        except BundleTooLargeError as e:
+            logger.warning("%s bundle too large: %s", action, e)
+            await _record_audit_event(
+                db,
+                action,
+                username,
+                case_id,
+                "failure",
+                {"error": "bundle_too_large"},
+            )
+            raise HTTPException(status_code=413, detail=str(e)) from e
+        except BundleError as e:
+            logger.warning("%s bundle malformed: %s", action, e)
+            await _record_audit_event(
+                db,
+                action,
+                username,
+                case_id,
+                "failure",
+                {"error": "bundle_malformed"},
+            )
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except ValidationError as e:
+            logger.warning("%s manifest validation error: %s", action, e)
+            await _record_audit_event(
+                db,
+                action,
+                username,
+                case_id,
+                "failure",
+                {"error": "manifest_validation_error"},
+            )
+            raise HTTPException(
+                status_code=422,
+                detail=f"Manifest validation failed: {e.errors()}",
+            ) from e
+        except ValueError as e:
+            logger.exception("%s validation error", action)
+            await _record_audit_event(
+                db,
+                action,
+                username,
+                case_id,
+                "failure",
+                {"error": "validation_error"},
+            )
+            raise HTTPException(status_code=422, detail=str(e)) from e
+        except Exception as e:
+            logger.exception("%s failed with unexpected error", action)
+            await _record_audit_event(
+                db,
+                action,
+                username,
+                case_id,
+                "failure",
+                {"error": "internal_error"},
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="An internal error occurred during ingest",
+            ) from e
+
+        await _invalidate_caches(db)
+        await _record_audit_event(db, action, username, case_id, "success")
+        return result
+
+
+@router.post("/ingest/taxprofiler", responses=_INGEST_RESPONSES)
 async def ingest_taxprofiler(
-    bundle: UploadFile = File(...),
-    content_length: int | None = Header(default=None),
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    user: dict = Depends(require_role("writer", "admin")),
-):
+    bundle: Annotated[UploadFile, File(...)],
+    db: Annotated[AsyncIOMotorDatabase, Depends(get_db)],
+    user: Annotated[dict, Depends(require_role("writer", "admin"))],
+    content_length: Annotated[int | None, Header()] = None,
+) -> dict:
     """Upload a tar.gz bundle and ingest one taxprofiler case.
 
     The bundle layout is documented in :mod:`app.ingestor.loader`. The server
@@ -75,173 +182,51 @@ async def ingest_taxprofiler(
     to the orchestrator. The tempdir (and all extracted files) are cleaned up
     when this handler returns, success or failure.
     """
-    case_id: str | None = None
-    with tempfile.TemporaryDirectory(prefix="ingest_") as tmp:
-        extract_dir = Path(tmp)
 
-        try:
-            _check_content_length(content_length)
-            # Stream the upload directly into the loader — no intermediate
-            # "bundle.tar" staged on disk. FastAPI's UploadFile.file is a
-            # SpooledTemporaryFile already, so we just hand it to tarfile in
-            # streaming mode.
-            t0 = time.perf_counter()
-            meta, inputs = await load_taxprofiler_bundle(bundle.file, extract_dir)
-            t_extract = time.perf_counter()
-            case_id = meta.case_id
-            result = await ingest_case(meta, inputs, db)
-            t_ingest = time.perf_counter()
-            logger.info(
-                "ingest timings case=%s extract_ms=%d ingest_ms=%d total_ms=%d",
-                case_id,
-                int((t_extract - t0) * 1000),
-                int((t_ingest - t_extract) * 1000),
-                int((t_ingest - t0) * 1000),
-            )
-        except BundleTooLargeError as e:
-            logger.warning("Ingest bundle too large: %s", e)
-            await _record_audit_event(
-                db,
-                "ingest",
-                user["username"],
-                case_id,
-                "failure",
-                {"error": "bundle_too_large"},
-            )
-            raise HTTPException(status_code=413, detail=str(e))
-        except BundleError as e:
-            logger.warning("Ingest bundle malformed: %s", e)
-            await _record_audit_event(
-                db,
-                "ingest",
-                user["username"],
-                case_id,
-                "failure",
-                {"error": "bundle_malformed"},
-            )
-            raise HTTPException(status_code=400, detail=str(e))
-        except ValidationError as e:
-            logger.warning("Ingest manifest validation error: %s", e)
-            await _record_audit_event(
-                db,
-                "ingest",
-                user["username"],
-                case_id,
-                "failure",
-                {"error": "manifest_validation_error"},
-            )
-            raise HTTPException(
-                status_code=422, detail=f"Manifest validation failed: {e.errors()}"
-            )
-        except ValueError as e:
-            logger.error("Ingest validation error: %s", e, exc_info=True)
-            await _record_audit_event(
-                db,
-                "ingest",
-                user["username"],
-                case_id,
-                "failure",
-                {"error": "validation_error"},
-            )
-            raise HTTPException(status_code=422, detail=str(e))
-        except Exception as e:
-            logger.error("Ingest failed with unexpected error: %s", e, exc_info=True)
-            await _record_audit_event(
-                db,
-                "ingest",
-                user["username"],
-                case_id,
-                "failure",
-                {"error": "internal_error"},
-            )
-            raise HTTPException(
-                status_code=500, detail="An internal error occurred during ingest"
-            )
-
-        await _invalidate_caches(db)
-        await _record_audit_event(db, "ingest", user["username"], case_id, "success")
-        return result
-
-
-@router.post("/ingest/trana")
-async def ingest_trana(
-    bundle: UploadFile = File(...),
-    content_length: int | None = Header(default=None),
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    user: dict = Depends(require_role("writer", "admin")),
-):
-    """Upload a tar.gz bundle and ingest one Trana (Emu/ONT) case."""
-    case_id: str | None = None
-    with tempfile.TemporaryDirectory(prefix="ingest_trana_") as tmp:
-        extract_dir = Path(tmp)
-
-        try:
-            _check_content_length(content_length)
-            meta, inputs = await load_trana_bundle(bundle.file, extract_dir)
-            case_id = meta.case_id
-            result = await ingest_trana_case(meta, inputs, db)
-        except BundleTooLargeError as e:
-            logger.warning("Trana ingest bundle too large: %s", e)
-            await _record_audit_event(
-                db,
-                "ingest_trana",
-                user["username"],
-                case_id,
-                "failure",
-                {"error": "bundle_too_large"},
-            )
-            raise HTTPException(status_code=413, detail=str(e))
-        except BundleError as e:
-            logger.warning("Trana ingest bundle malformed: %s", e)
-            await _record_audit_event(
-                db,
-                "ingest_trana",
-                user["username"],
-                case_id,
-                "failure",
-                {"error": "bundle_malformed"},
-            )
-            raise HTTPException(status_code=400, detail=str(e))
-        except ValidationError as e:
-            logger.warning("Trana ingest manifest validation error: %s", e)
-            await _record_audit_event(
-                db,
-                "ingest_trana",
-                user["username"],
-                case_id,
-                "failure",
-                {"error": "manifest_validation_error"},
-            )
-            raise HTTPException(
-                status_code=422, detail=f"Manifest validation failed: {e.errors()}"
-            )
-        except ValueError as e:
-            logger.error("Trana ingest validation error: %s", e, exc_info=True)
-            await _record_audit_event(
-                db,
-                "ingest_trana",
-                user["username"],
-                case_id,
-                "failure",
-                {"error": "validation_error"},
-            )
-            raise HTTPException(status_code=422, detail=str(e))
-        except Exception as e:
-            logger.error("Trana ingest failed: %s", e, exc_info=True)
-            await _record_audit_event(
-                db,
-                "ingest_trana",
-                user["username"],
-                case_id,
-                "failure",
-                {"error": "internal_error"},
-            )
-            raise HTTPException(
-                status_code=500, detail="An internal error occurred during ingest"
-            )
-
-        await _invalidate_caches(db)
-        await _record_audit_event(
-            db, "ingest_trana", user["username"], case_id, "success"
+    async def run(extract_dir: Path) -> tuple[str, dict]:
+        t0 = time.perf_counter()
+        meta, inputs = await load_taxprofiler_bundle(bundle.file, extract_dir)
+        t_extract = time.perf_counter()
+        result = await ingest_case(meta, inputs, db)
+        t_ingest = time.perf_counter()
+        logger.info(
+            "ingest timings case=%s extract_ms=%d ingest_ms=%d total_ms=%d",
+            meta.case_id,
+            int((t_extract - t0) * 1000),
+            int((t_ingest - t_extract) * 1000),
+            int((t_ingest - t0) * 1000),
         )
-        return result
+        return meta.case_id, result
+
+    return await _run_with_error_handling(
+        action="ingest",
+        tmp_prefix="ingest_",
+        db=db,
+        username=user["username"],
+        content_length=content_length,
+        run=run,
+    )
+
+
+@router.post("/ingest/trana", responses=_INGEST_RESPONSES)
+async def ingest_trana(
+    bundle: Annotated[UploadFile, File(...)],
+    db: Annotated[AsyncIOMotorDatabase, Depends(get_db)],
+    user: Annotated[dict, Depends(require_role("writer", "admin"))],
+    content_length: Annotated[int | None, Header()] = None,
+) -> dict:
+    """Upload a tar.gz bundle and ingest one Trana (Emu/ONT) case."""
+
+    async def run(extract_dir: Path) -> tuple[str, dict]:
+        meta, inputs = await load_trana_bundle(bundle.file, extract_dir)
+        result = await ingest_trana_case(meta, inputs, db)
+        return meta.case_id, result
+
+    return await _run_with_error_handling(
+        action="ingest_trana",
+        tmp_prefix="ingest_trana_",
+        db=db,
+        username=user["username"],
+        content_length=content_length,
+        run=run,
+    )
