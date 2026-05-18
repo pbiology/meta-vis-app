@@ -147,7 +147,9 @@ def get_session(
     return session, login_ms
 
 
-def check_case_available(session: requests.Session, base_url: str, case_id: str) -> None:
+def check_case_available(
+    session: requests.Session, base_url: str, case_id: str
+) -> None:
     """Fail fast if `case_id` is already taken. The server rejects duplicates,
     but it does so only after the bundle is uploaded and extracted — wasting
     minutes of wall time for a result that's knowable in one round-trip."""
@@ -214,6 +216,49 @@ def _add_tree(tar: tarfile.TarFile, src_root: Path, arc_prefix: str) -> None:
             tar.add(f.resolve(), arcname=arc, recursive=False)
 
 
+def _resolve_taxprofiler_sources(
+    *,
+    multiqc_path: str,
+    multiqc_report_path: str | None,
+    pipeline_info_path: str,
+    metaval_dir: str | None,
+    classifiers: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Resolve every user-supplied path to a real Path and validate existence.
+
+    Returns a dict with all the inputs the bundle build will pack. Exits with
+    a helpful message on any missing file/dir.
+    """
+    classifier_taxpasta_src: dict[str, Path] = {}
+    classifier_krona_src: dict[str, Path] = {}
+    classifiers_with_krona: list[str] = []
+    for clf in classifiers:
+        classifier_taxpasta_src[clf["name"]] = _check_file(
+            clf["taxpasta"], f"taxpasta TSV for {clf['name']}"
+        )
+        if clf.get("krona"):
+            classifier_krona_src[clf["name"]] = _check_file(
+                clf["krona"], f"krona HTML for {clf['name']}"
+            )
+            classifiers_with_krona.append(clf["name"])
+
+    return {
+        "multiqc": _check_file(multiqc_path, "MultiQC JSON"),
+        "pipeline_info": _check_file(pipeline_info_path, "pipeline-info YAML"),
+        "multiqc_report": (
+            _check_file(multiqc_report_path, "MultiQC HTML report")
+            if multiqc_report_path
+            else None
+        ),
+        "metaval": _check_dir(metaval_dir, "metaval directory")
+        if metaval_dir
+        else None,
+        "taxpasta": classifier_taxpasta_src,
+        "krona": classifier_krona_src,
+        "classifiers_with_krona": classifiers_with_krona,
+    }
+
+
 def build_taxprofiler_bundle(
     out_path: Path,
     *,
@@ -231,28 +276,13 @@ def build_taxprofiler_bundle(
 ) -> None:
     """Write a taxprofiler ingest bundle to out_path. Raises SystemExit on
     invalid inputs (missing files etc.)."""
-
-    multiqc_src = _check_file(multiqc_path, "MultiQC JSON")
-    pipeline_info_src = _check_file(pipeline_info_path, "pipeline-info YAML")
-    multiqc_report_src = (
-        _check_file(multiqc_report_path, "MultiQC HTML report")
-        if multiqc_report_path
-        else None
+    src = _resolve_taxprofiler_sources(
+        multiqc_path=multiqc_path,
+        multiqc_report_path=multiqc_report_path,
+        pipeline_info_path=pipeline_info_path,
+        metaval_dir=metaval_dir,
+        classifiers=classifiers,
     )
-    metaval_src = _check_dir(metaval_dir, "metaval directory") if metaval_dir else None
-
-    classifier_taxpasta_src: dict[str, Path] = {}
-    classifier_krona_src: dict[str, Path] = {}
-    classifiers_with_krona: list[str] = []
-    for clf in classifiers:
-        classifier_taxpasta_src[clf["name"]] = _check_file(
-            clf["taxpasta"], f"taxpasta TSV for {clf['name']}"
-        )
-        if clf.get("krona"):
-            classifier_krona_src[clf["name"]] = _check_file(
-                clf["krona"], f"krona HTML for {clf['name']}"
-            )
-            classifiers_with_krona.append(clf["name"])
 
     manifest = {
         "case_id": case_id,
@@ -260,9 +290,9 @@ def build_taxprofiler_bundle(
         "order_date": order_date,
         "classifiers": [{"name": c["name"], "db": c["db"]} for c in classifiers],
         "samples": samples,
-        "has_metaval": metaval_src is not None,
-        "classifiers_with_krona": classifiers_with_krona,
-        "has_multiqc_report": multiqc_report_src is not None,
+        "has_metaval": src["metaval"] is not None,
+        "classifiers_with_krona": src["classifiers_with_krona"],
+        "has_multiqc_report": src["multiqc_report"] is not None,
         "analysis_type": analysis_type,
         "sequencing_platform": sequencing_platform,
     }
@@ -273,28 +303,83 @@ def build_taxprofiler_bundle(
     # smaller wire payload (fits the 2 GiB cap), fast on the client, fast
     # to decompress on the server. The server auto-detects compression.
     with tarfile.open(out_path, mode="w:gz", compresslevel=1) as tar:
-        _add_file(tar, multiqc_src, MULTIQC_ARC, seen)
+        _add_file(tar, src["multiqc"], MULTIQC_ARC, seen)
         _add_file(
             tar,
-            pipeline_info_src,
-            f"{PIPELINE_INFO_DIR}/{pipeline_info_src.name}",
+            src["pipeline_info"],
+            f"{PIPELINE_INFO_DIR}/{src['pipeline_info'].name}",
             seen,
         )
-        if multiqc_report_src is not None:
+        if src["multiqc_report"] is not None:
             _add_file(
                 tar,
-                multiqc_report_src,
-                f"{MULTIQC_REPORT_DIR}/{multiqc_report_src.name}",
+                src["multiqc_report"],
+                f"{MULTIQC_REPORT_DIR}/{src['multiqc_report'].name}",
                 seen,
             )
-        for name, src in classifier_taxpasta_src.items():
-            _add_file(tar, src, _classifier_taxpasta_arcname(name, src), seen)
-        for name, src in classifier_krona_src.items():
-            _add_file(tar, src, _classifier_krona_arcname(name, src), seen)
-        if metaval_src is not None:
-            _add_tree(tar, metaval_src, METAVAL_DIR)
+        for name, path in src["taxpasta"].items():
+            _add_file(tar, path, _classifier_taxpasta_arcname(name, path), seen)
+        for name, path in src["krona"].items():
+            _add_file(tar, path, _classifier_krona_arcname(name, path), seen)
+        if src["metaval"] is not None:
+            _add_tree(tar, src["metaval"], METAVAL_DIR)
 
         _add_manifest(tar, manifest)
+
+
+def _optional_file(path: str | None, label: str) -> Path | None:
+    return _check_file(path, label) if path else None
+
+
+def _resolve_trana_sample(s: dict[str, Any]) -> dict[str, Any]:
+    sid = s["sample_id"]
+    abundance = _check_file(s["abundance_path"], f"abundance TSV for {sid}")
+    krona = _optional_file(s.get("krona_path"), f"krona HTML for {sid}")
+    np_unproc = _optional_file(
+        s.get("nanoplot_unprocessed_path"), f"NanoStats unprocessed for {sid}"
+    )
+    np_proc = _optional_file(
+        s.get("nanoplot_processed_path"), f"NanoStats processed for {sid}"
+    )
+    return {
+        "meta": {
+            "subject_id": s.get("subject_id"),
+            "sample_id": sid,
+            "sample_type": s["sample_type"],
+            "material": s["material"],
+            "sample_source": s.get("sample_source", "N/A"),
+            "has_krona": krona is not None,
+            "has_nanoplot_unprocessed": np_unproc is not None,
+            "has_nanoplot_processed": np_proc is not None,
+        },
+        "abundance": abundance,
+        "krona": krona,
+        "nanoplot_unprocessed": np_unproc,
+        "nanoplot_processed": np_proc,
+    }
+
+
+def _pack_trana_sample(
+    tar: tarfile.TarFile, rs: dict[str, Any], seen: dict[Path, str]
+) -> None:
+    sid = rs["meta"]["sample_id"]
+    _add_file(tar, rs["abundance"], _sample_abundance_arcname(sid), seen)
+    if rs["krona"] is not None:
+        _add_file(tar, rs["krona"], _sample_krona_arcname(sid), seen)
+    if rs["nanoplot_unprocessed"] is not None:
+        _add_file(
+            tar,
+            rs["nanoplot_unprocessed"],
+            _sample_nanoplot_arcname(sid, "unprocessed"),
+            seen,
+        )
+    if rs["nanoplot_processed"] is not None:
+        _add_file(
+            tar,
+            rs["nanoplot_processed"],
+            _sample_nanoplot_arcname(sid, "processed"),
+            seen,
+        )
 
 
 def build_trana_bundle(
@@ -310,57 +395,8 @@ def build_trana_bundle(
     sequencing_platform: str | None,
 ) -> None:
     pipeline_info_src = _check_file(pipeline_info_path, "pipeline-info YAML")
-    multiqc_report_src = (
-        _check_file(multiqc_report_path, "MultiQC HTML report")
-        if multiqc_report_path
-        else None
-    )
-
-    # Validate every per-sample path up-front so we fail before touching the tar.
-    resolved_samples: list[dict[str, Any]] = []
-    for s in samples:
-        abundance = _check_file(
-            s["abundance_path"], f"abundance TSV for {s['sample_id']}"
-        )
-        krona = (
-            _check_file(s["krona_path"], f"krona HTML for {s['sample_id']}")
-            if s.get("krona_path")
-            else None
-        )
-        np_unproc = (
-            _check_file(
-                s["nanoplot_unprocessed_path"],
-                f"NanoStats unprocessed for {s['sample_id']}",
-            )
-            if s.get("nanoplot_unprocessed_path")
-            else None
-        )
-        np_proc = (
-            _check_file(
-                s["nanoplot_processed_path"],
-                f"NanoStats processed for {s['sample_id']}",
-            )
-            if s.get("nanoplot_processed_path")
-            else None
-        )
-        resolved_samples.append(
-            {
-                "meta": {
-                    "subject_id": s.get("subject_id"),
-                    "sample_id": s["sample_id"],
-                    "sample_type": s["sample_type"],
-                    "material": s["material"],
-                    "sample_source": s.get("sample_source", "N/A"),
-                    "has_krona": krona is not None,
-                    "has_nanoplot_unprocessed": np_unproc is not None,
-                    "has_nanoplot_processed": np_proc is not None,
-                },
-                "abundance": abundance,
-                "krona": krona,
-                "nanoplot_unprocessed": np_unproc,
-                "nanoplot_processed": np_proc,
-            }
-        )
+    multiqc_report_src = _optional_file(multiqc_report_path, "MultiQC HTML report")
+    resolved_samples = [_resolve_trana_sample(s) for s in samples]
 
     manifest = {
         "case_id": case_id,
@@ -388,24 +424,7 @@ def build_trana_bundle(
                 seen,
             )
         for rs in resolved_samples:
-            sid = rs["meta"]["sample_id"]
-            _add_file(tar, rs["abundance"], _sample_abundance_arcname(sid), seen)
-            if rs["krona"]:
-                _add_file(tar, rs["krona"], _sample_krona_arcname(sid), seen)
-            if rs["nanoplot_unprocessed"]:
-                _add_file(
-                    tar,
-                    rs["nanoplot_unprocessed"],
-                    _sample_nanoplot_arcname(sid, "unprocessed"),
-                    seen,
-                )
-            if rs["nanoplot_processed"]:
-                _add_file(
-                    tar,
-                    rs["nanoplot_processed"],
-                    _sample_nanoplot_arcname(sid, "processed"),
-                    seen,
-                )
+            _pack_trana_sample(tar, rs, seen)
 
         _add_manifest(tar, manifest)
 
