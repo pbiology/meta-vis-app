@@ -215,19 +215,19 @@ class CaseResponse(_Base):
 
 
 # ---------------------------------------------------------------------------
-# Ingest request models
+# Ingest manifest models
+#
+# The CLI uploads a tar.gz bundle whose manifest.json deserialises into one
+# of the *Meta models below. File paths are NOT part of the wire model —
+# everything is addressed by arcname inside the bundle (see app.ingestor.loader).
 # ---------------------------------------------------------------------------
 
 
-class MetavalIngestRequest(BaseModel):
-    metaval_dir: str  # path to the metaval output root directory
+class ClassifierMeta(BaseModel):
+    """One classifier within a taxprofiler ingest manifest."""
 
-
-class ClassifierIngestRequest(BaseModel):
     name: str  # e.g. "kraken2" or "centrifuge"
     db: str  # e.g. "k2_pluspf" or "p_compressed+h+v"
-    taxpasta: str  # path to taxpasta TSV
-    krona: Optional[str] = None  # path to krona HTML
 
 
 class SampleIngestRequest(BaseModel):
@@ -236,50 +236,55 @@ class SampleIngestRequest(BaseModel):
     sample_type: Literal["sample", "positive_ctrl", "negative_ctrl"]
     material: Literal["DNA", "RNA"]
     sample_source: str = "N/A"
+    # classifier_name -> taxpasta column name
     columns: dict
 
 
-class IngestRequest(BaseModel):
+class IngestMeta(BaseModel):
+    """Taxprofiler ingest manifest. Carried as manifest.json inside the bundle."""
+
     case_id: str
     ticket_id: Optional[str] = None
     order_date: Optional[date] = None
-    multiqc_path: str
-    multiqc_report_path: Optional[str] = None  # path to multiqc_report.html
-    pipeline_info_path: str
-    classifiers: List[ClassifierIngestRequest]
+    classifiers: List[ClassifierMeta]
     samples: List[SampleIngestRequest]
-    metaval: Optional[MetavalIngestRequest] = None
+    # True iff the bundle includes a metaval/ subtree.
+    has_metaval: bool = False
+    # True iff classifiers/<name>/krona/<file> is present for the named classifier.
+    classifiers_with_krona: List[str] = Field(default_factory=list)
+    has_multiqc_report: bool = False
     analysis_type: Optional[AnalysisType] = None
     sequencing_platform: Optional[SequencingPlatform] = None
 
 
 # ---------------------------------------------------------------------------
-# Trana ingest request models
+# Trana ingest manifest models
 # ---------------------------------------------------------------------------
 
 
 class TranaSampleIngestRequest(BaseModel):
-    """Per-sample input for Trana pipeline ingest."""
+    """Per-sample input for Trana pipeline ingest. Files live in the bundle
+    under samples/<sample_id>/ (abundance.tsv, optional krona.html,
+    optional nanoplot_unprocessed/NanoStats.txt, optional
+    nanoplot_processed/NanoStats.txt)."""
 
     subject_id: Optional[str] = None
     sample_id: str
     sample_type: Literal["sample", "positive_ctrl", "negative_ctrl"]
     material: Literal["DNA", "RNA"]
     sample_source: str = "N/A"
-    abundance_path: str  # path to Emu *_rel-abundance.tsv
-    krona_path: Optional[str] = None
-    nanoplot_unprocessed_path: Optional[str] = None
-    nanoplot_processed_path: Optional[str] = None
+    has_krona: bool = False
+    has_nanoplot_unprocessed: bool = False
+    has_nanoplot_processed: bool = False
 
 
-class TranaIngestRequest(BaseModel):
-    """Top-level ingest request for a Trana pipeline run."""
+class TranaIngestMeta(BaseModel):
+    """Trana ingest manifest. Carried as manifest.json inside the bundle."""
 
     case_id: str
     ticket_id: Optional[str] = None
     order_date: Optional[date] = None
-    multiqc_report_path: Optional[str] = None  # path to multiqc_report.html
-    pipeline_info_path: str
     samples: List[TranaSampleIngestRequest]
+    has_multiqc_report: bool = False
     analysis_type: Optional[AnalysisType] = None
     sequencing_platform: Optional[SequencingPlatform] = None

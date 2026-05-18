@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Optional
 from pydantic import BaseModel, ConfigDict
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 class _StrictBase(BaseModel):
@@ -150,3 +154,48 @@ class MetavalOutput(_StrictBase):
 
     results: list[MetavalResult]
     pipeline_info: Optional[PipelineInfoOutput] = None
+
+
+# ---------------------------------------------------------------------------
+# Ingest inputs — fully-parsed content handed from the loader to the
+# orchestrator. The orchestrator never touches user-supplied paths; whatever
+# filesystem reads still happen (IGV HTMLs, verification-data FASTAs) read
+# only files that the loader itself extracted into a TemporaryDirectory.
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class IngestInputs:
+    """Parsed inputs for a taxprofiler ingest. All file I/O has already
+    happened in the loader (with the exception of metaval IGV/verification-data
+    blobs, which are streamed lazily from the loader's temp dir during the
+    prepare phase — see orchestrator._prepare_metaval_result)."""
+
+    multiqc: "MultiQCRaw"
+    pipeline_info: "PipelineInfoOutput"
+    # classifier name -> taxpasta DataFrame
+    taxpasta: dict[str, "pd.DataFrame"] = field(default_factory=dict)
+    # classifier name -> krona HTML content (only classifiers that had a krona)
+    krona_html: dict[str, str] = field(default_factory=dict)
+    multiqc_html: Optional[str] = None
+    metaval: Optional["MetavalOutput"] = None
+
+
+@dataclass
+class TranaSampleInputs:
+    """Per-sample parsed inputs for a Trana ingest."""
+
+    taxon_entries: list["TaxonEntry"]
+    nanoplot_unprocessed: Optional["NanoPlotStats"] = None
+    nanoplot_processed: Optional["NanoPlotStats"] = None
+    krona_html: Optional[str] = None
+
+
+@dataclass
+class TranaIngestInputs:
+    """Parsed inputs for a Trana ingest."""
+
+    pipeline_info: "PipelineInfoOutput"
+    # sample_id -> parsed per-sample content
+    samples: dict[str, TranaSampleInputs] = field(default_factory=dict)
+    multiqc_html: Optional[str] = None
