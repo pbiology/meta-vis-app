@@ -2,6 +2,7 @@
 
 import logging
 import time
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -47,7 +48,6 @@ class ReadinessResponse(BaseModel):
 
 @router.get(
     "/live",
-    response_model=LivenessResponse,
     summary="Liveness probe — process is up",
 )
 async def live() -> LivenessResponse:
@@ -56,12 +56,11 @@ async def live() -> LivenessResponse:
 
 @router.get(
     "/ready",
-    response_model=ReadinessResponse,
     summary="Readiness probe — DB reachable and basic stats",
 )
 async def ready(
     response: Response,
-    db: AsyncIOMotorDatabase = Depends(get_db),
+    db: Annotated[AsyncIOMotorDatabase, Depends(get_db)],
 ) -> ReadinessResponse:
     start = time.monotonic()
     try:
