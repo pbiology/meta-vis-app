@@ -185,6 +185,94 @@ def _build_taxa_upsert_ops(all_profiles: list) -> list[UpdateOne]:
 # ---------------------------------------------------------------------------
 
 
+def _build_sample_docs_and_profiles(
+    meta: IngestMeta,
+    inputs: IngestInputs,
+    now: datetime,
+) -> tuple[list[dict], list[dict], dict[str, list[int]]]:
+    """Build sample documents, per-classifier profiles, and subject_id groupings.
+
+    Returns (sample_docs, all_profiles, subject_refs). All three are consumed
+    by _prepare_ingest to build the case doc and taxa upsert ops.
+    """
+    qc_data = inputs.multiqc
+    pipeline_info = inputs.pipeline_info
+    has_krona_any = bool(inputs.krona_html)
+
+    sample_docs: list[dict] = []
+    all_profiles: list[dict] = []
+    subject_refs: dict[str, list[int]] = {}
+
+    for idx, s in enumerate(meta.samples):
+        if s.subject_id:
+            subject_refs.setdefault(s.subject_id, []).append(idx)
+
+        profiles: list[dict] = []
+        classifier_qc: dict = {}
+
+        for clf in meta.classifiers:
+            col = s.columns.get(clf.name)
+            if not col:
+                continue
+            taxon_entries: list[TaxonEntry] = extract_sample_profile(
+                inputs.taxpasta[clf.name], col
+            )
+            profiles.append(
+                {
+                    "classifier": clf.name,
+                    "classifier_db": clf.db,
+                    "profile": [e.model_dump() for e in taxon_entries],
+                }
+            )
+            clf_qc = _extract_classifier_qc(qc_data, clf.name, col)
+            if clf_qc:
+                classifier_qc[clf.name] = clf_qc
+
+        all_profiles.extend(profiles)
+        base_qc = _extract_base_qc(qc_data, s.sample_id)
+        outbreak_taxa = _compute_outbreak_taxa(profiles)
+
+        all_taxon_ids: list[int] = list(
+            {
+                entry["taxon_id"]
+                for p in profiles
+                for entry in p.get("profile", [])
+                if isinstance(entry, dict) and entry.get("taxon_id") is not None
+            }
+        )
+
+        sample_docs.append(
+            {
+                "_id": ObjectId(),
+                "case_id": meta.case_id,
+                "sample_id": s.sample_id,
+                "sample_source": s.sample_source,
+                "order_date": meta.order_date.isoformat() if meta.order_date else None,
+                "subject_id": None,
+                "sample_type": s.sample_type,
+                "material": s.material,
+                "taxprofiler": {
+                    **base_qc,
+                    "classifiers": classifier_qc,
+                    "pipeline_info": pipeline_info.model_dump(),
+                },
+                "profiles": profiles,
+                "outbreak_taxa": outbreak_taxa,
+                "all_taxon_ids": all_taxon_ids,
+                "has_krona": has_krona_any,
+                "review": {
+                    "reviewed": False,
+                    "reviewed_by": None,
+                    "reviewed_at": None,
+                    "notes": None,
+                },
+                "ingested_at": now,
+            }
+        )
+
+    return sample_docs, all_profiles, subject_refs
+
+
 def _prepare_metaval_result(
     r: MetavalResult,
     case_id: str,
@@ -281,9 +369,6 @@ async def _prepare_ingest(
     """Phase 1: build every Mongo doc + blob payload purely from already-parsed
     inputs. No filesystem reads except for metaval IGV/verification-data files,
     which the loader extracted into the request's tempdir."""
-    qc_data = inputs.multiqc
-    pipeline_info_typed = inputs.pipeline_info
-
     krona_uploads: list[_BlobUpload] = []
     classifier_docs: list[dict] = []
     for clf in meta.classifiers:
@@ -312,80 +397,13 @@ async def _prepare_ingest(
         [s for s in meta.samples if s.sample_type in ("positive_ctrl", "negative_ctrl")]
     )
 
-    sample_docs: list[dict] = []
-    all_profiles: list[dict] = []
-    subject_refs: dict[str, list[int]] = {}
-    has_krona_any = bool(inputs.krona_html)
-
-    for idx, s in enumerate(meta.samples):
-        if s.subject_id:
-            subject_refs.setdefault(s.subject_id, []).append(idx)
-
-        profiles: list[dict] = []
-        classifier_qc: dict = {}
-
-        for clf in meta.classifiers:
-            col = s.columns.get(clf.name)
-            if not col:
-                continue
-            taxon_entries: list[TaxonEntry] = extract_sample_profile(
-                inputs.taxpasta[clf.name], col
-            )
-            profiles.append(
-                {
-                    "classifier": clf.name,
-                    "classifier_db": clf.db,
-                    "profile": [e.model_dump() for e in taxon_entries],
-                }
-            )
-            clf_qc = _extract_classifier_qc(qc_data, clf.name, col)
-            if clf_qc:
-                classifier_qc[clf.name] = clf_qc
-
-        all_profiles.extend(profiles)
-        base_qc = _extract_base_qc(qc_data, s.sample_id)
-        outbreak_taxa = _compute_outbreak_taxa(profiles)
-
-        all_taxon_ids: list[int] = list(
-            {
-                entry["taxon_id"]
-                for p in profiles
-                for entry in p.get("profile", [])
-                if isinstance(entry, dict) and entry.get("taxon_id") is not None
-            }
-        )
-
-        sample_docs.append(
-            {
-                "_id": ObjectId(),
-                "case_id": meta.case_id,
-                "sample_id": s.sample_id,
-                "sample_source": s.sample_source,
-                "order_date": meta.order_date.isoformat() if meta.order_date else None,
-                "subject_id": None,
-                "sample_type": s.sample_type,
-                "material": s.material,
-                "taxprofiler": {
-                    **base_qc,
-                    "classifiers": classifier_qc,
-                    "pipeline_info": pipeline_info_typed.model_dump(),
-                },
-                "profiles": profiles,
-                "outbreak_taxa": outbreak_taxa,
-                "all_taxon_ids": all_taxon_ids,
-                "has_krona": has_krona_any,
-                "review": {
-                    "reviewed": False,
-                    "reviewed_by": None,
-                    "reviewed_at": None,
-                    "notes": None,
-                },
-                "ingested_at": now,
-            }
-        )
+    sample_docs, all_profiles, subject_refs = _build_sample_docs_and_profiles(
+        meta, inputs, now
+    )
 
     sample_ids = [doc["_id"] for doc in sample_docs]
     sample_name_to_oid = {doc["sample_id"]: doc["_id"] for doc in sample_docs}
+    has_krona = bool(inputs.krona_html)
 
     case_doc = {
         "case_id": meta.case_id,
@@ -397,9 +415,9 @@ async def _prepare_ingest(
         "control_count": control_count,
         "sample_names": sample_names,
         "classifiers": classifier_docs,
-        "has_krona": has_krona_any,
+        "has_krona": has_krona,
         "has_multiqc": inputs.multiqc_html is not None,
-        "pipeline_info": pipeline_info_typed.model_dump(),
+        "pipeline_info": inputs.pipeline_info.model_dump(),
         "analysis_type": meta.analysis_type.value if meta.analysis_type else None,
         "sequencing_platform": (
             meta.sequencing_platform.value if meta.sequencing_platform else None
