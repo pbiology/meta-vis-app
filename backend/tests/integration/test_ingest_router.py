@@ -49,7 +49,7 @@ def _meta_stub(case_id: str = "testcase"):
 
 
 class TestIngest:
-    async def test_successful_ingest_returns_result(self, client):
+    def test_successful_ingest_returns_result(self, client):
         with (
             patch(
                 "app.routers.ingest.load_taxprofiler_bundle",
@@ -75,7 +75,7 @@ class TestIngest:
         assert resp.status_code == 200
         assert resp.json()["case_id"] == "testcase"
 
-    async def test_malformed_bundle_returns_400(self, client):
+    def test_malformed_bundle_returns_400(self, client):
         with patch(
             "app.routers.ingest.load_taxprofiler_bundle",
             new=AsyncMock(side_effect=BundleError("bad tar")),
@@ -92,7 +92,7 @@ class TestIngest:
             )
         assert resp.status_code == 400
 
-    async def test_bundle_too_large_returns_413(self, client):
+    def test_bundle_too_large_returns_413(self, client):
         with patch(
             "app.routers.ingest.load_taxprofiler_bundle",
             new=AsyncMock(side_effect=BundleTooLargeError("too big")),
@@ -109,7 +109,7 @@ class TestIngest:
             )
         assert resp.status_code == 413
 
-    async def test_manifest_validation_returns_422(self, client):
+    def test_manifest_validation_returns_422(self, client):
         # Build a real ValidationError instance via Pydantic
         from app.models.sample import IngestMeta
 
@@ -133,7 +133,7 @@ class TestIngest:
             )
         assert resp.status_code == 422
 
-    async def test_duplicate_case_id_returns_422(self, client):
+    def test_duplicate_case_id_returns_422(self, client):
         with (
             patch(
                 "app.routers.ingest.load_taxprofiler_bundle",
@@ -158,7 +158,7 @@ class TestIngest:
             )
         assert resp.status_code == 422
 
-    async def test_unexpected_error_returns_500(self, client):
+    def test_unexpected_error_returns_500(self, client):
         with (
             patch(
                 "app.routers.ingest.load_taxprofiler_bundle",
@@ -181,7 +181,7 @@ class TestIngest:
             )
         assert resp.status_code == 500
 
-    async def test_ingest_clears_alerts_cache(self, client):
+    def test_ingest_clears_alerts_cache(self, client):
         from app.routers import alerts
 
         alerts._cache[14] = {"outbreaks": []}
