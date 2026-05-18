@@ -1,6 +1,7 @@
 SHELL := /bin/bash
 
 COMPOSE := docker compose
+KC_COMPOSE := docker compose -f docker-compose.keycloak.yml
 BACKEND_SERVICE := backend
 
 ADMIN_USERNAME ?= admin
@@ -14,6 +15,7 @@ NEW_ROLE ?= reader
 .PHONY: help dev dev-build up up-build build rebuild down reset logs ps restart \
         backend-shell frontend-shell mongo-shell minio-logs \
         init-db create-admin create-user load-taxonomy \
+        keycloak-up keycloak-down keycloak-logs keycloak-reset \
         test lint format
 
 help:
@@ -39,6 +41,11 @@ help:
 	@echo "  make create-admin     Create admin user"
 	@echo "  make create-user      Create a user with NEW_USERNAME/NEW_PASSWORD/NEW_ROLE"
 	@echo "  make load-taxonomy    Download and load NCBI taxonomy"
+	@echo ""
+	@echo "  make keycloak-up      Start local Keycloak (detached) on :8081"
+	@echo "  make keycloak-down    Stop Keycloak, keep volume"
+	@echo "  make keycloak-logs    Follow Keycloak logs"
+	@echo "  make keycloak-reset   Stop Keycloak and wipe its volume (re-imports realm)"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make up"
@@ -109,6 +116,18 @@ load-taxonomy:
 	$(COMPOSE) exec -T $(BACKEND_SERVICE) python load_taxonomy.py
 
 init-db: create-admin load-taxonomy
+
+keycloak-up:
+	$(KC_COMPOSE) up -d
+
+keycloak-down:
+	$(KC_COMPOSE) down
+
+keycloak-logs:
+	$(KC_COMPOSE) logs -f
+
+keycloak-reset:
+	$(KC_COMPOSE) down -v
 
 test:
 	$(COMPOSE) exec -T $(BACKEND_SERVICE) pytest
