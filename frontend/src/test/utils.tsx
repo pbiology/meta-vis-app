@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, RenderOptions } from "@testing-library/react";
 import { AuthProvider } from "../context/AuthContext";
 import { ReportBuilderProvider } from "../context/ReportBuilderContext";
+import { __authState } from "./setup";
 
 interface RenderOpts extends Omit<RenderOptions, "wrapper"> {
   // Initial URL the MemoryRouter starts at.
@@ -12,7 +13,7 @@ interface RenderOpts extends Omit<RenderOptions, "wrapper"> {
   routePath?: string;
   // Pre-seed sessionStorage before the component mounts.
   sessionStorage?: Record<string, unknown>;
-  // When true (default), pretends a user is logged in via localStorage.
+  // When true (default), the OIDC mock reports an authenticated user.
   authenticated?: boolean;
 }
 
@@ -62,10 +63,11 @@ export function renderWithProviders(ui: ReactElement, opts: RenderOpts = {}) {
     ...rest
   } = opts;
 
-  if (authenticated) {
-    localStorage.setItem("username", "tester");
-    localStorage.setItem("role", "admin");
-  }
+  __authState.isAuthenticated = authenticated;
+  __authState.isLoading = false;
+  __authState.preferredUsername = "tester";
+  __authState.roles = ["admin"];
+
   if (sessionSeed) {
     for (const [k, v] of Object.entries(sessionSeed)) {
       sessionStorage.setItem(k, JSON.stringify(v));

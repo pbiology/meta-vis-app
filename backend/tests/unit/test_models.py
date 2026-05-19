@@ -7,7 +7,6 @@ from pydantic import ValidationError
 from app.models.sample import (
     SampleResponse,
     CaseResponse,
-    SampleMetadata,
     ClassifierQcStats,
     PipelineConfiguration,
     ReviewStatus,

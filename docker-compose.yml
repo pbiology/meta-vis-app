@@ -90,6 +90,10 @@ services:
       MONGODB_PORT: 27017
       OBJECT_STORAGE_ENDPOINT: http://minio:9000
       CORS_ORIGINS: http://localhost:5173
+      # CG stage Keycloak. Same URL works from browser and from the backend
+      # container, so no JWKS-URL override is needed.
+      KEYCLOAK_ISSUER: https://keycloak-stage.cg-orchestration.sys.scilifelab.se/realms/clinical-genomics
+      KEYCLOAK_CLIENT_IDS: meta-vis-frontend,meta-vis-cli
     working_dir: /app
     volumes:
       - ./backend:/app

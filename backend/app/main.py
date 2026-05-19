@@ -1,11 +1,10 @@
 # app/main.py
 
 from contextlib import asynccontextmanager
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.auth.csrf import verify_csrf
-from app.config import settings, validate_jwt_secret
+from app.config import settings
 from app.logging_config import setup_logging
 
 # Configure logging before any router imports so all modules inherit the handlers.
@@ -31,10 +30,6 @@ from app.routers import (  # noqa: E402
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Validate configuration before connecting to database
-    # This ensures the app fails fast with a clear error if settings are invalid
-    validate_jwt_secret(settings.jwt_secret)
-
     await connect_db()
     yield
     await close_db()
@@ -44,7 +39,6 @@ app = FastAPI(
     title="meta-vis-app",
     version="0.1.0",
     lifespan=lifespan,
-    dependencies=[Depends(verify_csrf)],
 )
 
 # Parse CORS origins from comma-separated config string

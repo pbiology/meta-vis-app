@@ -25,8 +25,27 @@ class Settings(BaseSettings):
     mongodb_direct_connection: bool = True
     app_env: str = "development"
     log_level: str = "info"
-    jwt_secret: str = ""
     controls_taxa_path: str = "controls_taxa.json"
+
+    # Keycloak OIDC — the realm's issuer URL. The JWKS endpoint and other OIDC
+    # metadata are derived from it. Tokens are accepted only if their `iss`
+    # matches this value exactly.
+    keycloak_issuer: str = "http://localhost:8081/realms/meta-vis"
+    # Comma-separated list of client IDs whose tokens this API accepts. The
+    # `azp` claim of every incoming token must match one of these. Defaults
+    # cover the SPA and the ingest CLI.
+    keycloak_client_ids: str = "meta-vis-frontend,meta-vis-cli"
+    # The KC client whose client-roles drive app authorization. Tokens are
+    # inspected at `resource_access[<role_client>].roles`. Defaults to the
+    # SPA client; point at a dedicated resource client if you'd rather host
+    # the roles there.
+    keycloak_role_client: str = "meta-vis-frontend"
+    # JWKS endpoint override. When backend and KC live on different networks,
+    # the backend cannot reach the browser-facing issuer URL — it needs an
+    # in-network hostname for the certs fetch. The `iss` claim is still
+    # validated against `keycloak_issuer`; only the HTTP fetch URL changes.
+    # Leave unset to derive from the issuer.
+    keycloak_jwks_url: Optional[str] = None
 
     # CORS — comma-separated list of allowed origins
     cors_origins: str = "http://localhost:5173"
@@ -107,29 +126,6 @@ class Settings(BaseSettings):
         except Exception as e:
             logger.error("Error loading controls_taxa.json: %s", e, exc_info=True)
             self.controls_taxa = {}
-
-
-def validate_jwt_secret(jwt_secret: str) -> None:
-    """
-    Validate JWT secret meets minimum security requirements.
-
-    Args:
-        jwt_secret: The JWT secret string from configuration.
-
-    Raises:
-        ValueError: If jwt_secret is less than 32 characters (256 bits).
-
-    Why 32 characters?
-    - NIST recommends symmetric keys of at least 128 bits for sensitive operations
-    - JWT secrets should ideally be 256+ bits (32+ chars in base64)
-    - This prevents brute-force attacks on JWT tokens
-    """
-    min_length = 32
-    if len(jwt_secret) < min_length:
-        raise ValueError(
-            f"JWT_SECRET must be at least {min_length} characters long. "
-            "Configure it in backend/.env or set the JWT_SECRET environment variable."
-        )
 
 
 settings = Settings()

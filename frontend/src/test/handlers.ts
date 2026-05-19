@@ -5,21 +5,8 @@ const API = "*/api/v1";
 // Default handlers cover every endpoint the frontend touches with empty/permissive
 // payloads. Individual tests override what they care about via server.use(...).
 export const defaultHandlers = [
-  // auth + users
-  http.post(`${API}/auth/login`, () =>
-    HttpResponse.json({
-      access_token: "x",
-      token_type: "bearer",
-      username: "tester",
-      role: "admin",
-    })
-  ),
+  // auth + users (identity owned by Keycloak; only /me/* lives on the API)
   http.get(`${API}/auth/me`, () => HttpResponse.json({ username: "tester", role: "admin" })),
-  http.get(`${API}/users`, () => HttpResponse.json([])),
-  http.post(`${API}/users`, () => HttpResponse.json({})),
-  http.patch(`${API}/users/:username/role`, () => HttpResponse.json({})),
-  http.patch(`${API}/users/:username/password`, () => HttpResponse.json({})),
-  http.delete(`${API}/users/:username`, () => HttpResponse.json({})),
   http.get(`${API}/users/me/stats`, () => HttpResponse.json({ reviews: 0 })),
   http.get(`${API}/users/me/preferences`, () =>
     HttpResponse.json({

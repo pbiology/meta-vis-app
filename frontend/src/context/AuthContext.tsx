@@ -1,12 +1,46 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { useAuth as useOidcAuth } from "react-oidc-context";
 import { getMyPreferences, updateMyPreferences } from "../api/users";
-import { getMe } from "../api/auth";
 import type { AuthContextValue, Role, UserPreferences } from "../api/types";
 
 const DEFAULT_PREFERENCES: UserPreferences = {
   preferred_kingdoms: ["Viruses"],
   visible_analysis_types: ["shotgun", "amplicon"],
 };
+
+const ROLE_PRIORITY: Role[] = ["admin", "writer", "reader"];
+
+function deriveRole(realmRoles: string[] | undefined): Role {
+  const lowered = new Set((realmRoles ?? []).map((r) => r.toLowerCase()));
+  for (const role of ROLE_PRIORITY) {
+    if (lowered.has(role)) return role;
+  }
+  return "reader";
+}
+
+// Client roles are emitted in the access token (not the ID token), so we
+// decode its payload directly. No signature check here — the backend is the
+// authority on whether a token is valid; the frontend only uses claims for
+// UI gating.
+// Falls back to "meta-vis-frontend" so the SPA still derives roles in
+// environments where env vars aren't injected (e.g. CI test runs).
+const ROLE_CLIENT =
+  (import.meta.env.VITE_OIDC_ROLE_CLIENT as string | undefined) ||
+  (import.meta.env.VITE_OIDC_CLIENT_ID as string | undefined) ||
+  "meta-vis-frontend";
+
+function clientRolesFromAccessToken(token: string | undefined): string[] {
+  if (!token) return [];
+  try {
+    const payload = token.split(".")[1];
+    const padded = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const json = JSON.parse(atob(padded));
+    const access = json?.resource_access?.[ROLE_CLIENT];
+    return (access?.roles as string[] | undefined) ?? [];
+  } catch {
+    return [];
+  }
+}
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -15,64 +49,54 @@ interface AuthProviderProps {
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  const [user, setUser] = useState<string | null>(() => localStorage.getItem("username"));
-  // Role is never read from localStorage — always sourced from the server.
-  const [role, setRole] = useState<Role>("reader");
+  const oidc = useOidcAuth();
+
+  const profile = oidc.user?.profile as { preferred_username?: string } | undefined;
+  const user = oidc.isAuthenticated ? (profile?.preferred_username ?? null) : null;
+  const role = deriveRole(clientRolesFromAccessToken(oidc.user?.access_token));
+
   const [preferences, setPreferencesState] = useState<UserPreferences>(DEFAULT_PREFERENCES);
-  const [preferencesLoaded, setPreferencesLoaded] = useState<boolean>(
-    () => !localStorage.getItem("username")
-  );
-  // True while the initial /auth/me call is in-flight. Prevents rendering
-  // the protected shell with a stale/spoofed role from localStorage.
-  const [authLoading, setAuthLoading] = useState<boolean>(() => !!localStorage.getItem("username"));
+  const [preferencesLoaded, setPreferencesLoaded] = useState<boolean>(false);
   const [sessionKingdoms, setSessionKingdoms] = useState<string[]>(
     DEFAULT_PREFERENCES.preferred_kingdoms
   );
 
-  // On startup with a stored session: verify the token and fetch authoritative role + prefs.
+  // Fetch preferences once we have an authenticated session. The OIDC
+  // provider may flip isAuthenticated multiple times during a silent refresh,
+  // so we guard on user identity to avoid refetching needlessly.
   useEffect(() => {
-    if (!localStorage.getItem("username")) return;
-    Promise.all([getMe(), getMyPreferences()])
-      .then(([me, prefs]) => {
-        setRole(me.role);
+    if (!oidc.isAuthenticated) {
+      setPreferencesState(DEFAULT_PREFERENCES);
+      setSessionKingdoms(DEFAULT_PREFERENCES.preferred_kingdoms);
+      setPreferencesLoaded(false);
+      return;
+    }
+    let cancelled = false;
+    getMyPreferences()
+      .then((prefs) => {
+        if (cancelled) return;
         setPreferencesState(prefs);
         setSessionKingdoms(prefs.preferred_kingdoms);
       })
       .catch(() => {
-        // Token expired or invalid — clear the stale session.
-        logout();
+        if (cancelled) return;
+        setPreferencesState(DEFAULT_PREFERENCES);
+        setSessionKingdoms(DEFAULT_PREFERENCES.preferred_kingdoms);
       })
       .finally(() => {
-        setAuthLoading(false);
-        setPreferencesLoaded(true);
+        if (!cancelled) setPreferencesLoaded(true);
       });
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [oidc.isAuthenticated, oidc.user?.profile.sub]);
 
-  async function login(username: string, role: Role): Promise<void> {
-    localStorage.setItem("username", username);
-    // Role is received directly from the server LoginResponse — no localStorage.
-    setUser(username);
-    setRole(role);
-    setPreferencesLoaded(false);
-    try {
-      const prefs = await getMyPreferences();
-      setPreferencesState(prefs);
-      setSessionKingdoms(prefs.preferred_kingdoms);
-    } catch {
-      setPreferencesState(DEFAULT_PREFERENCES);
-      setSessionKingdoms(DEFAULT_PREFERENCES.preferred_kingdoms);
-    } finally {
-      setPreferencesLoaded(true);
-    }
+  async function login(): Promise<void> {
+    await oidc.signinRedirect();
   }
 
   function logout(): void {
-    localStorage.removeItem("username");
-    setUser(null);
-    setRole("reader");
-    setPreferencesState(DEFAULT_PREFERENCES);
-    setSessionKingdoms(DEFAULT_PREFERENCES.preferred_kingdoms);
-    setPreferencesLoaded(true);
+    oidc.signoutRedirect().catch((err) => console.error("signoutRedirect failed", err));
   }
 
   async function setPreferences(prefs: Partial<UserPreferences>): Promise<void> {
@@ -88,7 +112,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         role,
         preferences,
         preferencesLoaded,
-        authLoading,
+        authLoading: oidc.isLoading,
         sessionKingdoms,
         setSessionKingdoms,
         login,

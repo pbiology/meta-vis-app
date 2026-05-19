@@ -20,7 +20,7 @@ from app.routers.taxa import (
     _bvbrc_genomes_cache,
     _bvbrc_specialty_cache,
 )
-from app.auth.utils import get_current_user, require_role
+from app.auth.utils import get_current_user
 from app.database import get_db
 
 

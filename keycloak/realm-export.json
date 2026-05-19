@@ -1,0 +1,112 @@
+{
+  "realm": "meta-vis",
+  "enabled": true,
+  "displayName": "meta-vis-app",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "accessTokenLifespan": 1800,
+  "roles": {
+    "realm": [
+      {
+        "name": "kc-realm-admin",
+        "description": "Confers KC admin console access for the meta-vis realm",
+        "composite": true,
+        "composites": {
+          "client": {
+            "realm-management": ["realm-admin"]
+          }
+        }
+      }
+    ],
+    "client": {
+      "meta-vis-frontend": [
+        { "name": "reader", "description": "Read-only access to meta-vis-app" },
+        { "name": "writer", "description": "Read and write access to meta-vis-app" },
+        { "name": "admin", "description": "Full administrative access to meta-vis-app" }
+      ]
+    }
+  },
+  "clients": [
+    {
+      "clientId": "meta-vis-frontend",
+      "name": "meta-vis frontend (React SPA)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:5173/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5173/*"
+      }
+    },
+    {
+      "clientId": "meta-vis-cli",
+      "name": "meta-vis CLI (ingest)",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "dev-cli-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "attributes": {
+        "access.token.lifespan": "3600"
+      }
+    },
+    {
+      "clientId": "meta-vis-backend",
+      "name": "meta-vis backend (FastAPI)",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "dev-backend-secret-change-me",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "bearerOnly": false,
+      "attributes": {
+        "use.refresh.tokens": "false"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "service-account-meta-vis-cli",
+      "enabled": true,
+      "serviceAccountClientId": "meta-vis-cli",
+      "clientRoles": {
+        "meta-vis-frontend": ["admin"]
+      }
+    },
+    {
+      "username": "dev-admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Dev",
+      "lastName": "Admin",
+      "email": "dev-admin@example.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "dev-admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["kc-realm-admin"],
+      "clientRoles": {
+        "meta-vis-frontend": ["admin"]
+      }
+    }
+  ]
+}

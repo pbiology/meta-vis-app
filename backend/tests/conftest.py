@@ -1,9 +1,7 @@
 # tests/conftest.py
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 from mongomock_motor import AsyncMongoMockClient
 
 from app.database import get_db
@@ -52,8 +50,12 @@ def fake_blob():
 # ---------------------------------------------------------------------------
 
 
-def user(role: str = "admin", username: str = "testuser") -> dict:
-    return {"username": username, "role": role}
+def user(
+    role: str = "admin",
+    username: str = "testuser",
+    sub: str | None = None,
+) -> dict:
+    return {"sub": sub or f"sub-{username}", "username": username, "role": role}
 
 
 def override_auth(app: FastAPI, role: str = "admin", username: str = "testuser"):
@@ -72,7 +74,6 @@ def override_auth(app: FastAPI, role: str = "admin", username: str = "testuser")
 
 def make_test_app(router, fake_db, fake_blob, role: str = "admin"):
     """Build a minimal FastAPI test app with the given router and mocked deps."""
-    import app.database as db_module
     from unittest.mock import patch
 
     application = FastAPI()

@@ -1,67 +1,109 @@
 # app/auth/utils.py
+#
+# Keycloak OIDC access-token validation. Tokens arrive in the
+# `Authorization: Bearer …` header; signatures are checked against the
+# realm's JWKS (cached by pyjwt).
 
-from datetime import datetime, timedelta, timezone
-
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status, Cookie
 from typing import Optional
-from motor.motor_asyncio import AsyncIOMotorDatabase
+
+import jwt
+from fastapi import Depends, Header, HTTPException, status
+from jwt import PyJWKClient
 
 from app.config import settings
-from app.database import get_db
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-ALGORITHM = "HS256"
+ALGORITHMS = ["RS256"]
+ROLE_PRIORITY = ["admin", "writer", "reader"]
 
 
-def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+def _jwks_url() -> str:
+    if settings.keycloak_jwks_url:
+        return settings.keycloak_jwks_url
+    return f"{settings.keycloak_issuer.rstrip('/')}/protocol/openid-connect/certs"
 
 
-def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+# Module-level JWKS client so the realm's signing keys are fetched once and
+# reused. PyJWKClient handles key rotation transparently via the `kid` header.
+_jwks_client: Optional[PyJWKClient] = None
 
 
-def create_access_token(subject: str, expires_minutes: int = 60 * 8) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
-    payload = {"sub": subject, "exp": expire, "iss": "meta-vis-app"}
-    return jwt.encode(payload, settings.jwt_secret, algorithm=ALGORITHM)
+def _get_jwks_client() -> PyJWKClient:
+    global _jwks_client
+    if _jwks_client is None:
+        _jwks_client = PyJWKClient(_jwks_url(), cache_keys=True)
+    return _jwks_client
 
 
-def decode_token(token: str) -> dict:
+def _highest_role(realm_roles: list[str]) -> str:
+    lowered = {r.lower() for r in realm_roles}
+    for role in ROLE_PRIORITY:
+        if role in lowered:
+            return role
+    return "reader"
+
+
+def verify_access_token(token: str) -> dict:
+    """Validate a Keycloak access token and return its claims."""
     try:
-        return jwt.decode(token, settings.jwt_secret, algorithms=[ALGORITHM])
-    except JWTError:
+        signing_key = _get_jwks_client().get_signing_key_from_jwt(token).key
+        # Keycloak emits `aud` based on the user's resource client roles —
+        # e.g. a user with realm-management roles gets aud=realm-management.
+        # That makes a fixed expected audience brittle; replay protection
+        # comes from validating `azp` (the client the token was issued for).
+        claims = jwt.decode(
+            token,
+            signing_key,
+            algorithms=ALGORITHMS,
+            issuer=settings.keycloak_issuer,
+            options={"require": ["exp", "iss", "sub", "azp"], "verify_aud": False},
+        )
+    except jwt.PyJWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
+            detail=f"Invalid or expired token: {exc}",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+
+    allowed_clients = {
+        c.strip() for c in settings.keycloak_client_ids.split(",") if c.strip()
+    }
+    if claims.get("azp") not in allowed_clients:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token was not issued for this client",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    return claims
 
 
-async def get_current_user(
-    access_token: Optional[str] = Cookie(default=None),
-    db: AsyncIOMotorDatabase = Depends(get_db),
+def get_current_user(
+    authorization: Optional[str] = Header(default=None),
 ) -> dict:
-    if not access_token:
+    if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    payload = decode_token(access_token)
-    user = await db["users"].find_one({"username": payload["sub"]}, {"role": 1})
-    role = (user.get("role") or "reader").lower() if user else "reader"
-    return {"username": payload["sub"], "role": role}
+    token = authorization.split(" ", 1)[1].strip()
+    claims = verify_access_token(token)
+    resource_access = claims.get("resource_access") or {}
+    client_roles = (resource_access.get(settings.keycloak_role_client) or {}).get(
+        "roles"
+    ) or []
+    return {
+        "sub": claims["sub"],
+        "username": claims.get("preferred_username") or claims["sub"],
+        "role": _highest_role(client_roles),
+    }
 
 
 def require_role(*roles: str):
     """Dependency factory — raises 403 if the user's role is not in the allowed set."""
+    allowed = {r.lower() for r in roles}
 
-    async def _check(current_user: dict = Depends(get_current_user)):
-        if current_user["role"] not in [r.lower() for r in roles]:
+    def _check(current_user: dict = Depends(get_current_user)) -> dict:
+        if current_user["role"] not in allowed:
             raise HTTPException(status_code=403, detail="Insufficient permissions")
         return current_user
 
