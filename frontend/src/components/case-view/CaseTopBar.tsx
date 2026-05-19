@@ -86,13 +86,18 @@ export default function CaseTopBar({
             {reviewing ? "Saving…" : "Mark reviewed ✓"}
           </button>
         )}
-        {reviewed && (
+        {reviewed && canReview && (
           <button
             onClick={onUnreviewRequest}
             className="px-3 py-1.5 text-xs rounded-md border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 transition-colors"
           >
             ● Reviewed by {reviewer ?? "—"}
           </button>
+        )}
+        {reviewed && !canReview && (
+          <span className="px-3 py-1.5 text-xs rounded-md border border-gray-200 bg-white text-gray-500">
+            ● Reviewed by {reviewer ?? "—"}
+          </span>
         )}
       </div>
     </header>

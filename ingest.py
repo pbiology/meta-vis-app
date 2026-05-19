@@ -49,6 +49,16 @@ from typing import Any
 
 import requests
 
+# Auto-load a `.env` next to this script so KC URL / realm / credentials can
+# be set once instead of passed on every invocation. python-dotenv is part of
+# the backend deps and is available in the same conda env devs run from.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).resolve().parent / ".env")
+except ImportError:
+    pass
+
 
 # ---------------------------------------------------------------------------
 # Bundle layout — keep in sync with backend/app/ingestor/loader.py
@@ -118,32 +128,101 @@ def _check_unique_sample_ids(samples: list[dict]) -> None:
         sys.exit(1)
 
 
+def _highest_role(roles: list[str]) -> str:
+    """Mirror the backend's role-priority logic so the CLI fails fast when the
+    user can't ingest, instead of waiting for the upload to be rejected."""
+    lowered = {r.lower() for r in roles}
+    for role in ("admin", "writer", "reader"):
+        if role in lowered:
+            return role
+    return "reader"
+
+
 def get_session(
-    base_url: str, username: str, password: str
+    base_url: str,
+    username: str,
+    password: str,
+    *,
+    keycloak_url: str,
+    realm: str,
+    client_id: str,
+    client_secret: str | None = None,
 ) -> tuple[requests.Session, int]:
-    """Return (session, login_ms). Exits if the user's role can't ingest."""
-    t0 = _ms()
-    session = requests.Session()
-    resp = session.post(
-        f"{base_url}/api/v1/auth/login",
-        data={"username": username, "password": password},
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-    )
-    login_ms = _ms() - t0
-    if resp.status_code != 200:
-        print(f"Login failed ({resp.status_code}): {resp.text}")
-        sys.exit(1)
-    data = resp.json()
-    print(f"Logged in as {data['username']} ({data['role']})")
-    if data["role"] not in _INGEST_ROLES:
+    """Return (session, login_ms). When `client_secret` is set, authenticates
+    via the OAuth 2.0 Client Credentials grant — suitable for automation and
+    for corp realms that block password grants. Otherwise falls back to the
+    Resource Owner Password grant for the local-dev KC."""
+    use_client_credentials = bool(client_secret)
+    if not use_client_credentials and not password:
         print(
-            f"User '{data['username']}' has role '{data['role']}' which cannot "
-            f"ingest cases. Required role: one of {sorted(_INGEST_ROLES)}."
+            "Password is required. Pass --password, set KEYCLOAK_PASSWORD, or "
+            "switch to client_credentials mode by setting KEYCLOAK_CLIENT_SECRET."
         )
         sys.exit(1)
-    csrf_token = session.cookies.get("csrf_token")
-    if csrf_token:
-        session.headers["X-CSRF-Token"] = csrf_token
+    t0 = _ms()
+    token_url = (
+        f"{keycloak_url.rstrip('/')}/realms/{realm}/protocol/openid-connect/token"
+    )
+    if use_client_credentials:
+        data = {
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "scope": "openid",
+        }
+    else:
+        data = {
+            "grant_type": "password",
+            "client_id": client_id,
+            "username": username,
+            "password": password,
+            "scope": "openid",
+        }
+    resp = requests.post(token_url, data=data)
+    login_ms = _ms() - t0
+    if resp.status_code != 200:
+        print(f"Keycloak login failed ({resp.status_code}): {resp.text}")
+        sys.exit(1)
+    payload = resp.json()
+    access_token = payload["access_token"]
+
+    # Decode the JWT payload (no signature check — the backend is the
+    # authority; we read claims only to surface a clear error locally).
+    import base64
+
+    try:
+        body = access_token.split(".")[1]
+        body += "=" * (-len(body) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(body))
+    except Exception:
+        claims = {}
+
+    # In CC mode there is no human user; identity comes from the service
+    # account (`clientId` in the token preferred_username or `azp`).
+    pref = claims.get("preferred_username") or claims.get("azp") or username
+    # Read client roles for the role-host client (defaults to the SPA client,
+    # where the reader/writer/admin roles live), falling back to realm roles
+    # for compatibility with older local-dev KC setups.
+    role_client = os.environ.get("KEYCLOAK_ROLE_CLIENT", "meta-vis-frontend")
+    client_roles = (
+        (claims.get("resource_access") or {}).get(role_client, {}).get("roles") or []
+    )
+    realm_roles = (claims.get("realm_access") or {}).get("roles") or []
+    role = _highest_role(client_roles or realm_roles)
+
+    mode = "client_credentials" if use_client_credentials else "password"
+    print(f"Logged in as {pref} ({role}) via {mode}")
+    if role not in _INGEST_ROLES:
+        print(
+            f"'{pref}' has role '{role}' which cannot ingest cases. "
+            f"Required role: one of {sorted(_INGEST_ROLES)}. "
+            "If using client_credentials, assign the role to the "
+            f"'{client_id}' service-account user in Keycloak."
+        )
+        sys.exit(1)
+
+    session = requests.Session()
+    session.headers["Authorization"] = f"Bearer {access_token}"
     return session, login_ms
 
 
@@ -525,7 +604,15 @@ def parse_sample(raw: str, classifier_names: list) -> dict:
 
 
 def ingest_taxprofiler(args):
-    session, login_ms = get_session(args.url, args.username, args.password)
+    session, login_ms = get_session(
+        args.url,
+        args.username,
+        args.password,
+        keycloak_url=args.keycloak_url,
+        realm=args.realm,
+        client_id=args.client_id,
+        client_secret=args.client_secret,
+    )
     check_case_available(session, args.url, args.case_id)
 
     classifiers = [parse_classifier(c) for c in args.classifier]
@@ -621,8 +708,40 @@ def _add_taxprofiler_args(parser: argparse.ArgumentParser) -> None:
         help="Sequencing platform: illumina or nanopore",
     )
     parser.add_argument("--url", default="http://localhost:8000")
-    parser.add_argument("--username", default="admin")
-    parser.add_argument("--password", required=True)
+    parser.add_argument(
+        "--username",
+        default=os.environ.get("KEYCLOAK_USERNAME", "dev-admin"),
+        help="Keycloak username. Overrides KEYCLOAK_USERNAME env var.",
+    )
+    parser.add_argument(
+        "--password",
+        default=os.environ.get("KEYCLOAK_PASSWORD"),
+        help="Keycloak password. Overrides KEYCLOAK_PASSWORD env var. Required.",
+    )
+    parser.add_argument(
+        "--keycloak-url",
+        default=os.environ.get("KEYCLOAK_URL", "http://localhost:8081"),
+        help="Keycloak base URL. Overrides KEYCLOAK_URL env var.",
+    )
+    parser.add_argument(
+        "--realm",
+        default=os.environ.get("KEYCLOAK_REALM", "meta-vis"),
+        help="Keycloak realm. Overrides KEYCLOAK_REALM env var.",
+    )
+    parser.add_argument(
+        "--client-id",
+        default=os.environ.get("KEYCLOAK_CLI_CLIENT_ID", "meta-vis-cli"),
+        help="Keycloak client ID for the CLI. Overrides KEYCLOAK_CLI_CLIENT_ID env var.",
+    )
+    parser.add_argument(
+        "--client-secret",
+        default=os.environ.get("KEYCLOAK_CLIENT_SECRET"),
+        help=(
+            "Confidential-client secret. When set, the CLI uses the "
+            "client_credentials grant (no username/password). Overrides "
+            "KEYCLOAK_CLIENT_SECRET env var."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -659,7 +778,15 @@ def parse_trana_sample(raw: str) -> dict:
 
 
 def ingest_trana(args):
-    session, login_ms = get_session(args.url, args.username, args.password)
+    session, login_ms = get_session(
+        args.url,
+        args.username,
+        args.password,
+        keycloak_url=args.keycloak_url,
+        realm=args.realm,
+        client_id=args.client_id,
+        client_secret=args.client_secret,
+    )
     check_case_available(session, args.url, args.case_id)
 
     samples = [parse_trana_sample(s) for s in args.sample]
@@ -744,8 +871,40 @@ def _add_trana_args(parser: argparse.ArgumentParser) -> None:
         help="Sequencing platform (default: nanopore)",
     )
     parser.add_argument("--url", default="http://localhost:8000")
-    parser.add_argument("--username", default="admin")
-    parser.add_argument("--password", required=True)
+    parser.add_argument(
+        "--username",
+        default=os.environ.get("KEYCLOAK_USERNAME", "dev-admin"),
+        help="Keycloak username. Overrides KEYCLOAK_USERNAME env var.",
+    )
+    parser.add_argument(
+        "--password",
+        default=os.environ.get("KEYCLOAK_PASSWORD"),
+        help="Keycloak password. Overrides KEYCLOAK_PASSWORD env var. Required.",
+    )
+    parser.add_argument(
+        "--keycloak-url",
+        default=os.environ.get("KEYCLOAK_URL", "http://localhost:8081"),
+        help="Keycloak base URL. Overrides KEYCLOAK_URL env var.",
+    )
+    parser.add_argument(
+        "--realm",
+        default=os.environ.get("KEYCLOAK_REALM", "meta-vis"),
+        help="Keycloak realm. Overrides KEYCLOAK_REALM env var.",
+    )
+    parser.add_argument(
+        "--client-id",
+        default=os.environ.get("KEYCLOAK_CLI_CLIENT_ID", "meta-vis-cli"),
+        help="Keycloak client ID for the CLI. Overrides KEYCLOAK_CLI_CLIENT_ID env var.",
+    )
+    parser.add_argument(
+        "--client-secret",
+        default=os.environ.get("KEYCLOAK_CLIENT_SECRET"),
+        help=(
+            "Confidential-client secret. When set, the CLI uses the "
+            "client_credentials grant (no username/password). Overrides "
+            "KEYCLOAK_CLIENT_SECRET env var."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -9,19 +9,6 @@ export interface User {
   role: Role;
 }
 
-export interface AdminUser extends User {
-  _id: string;
-  reviewer_title?: string | null;
-  reviews?: number;
-}
-
-export interface LoginResponse {
-  access_token: string;
-  token_type: string;
-  username: string;
-  role: Role;
-}
-
 export interface MyStats {
   total_reviews?: number;
   reviews?: number;
@@ -246,7 +233,7 @@ export interface AuthContextValue {
   authLoading: boolean;
   sessionKingdoms: string[];
   setSessionKingdoms: (kingdoms: string[]) => void;
-  login: (username: string, role: Role) => Promise<void>;
+  login: () => Promise<void>;
   logout: () => void;
   setPreferences: (prefs: Partial<UserPreferences>) => Promise<void>;
 }

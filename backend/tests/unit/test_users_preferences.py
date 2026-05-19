@@ -1,7 +1,7 @@
 # tests/unit/test_users_preferences.py
 #
-# Tests for the /users/me/preferences endpoints, focusing on the new
-# visible_analysis_types field (Issue 28).
+# Tests for the /users/me/preferences endpoints, focused on the
+# visible_analysis_types field (Issue 28). Identity comes from the OIDC `sub`.
 
 import pytest
 from fastapi import FastAPI
@@ -12,12 +12,17 @@ from app.database import get_db
 from app.routers.users import router as users_router
 
 
+SUB = "sub-alice"
+USERNAME = "alice"
+
+
 def _make_app(fake_db):
     app = FastAPI()
     app.include_router(users_router, prefix="/api/v1")
     app.dependency_overrides[get_db] = lambda: fake_db
     app.dependency_overrides[get_current_user] = lambda: {
-        "username": "alice",
+        "sub": SUB,
+        "username": USERNAME,
         "role": "reader",
     }
     return app
@@ -25,9 +30,7 @@ def _make_app(fake_db):
 
 @pytest.fixture
 async def seeded_db(fake_db):
-    await fake_db["users"].insert_one(
-        {"username": "alice", "password_hash": "x", "role": "reader"}
-    )
+    await fake_db["users"].insert_one({"sub": SUB, "username": USERNAME})
     return fake_db
 
 

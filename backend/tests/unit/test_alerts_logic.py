@@ -3,8 +3,7 @@
 # Tests for the outbreak detection logic in _compute_outbreaks.
 # Uses a fake in-memory DB to avoid requiring a real MongoDB connection.
 
-import pytest
-from datetime import date, timedelta
+from datetime import date
 from app.routers.alerts import parse_date, _cache, CACHE_TTL_SECONDS
 
 

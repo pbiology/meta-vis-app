@@ -12,7 +12,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY pyproject.toml ./
 COPY app ./app
-COPY create_user.py ./
 COPY load_taxonomy.py ./
 COPY mongo-init.js ./
 COPY outbreak_configs.json ./

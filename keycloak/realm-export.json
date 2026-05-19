@@ -13,18 +13,23 @@
   "roles": {
     "realm": [
       {
-        "name": "reader",
-        "description": "Read-only access to meta-vis-app"
-      },
-      {
-        "name": "writer",
-        "description": "Read and write access to meta-vis-app"
-      },
-      {
-        "name": "admin",
-        "description": "Full administrative access to meta-vis-app"
+        "name": "kc-realm-admin",
+        "description": "Confers KC admin console access for the meta-vis realm",
+        "composite": true,
+        "composites": {
+          "client": {
+            "realm-management": ["realm-admin"]
+          }
+        }
       }
-    ]
+    ],
+    "client": {
+      "meta-vis-frontend": [
+        { "name": "reader", "description": "Read-only access to meta-vis-app" },
+        { "name": "writer", "description": "Read and write access to meta-vis-app" },
+        { "name": "admin", "description": "Full administrative access to meta-vis-app" }
+      ]
+    }
   },
   "clients": [
     {
@@ -48,6 +53,19 @@
       }
     },
     {
+      "clientId": "meta-vis-cli",
+      "name": "meta-vis CLI (ingest)",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "dev-cli-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "attributes": {
+        "access.token.lifespan": "3600"
+      }
+    },
+    {
       "clientId": "meta-vis-backend",
       "name": "meta-vis backend (FastAPI)",
       "enabled": true,
@@ -64,6 +82,14 @@
   ],
   "users": [
     {
+      "username": "service-account-meta-vis-cli",
+      "enabled": true,
+      "serviceAccountClientId": "meta-vis-cli",
+      "clientRoles": {
+        "meta-vis-frontend": ["admin"]
+      }
+    },
+    {
       "username": "dev-admin",
       "enabled": true,
       "emailVerified": true,
@@ -77,7 +103,10 @@
           "temporary": false
         }
       ],
-      "realmRoles": ["admin"]
+      "realmRoles": ["kc-realm-admin"],
+      "clientRoles": {
+        "meta-vis-frontend": ["admin"]
+      }
     }
   ]
 }

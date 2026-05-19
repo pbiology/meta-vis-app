@@ -1,6 +1,9 @@
 # tests/unit/test_cases_helpers.py
 
-from app.taxonomy_utils import non_host_total as _non_host_total, host_pct_for as _host_pct_for
+from app.taxonomy_utils import (
+    non_host_total as _non_host_total,
+    host_pct_for as _host_pct_for,
+)
 from app.routers.cases import (
     _top_taxa_for,
     _spike_in_for,

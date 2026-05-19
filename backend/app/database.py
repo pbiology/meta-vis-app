@@ -46,6 +46,12 @@ def get_client() -> AsyncIOMotorClient:
 async def _ensure_indexes():
     db = client[settings.mongodb_db_name]
 
+    # users — preferences store keyed by Keycloak `sub`. Any legacy documents
+    # (with `password_hash` / `role`) are wiped on startup; identity has moved
+    # to Keycloak and the old schema is incompatible.
+    await db["users"].delete_many({"sub": {"$exists": False}})
+    await db["users"].create_index("sub", unique=True)
+
     # cases — fast lookup by case_id and filtering by order_date
     await db["cases"].create_index("case_id", unique=True)
     await db["cases"].create_index("ingested_at")

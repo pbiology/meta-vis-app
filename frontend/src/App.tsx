@@ -18,6 +18,7 @@ import TaxonDetail from "./pages/TaxonDetail";
 import NtcTrends from "./pages/NtcTrends";
 import NtcListsPage from "./pages/NtcListsPage";
 import UserPreferences from "./pages/UserPreferences";
+import AuthCallback from "./pages/AuthCallback";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 function ProtectedRoute({ children }: Readonly<{ children: ReactNode }>) {
@@ -44,6 +45,7 @@ export default function App() {
       <ReportBuilderProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
 
           {/* Case-centric view — protected, but rendered OUTSIDE the app Layout
               so reviewers focus on the case (no app sidebar, only case nav). */}

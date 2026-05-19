@@ -4,17 +4,9 @@ COMPOSE := docker compose
 KC_COMPOSE := docker compose -f docker-compose.keycloak.yml
 BACKEND_SERVICE := backend
 
-ADMIN_USERNAME ?= admin
-ADMIN_PASSWORD ?= yourpassword
-ADMIN_ROLE ?= admin
-
-NEW_USERNAME ?= user
-NEW_PASSWORD ?= yourpassword
-NEW_ROLE ?= reader
-
 .PHONY: help dev dev-build up up-build build rebuild down reset logs ps restart \
         backend-shell frontend-shell mongo-shell minio-logs \
-        init-db create-admin create-user load-taxonomy \
+        load-taxonomy \
         keycloak-up keycloak-down keycloak-logs keycloak-reset \
         test lint format
 
@@ -37,10 +29,8 @@ help:
 	@echo "  make mongo-shell      Open mongosh in the Mongo container"
 	@echo "  make minio-logs       Show MinIO logs"
 	@echo ""
-	@echo "  make init-db          Create admin user and load taxonomy"
-	@echo "  make create-admin     Create admin user"
-	@echo "  make create-user      Create a user with NEW_USERNAME/NEW_PASSWORD/NEW_ROLE"
 	@echo "  make load-taxonomy    Download and load NCBI taxonomy"
+	@echo "  (users are managed via Keycloak — see 'make keycloak-up')"
 	@echo ""
 	@echo "  make keycloak-up      Start local Keycloak (detached) on :8081"
 	@echo "  make keycloak-down    Stop Keycloak, keep volume"
@@ -51,8 +41,7 @@ help:
 	@echo "  make up"
 	@echo "  make up-build"
 	@echo "  make dev"
-	@echo "  make init-db ADMIN_USERNAME=admin ADMIN_PASSWORD=supersecret"
-	@echo "  make create-user NEW_USERNAME=alice NEW_PASSWORD=secret NEW_ROLE=writer"
+	@echo "  make keycloak-up"
 
 dev:
 	$(COMPOSE) up
@@ -100,22 +89,8 @@ mongo-shell:
 minio-logs:
 	$(COMPOSE) logs -f minio
 
-create-admin:
-	$(COMPOSE) exec -T $(BACKEND_SERVICE) python create_user.py \
-		--username "$(ADMIN_USERNAME)" \
-		--password "$(ADMIN_PASSWORD)" \
-		--role "$(ADMIN_ROLE)"
-
-create-user:
-	$(COMPOSE) exec -T $(BACKEND_SERVICE) python create_user.py \
-		--username "$(NEW_USERNAME)" \
-		--password "$(NEW_PASSWORD)" \
-		--role "$(NEW_ROLE)"
-
 load-taxonomy:
 	$(COMPOSE) exec -T $(BACKEND_SERVICE) python load_taxonomy.py
-
-init-db: create-admin load-taxonomy
 
 keycloak-up:
 	$(KC_COMPOSE) up -d

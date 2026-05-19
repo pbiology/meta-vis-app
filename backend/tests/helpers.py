@@ -25,8 +25,12 @@ class FakeBlobStore:
             del self._store[k]
 
 
-def make_user(role: str = "admin", username: str = "testuser") -> dict:
-    return {"username": username, "role": role}
+def make_user(
+    role: str = "admin",
+    username: str = "testuser",
+    sub: str | None = None,
+) -> dict:
+    return {"sub": sub or f"sub-{username}", "username": username, "role": role}
 
 
 def override_auth(app: FastAPI, role: str = "admin", username: str = "testuser"):
