@@ -22,9 +22,12 @@ function deriveRole(realmRoles: string[] | undefined): Role {
 // decode its payload directly. No signature check here — the backend is the
 // authority on whether a token is valid; the frontend only uses claims for
 // UI gating.
+// Falls back to "meta-vis-frontend" so the SPA still derives roles in
+// environments where env vars aren't injected (e.g. CI test runs).
 const ROLE_CLIENT =
   (import.meta.env.VITE_OIDC_ROLE_CLIENT as string | undefined) ||
-  (import.meta.env.VITE_OIDC_CLIENT_ID as string);
+  (import.meta.env.VITE_OIDC_CLIENT_ID as string | undefined) ||
+  "meta-vis-frontend";
 
 function clientRolesFromAccessToken(token: string | undefined): string[] {
   if (!token) return [];
