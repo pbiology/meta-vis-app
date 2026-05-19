@@ -88,9 +88,9 @@ async def get_current_user(
     token = authorization.split(" ", 1)[1].strip()
     claims = verify_access_token(token)
     resource_access = claims.get("resource_access") or {}
-    client_roles = (
-        resource_access.get(settings.keycloak_role_client) or {}
-    ).get("roles") or []
+    client_roles = (resource_access.get(settings.keycloak_role_client) or {}).get(
+        "roles"
+    ) or []
     return {
         "sub": claims["sub"],
         "username": claims.get("preferred_username") or claims["sub"],

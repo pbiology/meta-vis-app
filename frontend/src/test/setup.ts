@@ -23,8 +23,7 @@ function fakeAccessToken(): string {
     preferred_username: __authState.preferredUsername,
     resource_access: { [roleClient]: { roles: __authState.roles } },
   };
-  const b64 = (obj: object) =>
-    Buffer.from(JSON.stringify(obj)).toString("base64url");
+  const b64 = (obj: object) => Buffer.from(JSON.stringify(obj)).toString("base64url");
   return `${b64({ alg: "none", typ: "JWT" })}.${b64(payload)}.sig`;
 }
 vi.mock("react-oidc-context", () => ({
