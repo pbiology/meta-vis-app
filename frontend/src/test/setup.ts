@@ -24,10 +24,7 @@ function fakeAccessToken(): string {
     resource_access: { [roleClient]: { roles: __authState.roles } },
   };
   const b64 = (obj: object) =>
-    btoa(JSON.stringify(obj))
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=+$/, "");
+    btoa(JSON.stringify(obj)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   return `${b64({ alg: "none", typ: "JWT" })}.${b64(payload)}.sig`;
 }
 vi.mock("react-oidc-context", () => ({
