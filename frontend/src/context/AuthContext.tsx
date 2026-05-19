@@ -93,7 +93,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }
 
   function logout(): void {
-    void oidc.signoutRedirect();
+    oidc.signoutRedirect().catch((err) => console.error("signoutRedirect failed", err));
   }
 
   async function setPreferences(prefs: Partial<UserPreferences>): Promise<void> {

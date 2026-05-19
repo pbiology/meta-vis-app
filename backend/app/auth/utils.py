@@ -76,7 +76,7 @@ def verify_access_token(token: str) -> dict:
     return claims
 
 
-async def get_current_user(
+def get_current_user(
     authorization: Optional[str] = Header(default=None),
 ) -> dict:
     if not authorization or not authorization.lower().startswith("bearer "):
@@ -102,7 +102,7 @@ def require_role(*roles: str):
     """Dependency factory — raises 403 if the user's role is not in the allowed set."""
     allowed = {r.lower() for r in roles}
 
-    async def _check(current_user: dict = Depends(get_current_user)) -> dict:
+    def _check(current_user: dict = Depends(get_current_user)) -> dict:
         if current_user["role"] not in allowed:
             raise HTTPException(status_code=403, detail="Insufficient permissions")
         return current_user

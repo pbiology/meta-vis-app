@@ -109,48 +109,46 @@ def test_tampered_signature_rejected(rsa_keypair, patched_jwks):
 # ---------------------------------------------------------------------------
 
 
-async def test_get_current_user_extracts_identity_and_role(rsa_keypair, patched_jwks):
+def test_get_current_user_extracts_identity_and_role(rsa_keypair, patched_jwks):
     token = _make_token(
         rsa_keypair,
         sub="u-42",
         preferred_username="bob",
         roles=["reader", "writer"],
     )
-    result = await auth_utils.get_current_user(authorization=f"Bearer {token}")
+    result = auth_utils.get_current_user(authorization=f"Bearer {token}")
     assert result == {"sub": "u-42", "username": "bob", "role": "writer"}
 
 
-async def test_get_current_user_picks_highest_role(rsa_keypair, patched_jwks):
+def test_get_current_user_picks_highest_role(rsa_keypair, patched_jwks):
     token = _make_token(rsa_keypair, roles=["reader", "writer", "admin"])
-    result = await auth_utils.get_current_user(authorization=f"Bearer {token}")
+    result = auth_utils.get_current_user(authorization=f"Bearer {token}")
     assert result["role"] == "admin"
 
 
-async def test_get_current_user_falls_back_to_reader_when_no_client_roles(
+def test_get_current_user_falls_back_to_reader_when_no_client_roles(
     rsa_keypair, patched_jwks
 ):
     token = _make_token(rsa_keypair, roles=[])
-    result = await auth_utils.get_current_user(authorization=f"Bearer {token}")
+    result = auth_utils.get_current_user(authorization=f"Bearer {token}")
     assert result["role"] == "reader"
 
 
-async def test_get_current_user_uses_sub_when_username_missing(
-    rsa_keypair, patched_jwks
-):
+def test_get_current_user_uses_sub_when_username_missing(rsa_keypair, patched_jwks):
     token = _make_token(rsa_keypair, sub="u-9", preferred_username="")
-    result = await auth_utils.get_current_user(authorization=f"Bearer {token}")
+    result = auth_utils.get_current_user(authorization=f"Bearer {token}")
     assert result["username"] == "u-9"
 
 
-async def test_get_current_user_missing_header_raises_401():
+def test_get_current_user_missing_header_raises_401():
     with pytest.raises(HTTPException) as exc:
-        await auth_utils.get_current_user(authorization=None)
+        auth_utils.get_current_user(authorization=None)
     assert exc.value.status_code == 401
 
 
-async def test_get_current_user_non_bearer_header_raises_401():
+def test_get_current_user_non_bearer_header_raises_401():
     with pytest.raises(HTTPException) as exc:
-        await auth_utils.get_current_user(authorization="Basic abc")
+        auth_utils.get_current_user(authorization="Basic abc")
     assert exc.value.status_code == 401
 
 
@@ -159,15 +157,15 @@ async def test_get_current_user_non_bearer_header_raises_401():
 # ---------------------------------------------------------------------------
 
 
-async def test_require_role_allows_matching_role():
+def test_require_role_allows_matching_role():
     user = {"sub": "s", "username": "u", "role": "writer"}
     dep = auth_utils.require_role("writer", "admin")
-    assert await dep(current_user=user) is user
+    assert dep(current_user=user) == user
 
 
-async def test_require_role_blocks_other_role():
+def test_require_role_blocks_other_role():
     user = {"sub": "s", "username": "u", "role": "reader"}
     dep = auth_utils.require_role("admin")
     with pytest.raises(HTTPException) as exc:
-        await dep(current_user=user)
+        dep(current_user=user)
     assert exc.value.status_code == 403

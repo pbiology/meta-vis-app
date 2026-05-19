@@ -14,7 +14,7 @@ function adminConsoleUrl(): string | null {
   // admin console path so we always derive from the same env value.
   try {
     const url = new URL(KC_AUTHORITY);
-    const match = url.pathname.match(/^(.*)\/realms\/([^/]+)\/?$/);
+    const match = /^(.*)\/realms\/([^/]+)\/?$/.exec(url.pathname);
     if (!match) return null;
     const [, prefix, realm] = match;
     url.pathname = `${prefix}/admin/${realm}/console/`;

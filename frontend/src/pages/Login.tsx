@@ -13,7 +13,7 @@ export default function Login() {
   useEffect(() => {
     if (oidc.isLoading || oidc.isAuthenticated || triggered.current) return;
     triggered.current = true;
-    void oidc.signinRedirect();
+    oidc.signinRedirect().catch((err) => console.error("signinRedirect failed", err));
   }, [oidc.isLoading, oidc.isAuthenticated, oidc.signinRedirect]);
 
   return (
@@ -26,7 +26,7 @@ export default function Login() {
         <button
           onClick={() => {
             triggered.current = true;
-            void oidc.signinRedirect();
+            oidc.signinRedirect().catch((err) => console.error("signinRedirect failed", err));
           }}
           className="mt-6 px-4 py-2 text-sm font-medium bg-gray-900 text-white rounded-lg hover:bg-gray-700 transition-colors"
         >

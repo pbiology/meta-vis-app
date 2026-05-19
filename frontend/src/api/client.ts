@@ -22,14 +22,16 @@ client.interceptors.response.use(
       try {
         const refreshed = await userManager.signinSilent();
         if (refreshed && !refreshed.expired) {
-          return Promise.reject(error);
+          throw error;
         }
-      } catch {
-        /* fall through */
+      } catch (refreshErr) {
+        // Silent refresh failed — fall through to redirect. Re-throw if the
+        // refresh succeeded but the caller still needs to see the 401.
+        if (refreshErr === error) throw error;
       }
       await userManager.signinRedirect();
     }
-    return Promise.reject(error);
+    throw error;
   }
 );
 

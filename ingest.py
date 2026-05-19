@@ -139,7 +139,6 @@ def _highest_role(roles: list[str]) -> str:
 
 
 def get_session(
-    base_url: str,
     username: str,
     password: str,
     *,
@@ -605,7 +604,6 @@ def parse_sample(raw: str, classifier_names: list) -> dict:
 
 def ingest_taxprofiler(args):
     session, login_ms = get_session(
-        args.url,
         args.username,
         args.password,
         keycloak_url=args.keycloak_url,
@@ -779,7 +777,6 @@ def parse_trana_sample(raw: str) -> dict:
 
 def ingest_trana(args):
     session, login_ms = get_session(
-        args.url,
         args.username,
         args.password,
         keycloak_url=args.keycloak_url,

@@ -76,7 +76,7 @@ class TestGetMyPreferences:
         assert resp.status_code == 200
         assert resp.json()["preferred_kingdoms"] == ["Viruses"]
 
-    async def test_returns_default_when_user_doc_missing(self, client, fake_db):
+    def test_returns_default_when_user_doc_missing(self, client, fake_db):
         resp = client.get("/api/v1/users/me/preferences")
         assert resp.status_code == 200
         assert resp.json()["preferred_kingdoms"] == ["Viruses"]
@@ -110,7 +110,7 @@ class TestGetMyPreferences:
 
 
 class TestUpdateMyPreferences:
-    async def test_saves_preferences(self, client, fake_db):
+    def test_saves_preferences(self, client, fake_db):
         resp = client.patch(
             "/api/v1/users/me/preferences",
             json={"preferred_kingdoms": ["Bacteria", "Viruses"]},
@@ -139,7 +139,7 @@ class TestUpdateMyPreferences:
         doc = await fake_db["users"].find_one({"sub": DEFAULT_SUB})
         assert doc["preferences"]["preferred_kingdoms"] == ["Bacteria"]
 
-    async def test_allows_empty_list(self, client, fake_db):
+    def test_allows_empty_list(self, client, fake_db):
         resp = client.patch(
             "/api/v1/users/me/preferences",
             json={"preferred_kingdoms": []},
@@ -147,7 +147,7 @@ class TestUpdateMyPreferences:
         assert resp.status_code == 200
         assert resp.json()["preferred_kingdoms"] == []
 
-    async def test_rejects_invalid_kingdom(self, client, fake_db):
+    def test_rejects_invalid_kingdom(self, client, fake_db):
         resp = client.patch(
             "/api/v1/users/me/preferences",
             json={"preferred_kingdoms": ["Bacteria", "NotAKingdom"]},

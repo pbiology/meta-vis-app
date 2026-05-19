@@ -22,11 +22,11 @@ export const userManager = new UserManager({
   client_id: clientId,
   redirect_uri:
     (import.meta.env.VITE_OIDC_REDIRECT_URI as string | undefined) ??
-    `${window.location.origin}/auth/callback`,
+    `${globalThis.location.origin}/auth/callback`,
   post_logout_redirect_uri:
     (import.meta.env.VITE_OIDC_POST_LOGOUT_REDIRECT_URI as string | undefined) ??
-    window.location.origin,
-  userStore: new WebStorageStateStore({ store: window.localStorage }),
+    globalThis.location.origin,
+  userStore: new WebStorageStateStore({ store: globalThis.localStorage }),
   monitorSession: false,
 });
 
@@ -35,6 +35,6 @@ export const oidcConfig = {
   onSigninCallback: () => {
     // Strip the ?code=… &state=… params from the URL after a successful login
     // so a refresh doesn't try to redeem the code a second time.
-    window.history.replaceState({}, document.title, window.location.pathname);
+    globalThis.history.replaceState({}, document.title, globalThis.location.pathname);
   },
 };
