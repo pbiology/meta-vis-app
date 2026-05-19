@@ -33,6 +33,34 @@ Backward-compatible: calling without a subcommand (old style) routes to taxprofi
 The bundle layout the CLI produces must match what the server's loader expects.
 The canonical layout is documented in backend/app/ingestor/loader.py; the
 constants below mirror it.
+
+Authentication
+--------------
+
+The CLI obtains an access token from Keycloak before each run. Two grants are
+supported and auto-selected from the environment:
+
+  - client_credentials (preferred for automation; used when KEYCLOAK_CLIENT_SECRET
+    is set). The CLI's KC client must be confidential with service accounts
+    enabled, and its service account must hold the role the backend checks
+    for under `resource_access[KEYCLOAK_ROLE_CLIENT].roles`.
+  - password grant (fallback for local dev; used when only KEYCLOAK_USERNAME/
+    KEYCLOAK_PASSWORD are set).
+
+Environment variables:
+
+  KEYCLOAK_URL              base URL, e.g. https://<kim-kc-host>
+  KEYCLOAK_REALM            realm name
+  KEYCLOAK_CLI_CLIENT_ID    confidential client (default: meta-vis-cli)
+  KEYCLOAK_ROLE_CLIENT      client whose roles drive authz (default: meta-vis-frontend)
+  KEYCLOAK_CLIENT_SECRET    enables client_credentials when set
+  KEYCLOAK_USERNAME         password-grant fallback
+  KEYCLOAK_PASSWORD         password-grant fallback
+  META_VIS_API              backend base URL, e.g. https://<meta-vis-backend-host>
+
+Local dev defaults target http://localhost:8081 / realm `meta-vis`. See
+docs/deployment/k8s-keycloak.md for a full example of running ingest against
+the K8s-deployed backend.
 """
 
 from __future__ import annotations
