@@ -100,6 +100,45 @@ def _ms() -> int:
     return int(time.time() * 1000)
 
 
+def _add_auth_args(parser: argparse.ArgumentParser) -> None:
+    """Attach the auth + server-URL flags shared by every ingest subcommand."""
+    parser.add_argument("--url", default="http://localhost:8000")
+    parser.add_argument(
+        "--username",
+        default=os.environ.get("KEYCLOAK_USERNAME", "dev-admin"),
+        help="Keycloak username. Overrides KEYCLOAK_USERNAME env var.",
+    )
+    parser.add_argument(
+        "--password",
+        default=os.environ.get("KEYCLOAK_PASSWORD"),
+        help="Keycloak password. Overrides KEYCLOAK_PASSWORD env var. Required.",
+    )
+    parser.add_argument(
+        "--keycloak-url",
+        default=os.environ.get("KEYCLOAK_URL", "http://localhost:8081"),
+        help="Keycloak base URL. Overrides KEYCLOAK_URL env var.",
+    )
+    parser.add_argument(
+        "--realm",
+        default=os.environ.get("KEYCLOAK_REALM", "meta-vis"),
+        help="Keycloak realm. Overrides KEYCLOAK_REALM env var.",
+    )
+    parser.add_argument(
+        "--client-id",
+        default=os.environ.get("KEYCLOAK_CLI_CLIENT_ID", "meta-vis-cli"),
+        help="Keycloak client ID for the CLI. Overrides KEYCLOAK_CLI_CLIENT_ID env var.",
+    )
+    parser.add_argument(
+        "--client-secret",
+        default=os.environ.get("KEYCLOAK_CLIENT_SECRET"),
+        help=(
+            "Confidential-client secret. When set, the CLI uses the "
+            "client_credentials grant (no username/password). Overrides "
+            "KEYCLOAK_CLIENT_SECRET env var."
+        ),
+    )
+
+
 _INGEST_ROLES = {"writer", "admin"}
 
 
@@ -705,41 +744,7 @@ def _add_taxprofiler_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="Sequencing platform: illumina or nanopore",
     )
-    parser.add_argument("--url", default="http://localhost:8000")
-    parser.add_argument(
-        "--username",
-        default=os.environ.get("KEYCLOAK_USERNAME", "dev-admin"),
-        help="Keycloak username. Overrides KEYCLOAK_USERNAME env var.",
-    )
-    parser.add_argument(
-        "--password",
-        default=os.environ.get("KEYCLOAK_PASSWORD"),
-        help="Keycloak password. Overrides KEYCLOAK_PASSWORD env var. Required.",
-    )
-    parser.add_argument(
-        "--keycloak-url",
-        default=os.environ.get("KEYCLOAK_URL", "http://localhost:8081"),
-        help="Keycloak base URL. Overrides KEYCLOAK_URL env var.",
-    )
-    parser.add_argument(
-        "--realm",
-        default=os.environ.get("KEYCLOAK_REALM", "meta-vis"),
-        help="Keycloak realm. Overrides KEYCLOAK_REALM env var.",
-    )
-    parser.add_argument(
-        "--client-id",
-        default=os.environ.get("KEYCLOAK_CLI_CLIENT_ID", "meta-vis-cli"),
-        help="Keycloak client ID for the CLI. Overrides KEYCLOAK_CLI_CLIENT_ID env var.",
-    )
-    parser.add_argument(
-        "--client-secret",
-        default=os.environ.get("KEYCLOAK_CLIENT_SECRET"),
-        help=(
-            "Confidential-client secret. When set, the CLI uses the "
-            "client_credentials grant (no username/password). Overrides "
-            "KEYCLOAK_CLIENT_SECRET env var."
-        ),
-    )
+    _add_auth_args(parser)
 
 
 # ---------------------------------------------------------------------------
@@ -867,41 +872,7 @@ def _add_trana_args(parser: argparse.ArgumentParser) -> None:
         default="nanopore",
         help="Sequencing platform (default: nanopore)",
     )
-    parser.add_argument("--url", default="http://localhost:8000")
-    parser.add_argument(
-        "--username",
-        default=os.environ.get("KEYCLOAK_USERNAME", "dev-admin"),
-        help="Keycloak username. Overrides KEYCLOAK_USERNAME env var.",
-    )
-    parser.add_argument(
-        "--password",
-        default=os.environ.get("KEYCLOAK_PASSWORD"),
-        help="Keycloak password. Overrides KEYCLOAK_PASSWORD env var. Required.",
-    )
-    parser.add_argument(
-        "--keycloak-url",
-        default=os.environ.get("KEYCLOAK_URL", "http://localhost:8081"),
-        help="Keycloak base URL. Overrides KEYCLOAK_URL env var.",
-    )
-    parser.add_argument(
-        "--realm",
-        default=os.environ.get("KEYCLOAK_REALM", "meta-vis"),
-        help="Keycloak realm. Overrides KEYCLOAK_REALM env var.",
-    )
-    parser.add_argument(
-        "--client-id",
-        default=os.environ.get("KEYCLOAK_CLI_CLIENT_ID", "meta-vis-cli"),
-        help="Keycloak client ID for the CLI. Overrides KEYCLOAK_CLI_CLIENT_ID env var.",
-    )
-    parser.add_argument(
-        "--client-secret",
-        default=os.environ.get("KEYCLOAK_CLIENT_SECRET"),
-        help=(
-            "Confidential-client secret. When set, the CLI uses the "
-            "client_credentials grant (no username/password). Overrides "
-            "KEYCLOAK_CLIENT_SECRET env var."
-        ),
-    )
+    _add_auth_args(parser)
 
 
 # ---------------------------------------------------------------------------
