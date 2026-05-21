@@ -95,7 +95,8 @@ export default function CaseClassifierKrona({
   const kronaIsLoading = !kronaUrls[activeClassifier.name] && !kronaErrors[activeClassifier.name];
 
   if (isTrana) {
-    if (!kronaSelectedSample) return null;
+    if (!kronaSelectedSample)
+    return <p className="text-xs text-gray-400">No Krona data available for this case.</p>;
     const selectedSample = samples.find((s) => s._id === kronaSelectedSample);
     return (
       <>
@@ -133,7 +134,8 @@ export default function CaseClassifierKrona({
     );
   }
 
-  if (!activeClassifier.krona_id) return null;
+  if (!activeClassifier.krona_id)
+    return <p className="text-xs text-gray-400">No Krona data available for this case.</p>;
   return (
     <>
       {kronaErrors[activeClassifier.name] && (
