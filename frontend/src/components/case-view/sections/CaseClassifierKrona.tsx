@@ -96,7 +96,7 @@ export default function CaseClassifierKrona({
 
   if (isTrana) {
     if (!kronaSelectedSample)
-    return <p className="text-xs text-gray-400">No Krona data available for this case.</p>;
+      return <p className="text-xs text-gray-400">No Krona data available for this case.</p>;
     const selectedSample = samples.find((s) => s._id === kronaSelectedSample);
     return (
       <>
