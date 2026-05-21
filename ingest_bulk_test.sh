@@ -30,7 +30,7 @@ set -uo pipefail
 # Load repo-root .env so KEYCLOAK_CLIENT_SECRET etc. are available.
 # ---------------------------------------------------------------------------
 REPO_ROOT_ENV="$(cd "$(dirname "$0")" && pwd)/.env"
-if [ -f "$REPO_ROOT_ENV" ]; then
+if [[ -f "$REPO_ROOT_ENV" ]]; then
   set -o allexport
   # shellcheck source=/dev/null
   source "$REPO_ROOT_ENV"
@@ -70,7 +70,7 @@ esac
 case "$ENV" in
   cg)
     URL="http://localhost:8000"
-    if [ -z "${KEYCLOAK_CLIENT_SECRET:-}" ]; then
+    if [[ -z "${KEYCLOAK_CLIENT_SECRET:-}" ]]; then
       echo "Error: KEYCLOAK_CLIENT_SECRET is not set. Add it to .env in the repo root." >&2
       exit 1
     fi
@@ -87,34 +87,36 @@ case "$ENV" in
 
     # Always fetch the K8s client secret from Vault (the .env holds the CG secret, not K8s).
     unset KEYCLOAK_CLIENT_SECRET
-    if [ -z "${KEYCLOAK_CLIENT_SECRET:-}" ]; then
-      VAULT_ADDR="${VAULT_ADDR:-https://vault.test.kim.karolinska.se}"
-      VAULT_PATH="kar-app-gmck-apps/dev/meta-vis"
-      VAULT_FIELD="KEYCLOAK_CLI_SECRET"
-      echo "KEYCLOAK_CLIENT_SECRET not set — fetching from Vault ($VAULT_ADDR)..."
-      if ! command -v vault >/dev/null 2>&1; then
-        echo "Error: 'vault' CLI not found on PATH. Install it or set KEYCLOAK_CLIENT_SECRET manually." >&2
-        exit 1
-      fi
-      KEYCLOAK_CLIENT_SECRET=$(vault kv get \
-        -address="$VAULT_ADDR" \
-        -mount=secret \
-        -field="$VAULT_FIELD" \
-        "$VAULT_PATH") || {
-          echo "Error: Vault lookup failed. Make sure you are logged in:" >&2
-          echo "  vault login -address=$VAULT_ADDR -method=oidc" >&2
-          exit 1
-        }
-      echo "Vault: secret fetched OK."
-      echo ""
+    VAULT_ADDR="${VAULT_ADDR:-https://vault.test.kim.karolinska.se}"
+    VAULT_PATH="kar-app-gmck-apps/dev/meta-vis"
+    VAULT_FIELD="KEYCLOAK_CLI_SECRET"
+    echo "Fetching K8s client secret from Vault ($VAULT_ADDR)..."
+    if ! command -v vault >/dev/null 2>&1; then
+      echo "Error: 'vault' CLI not found on PATH. Install it or set KEYCLOAK_CLIENT_SECRET manually." >&2
+      exit 1
     fi
+    KEYCLOAK_CLIENT_SECRET=$(vault kv get \
+      -address="$VAULT_ADDR" \
+      -mount=secret \
+      -field="$VAULT_FIELD" \
+      "$VAULT_PATH") || {
+        echo "Error: Vault lookup failed. Make sure you are logged in:" >&2
+        echo "  vault login -address=$VAULT_ADDR -method=oidc" >&2
+        exit 1
+      }
+    echo "Vault: secret fetched OK."
+    echo ""
     KC_ARGS+=(--client-secret "$KEYCLOAK_CLIENT_SECRET")
 
-    if [ -z "${REQUESTS_CA_BUNDLE:-}" ]; then
+    if [[ -z "${REQUESTS_CA_BUNDLE:-}" ]]; then
       echo "Warning: REQUESTS_CA_BUNDLE is not set — K8s TLS may fail (Region Stockholm CA)." >&2
       echo "  See the K8s prerequisites comment at the top of this script." >&2
       echo ""
     fi
+    ;;
+  *)
+    echo "Error: unhandled env '$ENV'" >&2
+    exit 1
     ;;
 esac
 
@@ -125,7 +127,7 @@ echo ""
 # ---------------------------------------------------------------------------
 # Optional reset: drop case-owned collections before ingesting.
 # ---------------------------------------------------------------------------
-if [ "${RESET:-0}" = "1" ]; then
+if [[ "${RESET:-0}" = "1" ]]; then
   MONGO_DB="${MONGO_DB:-meta_vis}"
   MONGO_URI="${MONGO_URI:-mongodb://localhost:27017/$MONGO_DB}"
   echo "RESET=1 — dropping cases, samples, metaval_results, blobs in $MONGO_DB..."
@@ -158,7 +160,7 @@ ADJECTIVES_FILE="$REPO_ROOT/backend/test-data/adjectives.txt"
 ANIMALS_FILE="$REPO_ROOT/backend/test-data/animals.txt"
 
 for f in "$ADJECTIVES_FILE" "$ANIMALS_FILE" "$TD" "$TD_TRANA" "$INGEST_SCRIPT"; do
-  if [ ! -e "$f" ]; then
+  if [[ ! -e "$f" ]]; then
     echo "Error: missing required path: $f" >&2
     exit 1
   fi
@@ -168,15 +170,15 @@ done
 # Case-ID generation
 # ---------------------------------------------------------------------------
 adjectives=()
-while IFS= read -r line; do [ -n "$line" ] && adjectives+=("$line"); done < "$ADJECTIVES_FILE"
+while IFS= read -r line; do [[ -n "$line" ]] && adjectives+=("$line"); done < "$ADJECTIVES_FILE"
 animals=()
-while IFS= read -r line; do [ -n "$line" ] && animals+=("$line"); done < "$ANIMALS_FILE"
+while IFS= read -r line; do [[ -n "$line" ]] && animals+=("$line"); done < "$ANIMALS_FILE"
 
 used_ids=()
 
 generate_case_id() {
   local max_combos=$(( ${#adjectives[@]} * ${#animals[@]} ))
-  if [ "${#used_ids[@]}" -ge "$max_combos" ]; then
+  if [[ "${#used_ids[@]}" -ge "$max_combos" ]]; then
     echo "Error: exhausted all $max_combos adjective-animal combinations" >&2
     return 1
   fi
@@ -187,9 +189,9 @@ generate_case_id() {
     candidate="${adj}${ani}"
     taken=0
     for existing in ${used_ids[@]+"${used_ids[@]}"}; do
-      [ "$existing" = "$candidate" ] && { taken=1; break; }
+      [[ "$existing" = "$candidate" ]] && { taken=1; break; }
     done
-    [ "$taken" -eq 0 ] && break
+    [[ "$taken" -eq 0 ]] && break
   done
   used_ids+=("$candidate")
   echo "$candidate"
@@ -208,14 +210,15 @@ range_days=$(( (end_epoch - start_epoch) / 86400 ))
 random_date() {
   local offset=$(( RANDOM % (range_days + 1) ))
   date -j -r $(( start_epoch + offset * 86400 )) "+%Y-%m-%d"
+  return
 }
 
-ms() { python3 -c "import time; print(int(time.time()*1000))"; }
+ms() { python3 -c "import time; print(int(time.time()*1000))"; return; }
 
 # ---------------------------------------------------------------------------
 # Taxprofiler cases
 # ---------------------------------------------------------------------------
-if [ "$COUNT" -gt 0 ]; then
+if [[ "$COUNT" -gt 0 ]]; then
   echo "Ingesting $COUNT taxprofiler case(s) ($START_DATE – $END_DATE)..."
   echo ""
 
@@ -248,7 +251,7 @@ if [ "$COUNT" -gt 0 ]; then
 
     elapsed=$(( $(ms) - t0 ))
 
-    if [ $rc -eq 0 ]; then
+    if [[ $rc -eq 0 ]]; then
       success=$(( success + 1 ))
       echo "  [taxprofiler $i/$COUNT] $case_id — $order_date — ${elapsed}ms (ok: $success, failed: $fail)"
     else
@@ -266,7 +269,7 @@ fi
 # ---------------------------------------------------------------------------
 # Trana cases (16S amplicon, ONT, Emu)
 # ---------------------------------------------------------------------------
-if [ "$TRANA_COUNT" -gt 0 ]; then
+if [[ "$TRANA_COUNT" -gt 0 ]]; then
   echo "Ingesting $TRANA_COUNT Trana (16S) case(s) ($START_DATE – $END_DATE)..."
   echo ""
 
@@ -292,7 +295,7 @@ if [ "$TRANA_COUNT" -gt 0 ]; then
 
     elapsed=$(( $(ms) - t0 ))
 
-    if [ $rc -eq 0 ]; then
+    if [[ $rc -eq 0 ]]; then
       t_success=$(( t_success + 1 ))
       echo "  [trana $i/$TRANA_COUNT] $case_id — $order_date — ${elapsed}ms (ok: $t_success, failed: $t_fail)"
     else
