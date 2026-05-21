@@ -4,13 +4,17 @@
 # spread across 2026-02-01 to 2026-04-06.
 #
 # Usage:
-#   bash ingest_bulk_test.sh                           # 10 taxprofiler + 3 trana, local dev
+#   bash ingest_bulk_test.sh                           # 10 taxprofiler + 3 trana, CG stage KC + local backend
 #   bash ingest_bulk_test.sh --env k8s                 # same, against K8s deployment
 #   bash ingest_bulk_test.sh 50 3 --env k8s            # 50 taxprofiler + 3 trana, K8s
-#   bash ingest_bulk_test.sh 0 5                       # skip taxprofiler, 5 trana, local
+#   bash ingest_bulk_test.sh 0 5                       # skip taxprofiler, 5 trana
 #   RESET=1 bash ingest_bulk_test.sh                   # drop collections first, then ingest
 #
-# K8s prerequisites:
+# Prerequisites (cg env):
+#   KEYCLOAK_CLIENT_SECRET is read from .env in the repo root automatically.
+#   The local backend must be running: uvicorn app.main:app --reload
+#
+# Prerequisites (k8s env):
 #   The script fetches KEYCLOAK_CLIENT_SECRET from Vault automatically.
 #   You must be logged in to Vault first:
 #     vault login -method=ldap -address=https://vault.test.kim.karolinska.se username=<you>
@@ -23,9 +27,20 @@
 set -uo pipefail
 
 # ---------------------------------------------------------------------------
+# Load repo-root .env so KEYCLOAK_CLIENT_SECRET etc. are available.
+# ---------------------------------------------------------------------------
+REPO_ROOT_ENV="$(cd "$(dirname "$0")" && pwd)/.env"
+if [ -f "$REPO_ROOT_ENV" ]; then
+  set -o allexport
+  # shellcheck source=/dev/null
+  source "$REPO_ROOT_ENV"
+  set +o allexport
+fi
+
+# ---------------------------------------------------------------------------
 # Argument parsing — positional COUNT / TRANA_COUNT plus an --env flag.
 # ---------------------------------------------------------------------------
-ENV="local"
+ENV="cg"
 POSITIONAL=()
 
 while [[ $# -gt 0 ]]; do
@@ -45,17 +60,26 @@ COUNT="${POSITIONAL[0]:-10}"
 TRANA_COUNT="${POSITIONAL[1]:-3}"
 
 case "$ENV" in
-  local|k8s) ;;
-  *) echo "Error: --env must be 'local' or 'k8s' (got: '$ENV')" >&2; exit 1 ;;
+  cg|k8s) ;;
+  *) echo "Error: --env must be 'cg' or 'k8s' (got: '$ENV')" >&2; exit 1 ;;
 esac
 
 # ---------------------------------------------------------------------------
 # Environment-specific settings
 # ---------------------------------------------------------------------------
 case "$ENV" in
-  local)
+  cg)
     URL="http://localhost:8000"
-    KC_ARGS=(--keycloak-url http://localhost:8081 --realm meta-vis --client-id meta-vis-cli --password dev-admin)
+    if [ -z "${KEYCLOAK_CLIENT_SECRET:-}" ]; then
+      echo "Error: KEYCLOAK_CLIENT_SECRET is not set. Add it to .env in the repo root." >&2
+      exit 1
+    fi
+    KC_ARGS=(
+      --keycloak-url https://keycloak-stage.cg-orchestration.sys.scilifelab.se
+      --realm clinical-genomics
+      --client-id meta-vis-cli
+      --client-secret "$KEYCLOAK_CLIENT_SECRET"
+    )
     ;;
   k8s)
     URL="https://metavis-backend.apps.test.kim.karolinska.se"
