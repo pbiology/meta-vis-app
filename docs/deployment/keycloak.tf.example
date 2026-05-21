@@ -1,0 +1,123 @@
+###############################################################################
+# Terraform snippet for the shared KIM Keycloak realm.
+#
+# Hand this to the realm owner. Mirrors the style used by other apps in the
+# realm (e.g. cg-api, gmck-order-client). Fill in the placeholders before
+# applying.
+#
+# Provisions:
+#   - meta-vis-frontend: public SPA client (PKCE, standard flow)
+#   - reader / writer / admin: client roles on meta-vis-frontend
+#   - meta-vis-cli: confidential client with a service account
+#   - service-account role binding so ingest can call the backend as admin
+###############################################################################
+
+# -----------------------------------------------------------------------------
+# Public SPA client
+# -----------------------------------------------------------------------------
+resource "keycloak_openid_client" "meta_vis_frontend" {
+  realm_id  = var.realm_id
+  client_id = "meta-vis-frontend"
+  name      = "meta-vis-frontend"
+
+  access_type                = "PUBLIC"
+  standard_flow_enabled      = true
+  pkce_code_challenge_method = "S256"
+
+  valid_redirect_uris = [
+    "https://metavis-frontend.apps.test.kim.karolinska.se/auth/callback",
+    # add a prod URI too once it exists
+  ]
+  web_origins = ["+"]
+}
+
+# -----------------------------------------------------------------------------
+# Client roles on meta-vis-frontend.
+# Backend reads these via `resource_access["meta-vis-frontend"].roles`.
+# -----------------------------------------------------------------------------
+resource "keycloak_role" "meta_vis_reader" {
+  realm_id    = var.realm_id
+  client_id   = keycloak_openid_client.meta_vis_frontend.id
+  name        = "reader"
+  description = "Read-only access to meta-vis-app"
+}
+
+resource "keycloak_role" "meta_vis_writer" {
+  realm_id    = var.realm_id
+  client_id   = keycloak_openid_client.meta_vis_frontend.id
+  name        = "writer"
+  description = "Read + write access to meta-vis-app"
+}
+
+resource "keycloak_role" "meta_vis_admin" {
+  realm_id    = var.realm_id
+  client_id   = keycloak_openid_client.meta_vis_frontend.id
+  name        = "admin"
+  description = "Full admin access to meta-vis-app"
+}
+# (If you see `resource "..." { ... }` blocks with literal `...` in earlier
+# revisions of this file, expand them to full bodies like the three above —
+# HCL does not allow `{ ... }` as a placeholder.)
+
+# -----------------------------------------------------------------------------
+# Confidential CLI client used by the ingest service account.
+# Secret comes from Vault — populate KEYCLOAK_CLI_SECRET there first.
+#
+# NOTE: this references a `data "vault_kv_secret_v2" "meta_vis_secrets"` data
+# source which you must declare elsewhere in the module (look at how other
+# apps in the same project do it, e.g. `cg_dev_secrets`). Without that
+# declaration, `terraform validate` errors with "Reference to undeclared
+# resource". A typical declaration looks like:
+#
+#   data "vault_kv_secret_v2" "meta_vis_secrets" {
+#     mount = "<same-mount-as-other-apps>"
+#     name  = "<vault-path-with-KEYCLOAK_CLI_SECRET>"
+#   }
+# -----------------------------------------------------------------------------
+resource "keycloak_openid_client" "meta_vis_cli" {
+  realm_id  = var.realm_id
+  client_id = "meta-vis-cli"
+  name      = "meta-vis-cli"
+
+  access_type                  = "CONFIDENTIAL"
+  service_accounts_enabled     = true
+  standard_flow_enabled        = false
+  direct_access_grants_enabled = false
+
+  client_secret = data.vault_kv_secret_v2.meta_vis_secrets.data.KEYCLOAK_CLI_SECRET
+}
+
+# -----------------------------------------------------------------------------
+# Give the CLI's service account the `admin` client role on meta-vis-frontend
+# so ingest calls pass backend authorization.
+# -----------------------------------------------------------------------------
+resource "keycloak_openid_client_service_account_role" "cli_admin" {
+  realm_id                = var.realm_id
+  service_account_user_id = keycloak_openid_client.meta_vis_cli.service_account_user_id
+  client_id               = keycloak_openid_client.meta_vis_frontend.id
+  role                    = keycloak_role.meta_vis_admin.name
+}
+
+# -----------------------------------------------------------------------------
+# IMPORTANT — verify after apply:
+#
+# The backend reads roles from `resource_access["meta-vis-frontend"].roles`.
+# For that claim to appear in the service-account's token, the CLI client
+# typically needs `meta-vis-frontend` exposed as a client scope (or an
+# explicit audience / role mapper). The role binding above grants the role,
+# but doesn't guarantee it lands in the token. Decode a token after apply:
+#
+#   TOKEN=$(curl -s -d "grant_type=client_credentials" \
+#       -d "client_id=meta-vis-cli" -d "client_secret=$SECRET" \
+#       "$KC_URL/realms/$REALM/protocol/openid-connect/token" \
+#       | jq -r .access_token)
+#   echo "$TOKEN" | cut -d. -f2 | base64 -d | jq .resource_access
+#
+# If `meta-vis-frontend` is missing from resource_access, add a client-scope
+# or audience mapper. The exact resource to use varies by keycloak provider
+# version — common options are:
+#   - keycloak_openid_client_default_scopes (assign a scope that includes the
+#     role mapper for meta-vis-frontend)
+#   - keycloak_generic_protocol_mapper (audience mapper, included_client_audience
+#     = meta-vis-frontend)
+# -----------------------------------------------------------------------------

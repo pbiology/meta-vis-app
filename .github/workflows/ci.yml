@@ -189,7 +189,11 @@ jobs:
         working-directory: backend
         run: |
           pip install pip-audit
-          pip-audit .
+          # PYSEC-2025-183: disputed pyjwt advisory about HMAC key length
+          # enforcement. No fix released; supplier maintains the key length
+          # is the application's responsibility. Our tokens are RS256-signed
+          # by Keycloak (not HMAC), so this does not apply.
+          pip-audit --ignore-vuln PYSEC-2025-183 .
 
       - name: Set up Node (frontend)
         if: matrix.component == 'frontend'
