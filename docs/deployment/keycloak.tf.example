@@ -25,7 +25,7 @@ resource "keycloak_openid_client" "meta_vis_frontend" {
   pkce_code_challenge_method = "S256"
 
   valid_redirect_uris = [
-    "https://<meta-vis-frontend-host>/auth/callback",
+    "https://metavis-frontend.apps.test.kim.karolinska.se/auth/callback",
     # add a prod URI too once it exists
   ]
   web_origins = ["+"]
@@ -55,10 +55,24 @@ resource "keycloak_role" "meta_vis_admin" {
   name        = "admin"
   description = "Full admin access to meta-vis-app"
 }
+# (If you see `resource "..." { ... }` blocks with literal `...` in earlier
+# revisions of this file, expand them to full bodies like the three above —
+# HCL does not allow `{ ... }` as a placeholder.)
 
 # -----------------------------------------------------------------------------
 # Confidential CLI client used by the ingest service account.
 # Secret comes from Vault — populate KEYCLOAK_CLI_SECRET there first.
+#
+# NOTE: this references a `data "vault_kv_secret_v2" "meta_vis_secrets"` data
+# source which you must declare elsewhere in the module (look at how other
+# apps in the same project do it, e.g. `cg_dev_secrets`). Without that
+# declaration, `terraform validate` errors with "Reference to undeclared
+# resource". A typical declaration looks like:
+#
+#   data "vault_kv_secret_v2" "meta_vis_secrets" {
+#     mount = "<same-mount-as-other-apps>"
+#     name  = "<vault-path-with-KEYCLOAK_CLI_SECRET>"
+#   }
 # -----------------------------------------------------------------------------
 resource "keycloak_openid_client" "meta_vis_cli" {
   realm_id  = var.realm_id
