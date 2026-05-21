@@ -17,7 +17,7 @@
 # Prerequisites (k8s env):
 #   The script fetches KEYCLOAK_CLIENT_SECRET from Vault automatically.
 #   You must be logged in to Vault first:
-#     vault login -method=ldap -address=https://vault.test.kim.karolinska.se username=<you>
+#     vault login -address=https://vault.test.kim.karolinska.se -method=oidc
 #   Corporate CA (one-time setup — fixes Python SSL against the K8s cluster):
 #     security find-certificate -a -c "Region Stockholm" -p > /tmp/region-stockholm-ca.pem
 #     cat "$(python -c 'import certifi; print(certifi.where())')" \
@@ -85,7 +85,8 @@ case "$ENV" in
     URL="https://metavis-backend.apps.test.kim.karolinska.se"
     KC_ARGS=(--keycloak-url https://sso.test.kim.karolinska.se --realm karolinska --client-id meta-vis-cli)
 
-    # Fetch the CLI client secret from Vault if not already in the environment.
+    # Always fetch the K8s client secret from Vault (the .env holds the CG secret, not K8s).
+    unset KEYCLOAK_CLIENT_SECRET
     if [ -z "${KEYCLOAK_CLIENT_SECRET:-}" ]; then
       VAULT_ADDR="${VAULT_ADDR:-https://vault.test.kim.karolinska.se}"
       VAULT_PATH="kar-app-gmck-apps/dev/meta-vis"
@@ -101,7 +102,7 @@ case "$ENV" in
         -field="$VAULT_FIELD" \
         "$VAULT_PATH") || {
           echo "Error: Vault lookup failed. Make sure you are logged in:" >&2
-          echo "  vault login -method=ldap -address=$VAULT_ADDR username=<you>" >&2
+          echo "  vault login -address=$VAULT_ADDR -method=oidc" >&2
           exit 1
         }
       echo "Vault: secret fetched OK."
