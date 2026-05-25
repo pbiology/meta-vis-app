@@ -147,7 +147,7 @@ export default function CaseList() {
         </div>
       </div>
 
-      <div className="px-6 py-2 bg-amber-50/50 border-b border-gray-100 text-xs text-gray-600 flex items-center gap-4">
+      <div className="px-4 py-3 bg-amber-50/50 border-b border-gray-100 text-lg text-gray-600 flex items-center gap-6">
         <span className="font-medium text-gray-700">Ready for review:</span>
         {showShotgun && (
           <span>
