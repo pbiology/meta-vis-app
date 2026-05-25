@@ -57,7 +57,7 @@ export default function CaseClassifiers({
     <section className="bg-white border border-gray-100 rounded-lg overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 flex items-center">
         <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-900 m-0">
-          Classifier results
+          {isTrana ? "Taxonomic profile" : "Classifier results"}
         </h3>
         <div className="ml-auto flex gap-1.5">
           {classifiers.map((clf) => (

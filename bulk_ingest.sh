@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# ingest_bulk_test.sh
+# bulk_ingest.sh
 # Ingests test cases with random adjective-animal names and order dates
 # spread across 2026-02-01 to 2026-04-06.
 #
 # Usage:
-#   bash ingest_bulk_test.sh                           # 10 taxprofiler + 3 trana, CG stage KC + local backend
-#   bash ingest_bulk_test.sh --env k8s                 # same, against K8s deployment
-#   bash ingest_bulk_test.sh 50 3 --env k8s            # 50 taxprofiler + 3 trana, K8s
-#   bash ingest_bulk_test.sh 0 5                       # skip taxprofiler, 5 trana
-#   RESET=1 bash ingest_bulk_test.sh                   # drop collections first, then ingest
+#   bash bulk_ingest.sh                           # 10 taxprofiler + 3 trana, CG stage KC + local backend
+#   bash bulk_ingest.sh --env k8s                 # same, against K8s deployment
+#   bash bulk_ingest.sh 50 3 --env k8s            # 50 taxprofiler + 3 trana, K8s
+#   bash bulk_ingest.sh 0 5                       # skip taxprofiler, 5 trana
+#   RESET=1 bash bulk_ingest.sh                   # drop collections first, then ingest
 #
 # Prerequisites (cg env):
 #   KEYCLOAK_CLIENT_SECRET is read from .env in the repo root automatically.

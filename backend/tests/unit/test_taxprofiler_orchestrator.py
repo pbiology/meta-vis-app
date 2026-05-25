@@ -1,4 +1,6 @@
-# tests/unit/test_orchestrator.py
+# tests/unit/test_taxprofiler_orchestrator.py
+
+import pytest
 
 from app.ingestor.inputs import MultiQCRaw
 from app.ingestor.orchestrator import _extract_classifier_qc, _extract_base_qc
@@ -120,7 +122,7 @@ class TestExtractClassifierQcKraken2:
             "kraken2",
             "SAMPLE1_k2_pluspf.kraken2.kraken2.report",
         )
-        assert result["pct_unclassified"] == 20.0
+        assert result["pct_unclassified"] == pytest.approx(20.0)
 
     def test_classified_reads_from_root_record(self):
         records = make_kraken2_records(classified=800)
@@ -301,7 +303,7 @@ class TestExtractBaseQcFastp:
 
     def test_q30_rate_correct(self):
         result = _extract_base_qc(self._qc_data(q30=0.92), "SAMPLE1")
-        assert result["fastp"]["q30_rate"] == 0.92
+        assert result["fastp"]["q30_rate"] == pytest.approx(0.92)
 
     def test_multi_lane_reads_summed(self):
         qc_data = make_multiqc(
@@ -321,7 +323,7 @@ class TestExtractBaseQcFastp:
             }
         )
         result = _extract_base_qc(qc_data, "SAMPLE1")
-        assert result["fastp"]["q30_rate"] == 0.85
+        assert result["fastp"]["q30_rate"] == pytest.approx(0.85)
 
     def test_sample_not_present_no_fastp_key(self):
         result = _extract_base_qc(make_multiqc(), "SAMPLE1")
@@ -346,7 +348,7 @@ class TestExtractBaseQcBowtie2:
 
     def test_alignment_rate_correct(self):
         result = _extract_base_qc(self._qc_data(rate=15.5), "SAMPLE1")
-        assert result["bowtie2"]["overall_alignment_rate"] == 15.5
+        assert result["bowtie2"]["overall_alignment_rate"] == pytest.approx(15.5)
 
     def test_total_reads_correct(self):
         result = _extract_base_qc(self._qc_data(total=900000), "SAMPLE1")
@@ -389,11 +391,11 @@ class TestExtractBaseQcFastqc:
 
     def test_gc_forward_correct(self):
         result = _extract_base_qc(self._qc_data(), "SAMPLE1")
-        assert result["fastqc"]["pct_gc_forward"] == 48.0
+        assert result["fastqc"]["pct_gc_forward"] == pytest.approx(48.0)
 
     def test_gc_reverse_correct(self):
         result = _extract_base_qc(self._qc_data(), "SAMPLE1")
-        assert result["fastqc"]["pct_gc_reverse"] == 50.0
+        assert result["fastqc"]["pct_gc_reverse"] == pytest.approx(50.0)
 
     def test_sample_not_present_no_fastqc_key(self):
         result = _extract_base_qc(make_multiqc(), "SAMPLE1")
