@@ -9,7 +9,7 @@ from typing import Any
 
 import pandas as pd
 
-from app.ingestor.models import TaxonEntry
+from app.models.taxonomy import TaxonEntry
 
 # Rows with these tax_id values are Emu bookkeeping, not real taxa.
 _SKIP_TAX_IDS = {"unmapped", "mapped_unclassified"}

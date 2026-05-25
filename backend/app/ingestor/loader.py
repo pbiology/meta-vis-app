@@ -43,17 +43,17 @@ from app.config import settings
 from app.ingestor.emu_reader import read_emu_abundance
 from app.ingestor.metaval_reader import read_metaval
 from app.ingestor.multiqc_reader import read_multiqc
-from app.ingestor.models import (
-    TaxprofilerIngestInputs,
+from app.ingestor.inputs import (
     MultiQCRaw,
-    PipelineInfoOutput,
+    TaxprofilerIngestInputs,
     TranaIngestInputs,
     TranaSampleInputs,
 )
 from app.ingestor.nanoplot_reader import read_nanostats
 from app.ingestor.pipeline_info_reader import read_pipeline_info
 from app.ingestor.taxpasta_reader import load_taxpasta
-from app.models.sample import TaxprofilerIngestMeta, TranaIngestMeta
+from app.models.ingest import TaxprofilerIngestMeta, TranaIngestMeta
+from app.models.pipeline import PipelineInfo
 
 
 # ---------------------------------------------------------------------------
@@ -275,7 +275,7 @@ async def _parse_taxprofiler_inputs(
     results = await asyncio.gather(*io_tasks)
 
     cursor = 0
-    pipeline_info: PipelineInfoOutput = results[cursor]
+    pipeline_info: PipelineInfo = results[cursor]
     cursor += 1
     multiqc: MultiQCRaw = results[cursor]
     cursor += 1
@@ -448,7 +448,7 @@ async def _parse_trana_inputs(
 
     results = await asyncio.gather(*io_tasks)
 
-    pipeline_info: PipelineInfoOutput = results[0]
+    pipeline_info: PipelineInfo = results[0]
     multiqc_html: str | None = results[1] if files.multiqc_html is not None else None
 
     def _at(slot: dict[str, int], key: str):

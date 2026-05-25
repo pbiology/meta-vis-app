@@ -5,7 +5,7 @@
 from pathlib import Path
 from typing import Any
 
-from app.ingestor.models import NanoPlotStats
+from app.models.qc import NanoPlotStats
 
 # Maps NanoStats.txt keys (lowercased) to NanoPlotStats field names.
 _KEY_MAP: dict[str, str] = {

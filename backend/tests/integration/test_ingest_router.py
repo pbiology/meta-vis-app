@@ -32,7 +32,7 @@ def _fake_bundle() -> bytes:
 
 
 def _meta_stub(case_id: str = "testcase"):
-    from app.models.sample import (
+    from app.models.ingest import (
         TaxprofilerClassifierMeta,
         TaxprofilerIngestMeta,
         TaxprofilerSampleIngestRequest,
@@ -115,7 +115,7 @@ class TestIngest:
 
     def test_manifest_validation_returns_422(self, client):
         # Build a real ValidationError instance via Pydantic
-        from app.models.sample import TaxprofilerIngestMeta
+        from app.models.ingest import TaxprofilerIngestMeta
 
         try:
             TaxprofilerIngestMeta.model_validate({})

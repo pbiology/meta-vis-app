@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from app.ingestor.models import MultiQCRaw
+from app.ingestor.inputs import MultiQCRaw
 
 
 def read_multiqc(file_path: str) -> MultiQCRaw:

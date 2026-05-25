@@ -4,14 +4,14 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from app.ingestor.models import (
+from app.models.metaval import (
     BlastHits,
     IgvOrganism,
     MetavalOutput,
     MetavalResult,
-    PipelineInfoOutput,
     VerificationData,
 )
+from app.models.pipeline import PipelineInfo
 
 
 MAX_IGV_SIZE = 10 * 1024 * 1024  # 10 MB
@@ -239,10 +239,10 @@ def _read_spades(metaval_dir: Path) -> dict[tuple[str, str], dict[str, object]]:
     return spades_map
 
 
-def _read_metaval_pipeline_info(metaval_dir: Path) -> Optional[PipelineInfoOutput]:
+def _read_metaval_pipeline_info(metaval_dir: Path) -> Optional[PipelineInfo]:
     """
     Read the metaval software versions file from pipeline_info/.
-    Returns a PipelineInfoOutput or None if the file is absent or invalid.
+    Returns a PipelineInfo or None if the file is absent or invalid.
     """
     pipeline_info_dir = metaval_dir / "pipeline_info"
     if not pipeline_info_dir.exists():

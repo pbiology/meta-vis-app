@@ -19,17 +19,13 @@ from mongomock.collection import BulkOperationBuilder
 from mongomock.not_implemented import ignore_feature
 
 from app.ingestor import orchestrator
-from app.ingestor.models import (
-    TaxprofilerIngestInputs,
-    MultiQCRaw,
-    PipelineInfoOutput,
-    PipelineConfiguration,
-)
-from app.models.sample import (
+from app.ingestor.inputs import MultiQCRaw, TaxprofilerIngestInputs
+from app.models.ingest import (
     TaxprofilerClassifierMeta,
     TaxprofilerIngestMeta,
     TaxprofilerSampleIngestRequest,
 )
+from app.models.pipeline import PipelineConfiguration, PipelineInfo
 
 # Mongomock doesn't implement real sessions/transactions; we verify ordering
 # and prepare-phase validation rather than true rollback, which requires a
@@ -91,7 +87,7 @@ def make_inputs(**overrides) -> TaxprofilerIngestInputs:
         fastp={},
         bowtie2={},
     )
-    pipeline_info = PipelineInfoOutput(
+    pipeline_info = PipelineInfo(
         software_used={"FASTP": {"fastp": "0.23.4"}},
         pipeline_configuration=PipelineConfiguration(
             pipeline_name="nf-core/taxprofiler",

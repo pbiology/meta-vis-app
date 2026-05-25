@@ -33,7 +33,7 @@ FULL_MULTIQC = {
 
 
 def test_read_multiqc_returns_all_keys(tmp_path):
-    from app.ingestor.models import MultiQCRaw
+    from app.ingestor.inputs import MultiQCRaw
 
     path = write_multiqc(tmp_path, FULL_MULTIQC)
     result = read_multiqc(path)

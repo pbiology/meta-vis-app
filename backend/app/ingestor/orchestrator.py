@@ -12,15 +12,15 @@ from typing import Any
 from pymongo import ReturnDocument, UpdateOne
 
 from app.database import get_client
-from app.ingestor.models import (
-    TaxprofilerIngestInputs,
-    MetavalResult,
+from app.ingestor.inputs import (
     MultiQCRaw,
-    TaxonEntry,
+    TaxprofilerIngestInputs,
     TranaIngestInputs,
 )
 from app.ingestor.taxpasta_reader import extract_sample_profile
-from app.models.sample import TaxprofilerIngestMeta, TranaIngestMeta
+from app.models.ingest import TaxprofilerIngestMeta, TranaIngestMeta
+from app.models.metaval import MetavalResult
+from app.models.taxonomy import TaxonEntry
 
 logger = logging.getLogger(__name__)
 
