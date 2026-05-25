@@ -28,8 +28,6 @@ Examples:
         --sample "sample_id=S1 type=sample material=DNA abundance_path=/path/to/S1_rel-abundance.tsv" \\
         --password yourpassword
 
-Backward-compatible: calling without a subcommand (old style) routes to taxprofiler.
-
 The bundle layout the CLI produces must match what the server's loader expects.
 The canonical layout is documented in backend/app/ingestor/loader.py; the
 constants below mirror it.
@@ -933,14 +931,7 @@ def _print_result(
 # Entry point
 # ---------------------------------------------------------------------------
 
-_SUBCOMMANDS = {"taxprofiler", "trana"}
-
-
 def main():
-    # Backward compatibility: if first arg is not a subcommand, assume taxprofiler
-    if len(sys.argv) > 1 and sys.argv[1] not in _SUBCOMMANDS and sys.argv[1] != "-h":
-        sys.argv.insert(1, "taxprofiler")
-
     parser = argparse.ArgumentParser(
         description="Ingest pipeline results into meta-vis-app",
         formatter_class=argparse.RawDescriptionHelpFormatter,
