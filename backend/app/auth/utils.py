@@ -39,7 +39,7 @@ def _highest_role(realm_roles: list[str]) -> str:
     for role in ROLE_PRIORITY:
         if role in lowered:
             return role
-    return "reader"
+    return "writer"
 
 
 def verify_access_token(token: str) -> dict:
