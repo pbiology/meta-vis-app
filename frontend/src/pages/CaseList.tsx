@@ -39,6 +39,11 @@ export default function CaseList() {
 
   const data = casesQ.data ?? { items: [], total: 0, pages: 1, ticket_links_enabled: false };
   const stats = statsQ.data ?? { total: 0, pending: 0, reviewed: 0 };
+  const visibleAnalysisTypes = visibleAnalysis ?? ["shotgun", "amplicon"];
+  const showShotgun = visibleAnalysisTypes.includes("shotgun");
+  const showAmplicon = visibleAnalysisTypes.includes("amplicon");
+  const pendingShotgun = (stats.pending_shotgun as number | undefined) ?? 0;
+  const pendingAmplicon = (stats.pending_amplicon as number | undefined) ?? 0;
   const outbreakCaseIds = new Set(outbreaksQ.data?.outbreaks.flatMap((o) => o.case_ids) ?? []);
   const pathogenCaseIds = new Set(pathogenCasesQ.data?.case_ids ?? []);
   const ntcContaminantCaseIds = new Set(ntcCaseIdsQ.data?.case_ids ?? []);
@@ -140,6 +145,20 @@ export default function CaseList() {
           </span>
           <span className="text-xs text-gray-300">{String(stats.total ?? 0)} total</span>
         </div>
+      </div>
+
+      <div className="px-4 py-3 bg-amber-50/50 border-b border-gray-100 text-lg text-gray-600 flex items-center gap-6">
+        <span className="font-medium text-gray-700">Ready for review:</span>
+        {showShotgun && (
+          <span>
+            <span className="text-amber-600 font-semibold">{pendingShotgun}</span> shotgun
+          </span>
+        )}
+        {showAmplicon && (
+          <span>
+            <span className="text-amber-600 font-semibold">{pendingAmplicon}</span> amplicon
+          </span>
+        )}
       </div>
 
       <div className="flex-1 overflow-auto">
