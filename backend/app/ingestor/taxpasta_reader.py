@@ -4,7 +4,7 @@ import pandas as pd
 from pathlib import Path
 from typing import Optional
 
-from app.ingestor.models import TaxonEntry
+from app.models.taxonomy import TaxonEntry
 
 
 # Superkingdom names as they appear in the lineage string

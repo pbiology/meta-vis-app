@@ -1,6 +1,6 @@
 # tests/unit/test_orchestrator.py
 
-from app.ingestor.models import MultiQCRaw
+from app.ingestor.inputs import MultiQCRaw
 from app.ingestor.orchestrator import _extract_classifier_qc, _extract_base_qc
 
 

@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
 from typing import Annotated, Optional
-from app.models.sample import CaseResponse
+from app.models.case import CaseResponse
 
 from app.audit import log_audit_event
 from app.database import get_db

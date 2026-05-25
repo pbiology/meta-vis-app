@@ -2,7 +2,7 @@
 #
 # Loader-side bundle tests. We build tar.gz files programmatically (no
 # dependency on backend/test-data/) and assert:
-#   - happy-path extraction produces correct IngestMeta + IngestInputs
+#   - happy-path extraction produces correct TaxprofilerIngestMeta + TaxprofilerIngestInputs
 #   - unsafe member names are rejected (absolute, .., symlink)
 #   - missing manifest, missing referenced files, and manifest/bundle
 #     mismatches produce BundleError (HTTP 400 in the router)

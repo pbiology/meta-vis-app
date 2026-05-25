@@ -19,7 +19,7 @@ from app.ingestor.loader import (
     load_taxprofiler_bundle,
     load_trana_bundle,
 )
-from app.ingestor.orchestrator import ingest_case, ingest_trana_case
+from app.ingestor.orchestrator import ingest_taxprofiler_case, ingest_trana_case
 from app.routers import alerts, ntc
 
 router = APIRouter()
@@ -187,7 +187,7 @@ async def ingest_taxprofiler(
         t0 = time.perf_counter()
         meta, inputs = await load_taxprofiler_bundle(bundle.file, extract_dir)
         t_extract = time.perf_counter()
-        result = await ingest_case(meta, inputs, db)
+        result = await ingest_taxprofiler_case(meta, inputs, db)
         t_ingest = time.perf_counter()
         logger.info(
             "ingest timings case=%s extract_ms=%d ingest_ms=%d total_ms=%d",

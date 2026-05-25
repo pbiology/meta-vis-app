@@ -1,13 +1,13 @@
 # tests/integration/test_ingest_atomicity.py
 #
-# Verifies the atomicity contract of `ingest_case`:
+# Verifies the atomicity contract of `ingest_taxprofiler_case`:
 #   - prepare phase materialises every doc before any DB write
 #   - commit phase runs all Mongo writes inside one transaction
 #   - blob uploads run only after the transaction commits
 #
 # The orchestrator no longer touches the filesystem: it consumes pre-parsed
-# IngestInputs handed to it by the loader (see app.ingestor.loader). These
-# tests therefore build IngestInputs in-memory and skip the filesystem
+# TaxprofilerIngestInputs handed to it by the loader (see app.ingestor.loader). These
+# tests therefore build TaxprofilerIngestInputs in-memory and skip the filesystem
 # entirely. Loader-side failures (missing files, bad bundles) are covered
 # separately in tests/unit/test_loader.py.
 
@@ -19,17 +19,13 @@ from mongomock.collection import BulkOperationBuilder
 from mongomock.not_implemented import ignore_feature
 
 from app.ingestor import orchestrator
-from app.ingestor.models import (
-    IngestInputs,
-    MultiQCRaw,
-    PipelineInfoOutput,
-    PipelineConfiguration,
+from app.ingestor.inputs import MultiQCRaw, TaxprofilerIngestInputs
+from app.models.ingest import (
+    TaxprofilerClassifierMeta,
+    TaxprofilerIngestMeta,
+    TaxprofilerSampleIngestRequest,
 )
-from app.models.sample import (
-    ClassifierMeta,
-    IngestMeta,
-    SampleIngestRequest,
-)
+from app.models.pipeline import PipelineConfiguration, PipelineInfo
 
 # Mongomock doesn't implement real sessions/transactions; we verify ordering
 # and prepare-phase validation rather than true rollback, which requires a
@@ -54,13 +50,13 @@ BulkOperationBuilder.add_update = _add_update_compat  # type: ignore[method-assi
 # ---------------------------------------------------------------------------
 
 
-def make_meta(**overrides) -> IngestMeta:
+def make_meta(**overrides) -> TaxprofilerIngestMeta:
     payload = {
         "case_id": "atomic-case",
         "order_date": "2026-01-01",
-        "classifiers": [ClassifierMeta(name="kraken2", db="k2_pluspf")],
+        "classifiers": [TaxprofilerClassifierMeta(name="kraken2", db="k2_pluspf")],
         "samples": [
-            SampleIngestRequest(
+            TaxprofilerSampleIngestRequest(
                 sample_id="SRR001",
                 sample_type="sample",
                 material="DNA",
@@ -72,10 +68,10 @@ def make_meta(**overrides) -> IngestMeta:
         "has_multiqc_report": False,
     }
     payload.update(overrides)
-    return IngestMeta(**payload)
+    return TaxprofilerIngestMeta(**payload)
 
 
-def make_inputs(**overrides) -> IngestInputs:
+def make_inputs(**overrides) -> TaxprofilerIngestInputs:
     multiqc = MultiQCRaw(
         kraken2={
             "SRR001_k2_pluspf": {
@@ -91,7 +87,7 @@ def make_inputs(**overrides) -> IngestInputs:
         fastp={},
         bowtie2={},
     )
-    pipeline_info = PipelineInfoOutput(
+    pipeline_info = PipelineInfo(
         software_used={"FASTP": {"fastp": "0.23.4"}},
         pipeline_configuration=PipelineConfiguration(
             pipeline_name="nf-core/taxprofiler",
@@ -121,7 +117,7 @@ def make_inputs(**overrides) -> IngestInputs:
         "metaval": None,
     }
     defaults.update(overrides)
-    return IngestInputs(**defaults)
+    return TaxprofilerIngestInputs(**defaults)
 
 
 # ---------------------------------------------------------------------------
@@ -166,7 +162,9 @@ def patch_blob_store(fake_blob):
 
 class TestIngestAtomicity:
     async def test_happy_path_persists_case_and_samples(self, fake_db):
-        result = await orchestrator.ingest_case(make_meta(), make_inputs(), fake_db)
+        result = await orchestrator.ingest_taxprofiler_case(
+            make_meta(), make_inputs(), fake_db
+        )
 
         assert result["case_id"] == "atomic-case"
         assert result["samples_ingested"] == 1
@@ -184,14 +182,16 @@ class TestIngestAtomicity:
         await fake_db["cases"].insert_one({"case_id": "atomic-case"})
 
         with pytest.raises(ValueError, match="already exists"):
-            await orchestrator.ingest_case(make_meta(), make_inputs(), fake_db)
+            await orchestrator.ingest_taxprofiler_case(
+                make_meta(), make_inputs(), fake_db
+            )
 
         assert await fake_db["samples"].count_documents({}) == 0
         assert await fake_db["taxa"].count_documents({}) == 0
 
     async def test_case_doc_written_with_sample_ids_in_single_write(self, fake_db):
         """case.sample_ids must be populated at insert time, not patched later."""
-        await orchestrator.ingest_case(make_meta(), make_inputs(), fake_db)
+        await orchestrator.ingest_taxprofiler_case(make_meta(), make_inputs(), fake_db)
 
         case = await fake_db["cases"].find_one({"case_id": "atomic-case"})
         assert case["sample_ids"], "case.sample_ids must be populated at insert time"
@@ -203,7 +203,7 @@ class TestIngestAtomicity:
         meta = make_meta(classifiers_with_krona=["kraken2"])
         inputs = make_inputs(krona_html={"kraken2": "<html>krona</html>"})
 
-        await orchestrator.ingest_case(meta, inputs, fake_db)
+        await orchestrator.ingest_taxprofiler_case(meta, inputs, fake_db)
 
         blob = await fake_blob.get("krona/atomic-case/kraken2.html")
         assert blob == "<html>krona</html>"

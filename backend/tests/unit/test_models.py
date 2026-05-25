@@ -4,15 +4,12 @@ import pytest
 from datetime import datetime, timezone
 from pydantic import ValidationError
 
-from app.models.sample import (
-    SampleResponse,
-    CaseResponse,
-    ClassifierQcStats,
-    PipelineConfiguration,
-    ReviewStatus,
-    TaxonEntry,
-    ClassifierProfile,
-)
+from app.models.case import CaseResponse
+from app.models.common import ReviewStatus
+from app.models.pipeline import PipelineConfiguration
+from app.models.qc import ClassifierQcStats
+from app.models.sample import SampleResponse
+from app.models.taxonomy import ClassifierProfile, TaxonEntry
 
 
 def minimal_sample_doc(**overrides) -> dict:

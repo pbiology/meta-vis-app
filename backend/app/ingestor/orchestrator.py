@@ -12,15 +12,15 @@ from typing import Any
 from pymongo import ReturnDocument, UpdateOne
 
 from app.database import get_client
-from app.ingestor.models import (
-    IngestInputs,
-    MetavalResult,
+from app.ingestor.inputs import (
     MultiQCRaw,
-    TaxonEntry,
+    TaxprofilerIngestInputs,
     TranaIngestInputs,
 )
 from app.ingestor.taxpasta_reader import extract_sample_profile
-from app.models.sample import IngestMeta, TranaIngestMeta
+from app.models.ingest import TaxprofilerIngestMeta, TranaIngestMeta
+from app.models.metaval import MetavalResult
+from app.models.taxonomy import TaxonEntry
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Prepared-ingest dataclasses
 #
-# Issue #10: ingest_case is split into three phases — prepare (pure; no DB or
+# Issue #10: ingest_taxprofiler_case is split into three phases — prepare (pure; no DB or
 # blob writes), commit (all Mongo writes inside a single transaction), and
 # upload-blobs (after the transaction commits). These dataclasses carry the
 # fully-materialised writes from prepare to commit/upload so that a failure
@@ -186,14 +186,14 @@ def _build_taxa_upsert_ops(all_profiles: list) -> list[UpdateOne]:
 
 
 def _build_sample_docs_and_profiles(
-    meta: IngestMeta,
-    inputs: IngestInputs,
+    meta: TaxprofilerIngestMeta,
+    inputs: TaxprofilerIngestInputs,
     now: datetime,
 ) -> tuple[list[dict], list[dict], dict[str, list[int]]]:
     """Build sample documents, per-classifier profiles, and subject_id groupings.
 
     Returns (sample_docs, all_profiles, subject_refs). All three are consumed
-    by _prepare_ingest to build the case doc and taxa upsert ops.
+    by _prepare_taxprofiler_ingest to build the case doc and taxa upsert ops.
     """
     qc_data = inputs.multiqc
     pipeline_info = inputs.pipeline_info
@@ -363,8 +363,8 @@ def _prepare_metaval_result(
     return _MetavalPrepared(doc=doc, blob_uploads=blob_uploads)
 
 
-async def _prepare_ingest(
-    meta: IngestMeta, inputs: IngestInputs, now: datetime
+async def _prepare_taxprofiler_ingest(
+    meta: TaxprofilerIngestMeta, inputs: TaxprofilerIngestInputs, now: datetime
 ) -> _PreparedIngest:
     """Phase 1: build every Mongo doc + blob payload purely from already-parsed
     inputs. No filesystem reads except for metaval IGV/verification-data files,
@@ -573,8 +573,10 @@ async def _upload_all_blobs(prepared: _PreparedIngest) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def ingest_case(
-    meta: IngestMeta, inputs: IngestInputs, db: AsyncIOMotorDatabase
+async def ingest_taxprofiler_case(
+    meta: TaxprofilerIngestMeta,
+    inputs: TaxprofilerIngestInputs,
+    db: AsyncIOMotorDatabase,
 ) -> dict:
     """
     Atomic ingest of a taxprofiler + optional metaval case.
@@ -598,7 +600,7 @@ async def ingest_case(
         )
 
     t0 = time.perf_counter()
-    prepared = await _prepare_ingest(meta, inputs, now)
+    prepared = await _prepare_taxprofiler_ingest(meta, inputs, now)
     t_prepare = time.perf_counter()
 
     subject_map: dict[str, ObjectId] = {}
@@ -617,7 +619,7 @@ async def ingest_case(
     t_blobs = time.perf_counter()
 
     logger.info(
-        "ingest_case timings case=%s prepare_ms=%d commit_ms=%d blobs_ms=%d "
+        "ingest_taxprofiler_case timings case=%s prepare_ms=%d commit_ms=%d blobs_ms=%d "
         "blob_count=%d",
         meta.case_id,
         int((t_prepare - t0) * 1000),
@@ -773,7 +775,7 @@ def _prepare_trana_ingest(
 async def ingest_trana_case(
     meta: TranaIngestMeta, inputs: TranaIngestInputs, db: AsyncIOMotorDatabase
 ) -> dict:
-    """Atomic ingest of a Trana (16S / ONT / Emu) case. See `ingest_case`."""
+    """Atomic ingest of a Trana (16S / ONT / Emu) case. See `ingest_taxprofiler_case`."""
     now = datetime.now(timezone.utc)
 
     if await db["cases"].find_one({"case_id": meta.case_id}):

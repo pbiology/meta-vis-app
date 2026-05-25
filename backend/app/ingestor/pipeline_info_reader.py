@@ -3,10 +3,10 @@
 import yaml
 from pathlib import Path
 
-from app.ingestor.models import PipelineConfiguration, PipelineInfoOutput
+from app.models.pipeline import PipelineConfiguration, PipelineInfo
 
 
-def read_pipeline_info(pipeline_info_path: str) -> PipelineInfoOutput:
+def read_pipeline_info(pipeline_info_path: str) -> PipelineInfo:
     path = Path(pipeline_info_path)
 
     if not path.exists():
@@ -36,7 +36,7 @@ def read_pipeline_info(pipeline_info_path: str) -> PipelineInfoOutput:
         (k for k in workflow_info.keys() if k != "Nextflow"), None
     )
 
-    return PipelineInfoOutput(
+    return PipelineInfo(
         software_used=data,
         pipeline_configuration=PipelineConfiguration(
             pipeline_name=pipeline_name,

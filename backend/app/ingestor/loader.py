@@ -9,7 +9,7 @@ orchestrator. The orchestrator never sees user-supplied paths.
 
 Bundle layout (taxprofiler)::
 
-    manifest.json                                  # IngestMeta as JSON
+    manifest.json                                  # TaxprofilerIngestMeta as JSON
     multiqc/multiqc_data.json                      # required
     multiqc_report/<filename>                      # optional
     pipeline_info/<filename>                       # required
@@ -43,17 +43,17 @@ from app.config import settings
 from app.ingestor.emu_reader import read_emu_abundance
 from app.ingestor.metaval_reader import read_metaval
 from app.ingestor.multiqc_reader import read_multiqc
-from app.ingestor.models import (
-    IngestInputs,
+from app.ingestor.inputs import (
     MultiQCRaw,
-    PipelineInfoOutput,
+    TaxprofilerIngestInputs,
     TranaIngestInputs,
     TranaSampleInputs,
 )
 from app.ingestor.nanoplot_reader import read_nanostats
 from app.ingestor.pipeline_info_reader import read_pipeline_info
 from app.ingestor.taxpasta_reader import load_taxpasta
-from app.models.sample import IngestMeta, TranaIngestMeta
+from app.models.ingest import TaxprofilerIngestMeta, TranaIngestMeta
+from app.models.pipeline import PipelineInfo
 
 
 # ---------------------------------------------------------------------------
@@ -194,7 +194,9 @@ def _check_optional_subtree(
         raise BundleError(f"{subdir}/ present but manifest {flag_name}=False")
 
 
-def _resolve_taxprofiler_files(meta: IngestMeta, dest_dir: Path) -> _TaxprofilerFiles:
+def _resolve_taxprofiler_files(
+    meta: TaxprofilerIngestMeta, dest_dir: Path
+) -> _TaxprofilerFiles:
     """Locate every file the manifest claims, cross-check the tree against
     the manifest, and return the resolved Paths."""
     multiqc_file = dest_dir / MULTIQC_ARC
@@ -252,9 +254,9 @@ def _resolve_taxprofiler_files(meta: IngestMeta, dest_dir: Path) -> _Taxprofiler
 
 
 async def _parse_taxprofiler_inputs(
-    meta: IngestMeta, files: _TaxprofilerFiles
-) -> IngestInputs:
-    """Read and parse every file concurrently into typed IngestInputs."""
+    meta: TaxprofilerIngestMeta, files: _TaxprofilerFiles
+) -> TaxprofilerIngestInputs:
+    """Read and parse every file concurrently into typed TaxprofilerIngestInputs."""
     io_tasks: list = [
         asyncio.to_thread(read_pipeline_info, str(files.pipeline_info)),
         asyncio.to_thread(read_multiqc, str(files.multiqc)),
@@ -273,7 +275,7 @@ async def _parse_taxprofiler_inputs(
     results = await asyncio.gather(*io_tasks)
 
     cursor = 0
-    pipeline_info: PipelineInfoOutput = results[cursor]
+    pipeline_info: PipelineInfo = results[cursor]
     cursor += 1
     multiqc: MultiQCRaw = results[cursor]
     cursor += 1
@@ -291,7 +293,7 @@ async def _parse_taxprofiler_inputs(
         cursor += 1
     metaval = results[cursor] if files.metaval_dir is not None else None
 
-    return IngestInputs(
+    return TaxprofilerIngestInputs(
         multiqc=multiqc,
         pipeline_info=pipeline_info,
         taxpasta=taxpasta,
@@ -303,16 +305,16 @@ async def _parse_taxprofiler_inputs(
 
 async def load_taxprofiler_bundle(
     source: BinaryIO | Path, dest_dir: Path
-) -> tuple[IngestMeta, IngestInputs]:
+) -> tuple[TaxprofilerIngestMeta, TaxprofilerIngestInputs]:
     """Extract ``source`` (a tar stream or path) into ``dest_dir`` and parse
     it into ``(meta, inputs)``.
 
     Raises ``BundleError`` on malformed bundles, ``BundleTooLargeError`` on
     oversized bundles, or ``pydantic.ValidationError`` on a manifest that
-    doesn't match :class:`IngestMeta`.
+    doesn't match :class:`TaxprofilerIngestMeta`.
     """
     _safe_extract(source, dest_dir, settings.ingest_upload_max_uncompressed_bytes)
-    meta = IngestMeta.model_validate(_read_manifest(dest_dir))
+    meta = TaxprofilerIngestMeta.model_validate(_read_manifest(dest_dir))
     files = _resolve_taxprofiler_files(meta, dest_dir)
     inputs = await _parse_taxprofiler_inputs(meta, files)
     return meta, inputs
@@ -446,7 +448,7 @@ async def _parse_trana_inputs(
 
     results = await asyncio.gather(*io_tasks)
 
-    pipeline_info: PipelineInfoOutput = results[0]
+    pipeline_info: PipelineInfo = results[0]
     multiqc_html: str | None = results[1] if files.multiqc_html is not None else None
 
     def _at(slot: dict[str, int], key: str):

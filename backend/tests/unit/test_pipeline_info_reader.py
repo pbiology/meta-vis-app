@@ -33,9 +33,9 @@ VALID_PIPELINE_INFO = {
 def test_read_pipeline_info_returns_model(tmp_path):
     path = write_yaml(tmp_path, VALID_PIPELINE_INFO)
     result = read_pipeline_info(path)
-    from app.ingestor.models import PipelineInfoOutput
+    from app.models.pipeline import PipelineInfo
 
-    assert isinstance(result, PipelineInfoOutput)
+    assert isinstance(result, PipelineInfo)
 
 
 def test_pipeline_configuration_extracted(tmp_path):
