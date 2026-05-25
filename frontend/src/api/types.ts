@@ -59,6 +59,11 @@ export interface CasesResponse {
 }
 
 export interface CaseStats {
+  total?: number;
+  pending?: number;
+  reviewed?: number;
+  pending_shotgun?: number;
+  pending_amplicon?: number;
   [key: string]: number | string | boolean | null | undefined;
 }
 

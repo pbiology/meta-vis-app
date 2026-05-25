@@ -24,28 +24,35 @@ def client(app):
     return TestClient(app)
 
 
-async def insert_case(db, case_id="testcase", reviewed=False, order_date="2026-01-01"):
-    result = await db["cases"].insert_one(
-        {
-            "case_id": case_id,
-            "order_date": order_date,
-            "ingested_at": datetime.now(timezone.utc),
-            "sample_ids": [],
-            "classifiers": [],
-            "has_krona": False,
-            "pipeline_info": None,
-            "sample_count": 0,
-            "control_count": 0,
-            "sample_names": [],
-            "notes": [],
-            "review": {
-                "reviewed": reviewed,
-                "reviewed_by": "alice" if reviewed else None,
-                "reviewed_at": None,
-                "notes": None,
-            },
-        }
-    )
+async def insert_case(
+    db,
+    case_id="testcase",
+    reviewed=False,
+    order_date="2026-01-01",
+    analysis_type=None,
+):
+    doc = {
+        "case_id": case_id,
+        "order_date": order_date,
+        "ingested_at": datetime.now(timezone.utc),
+        "sample_ids": [],
+        "classifiers": [],
+        "has_krona": False,
+        "pipeline_info": None,
+        "sample_count": 0,
+        "control_count": 0,
+        "sample_names": [],
+        "notes": [],
+        "review": {
+            "reviewed": reviewed,
+            "reviewed_by": "alice" if reviewed else None,
+            "reviewed_at": None,
+            "notes": None,
+        },
+    }
+    if analysis_type is not None:
+        doc["analysis_type"] = analysis_type
+    result = await db["cases"].insert_one(doc)
     return result.inserted_id
 
 
@@ -79,6 +86,8 @@ class TestCaseStats:
         assert data["total"] == 0
         assert data["pending"] == 0
         assert data["reviewed"] == 0
+        assert data["pending_shotgun"] == 0
+        assert data["pending_amplicon"] == 0
 
     async def test_counts_correctly(self, client, fake_db):
         await insert_case(fake_db, "case1", reviewed=False)
@@ -88,6 +97,18 @@ class TestCaseStats:
         assert data["total"] == 2
         assert data["reviewed"] == 1
         assert data["pending"] == 1
+
+    async def test_pending_split_by_analysis_type(self, client, fake_db):
+        await insert_case(fake_db, "s1", reviewed=False, analysis_type="shotgun")
+        await insert_case(fake_db, "s2", reviewed=False, analysis_type="shotgun")
+        await insert_case(fake_db, "a1", reviewed=False, analysis_type="amplicon")
+        await insert_case(fake_db, "s3", reviewed=True, analysis_type="shotgun")
+        resp = client.get("/api/v1/cases/stats")
+        data = resp.json()
+        assert data["pending_shotgun"] == 2
+        assert data["pending_amplicon"] == 1
+        assert data["pending"] == 3
+        assert data["reviewed"] == 1
 
 
 # ---------------------------------------------------------------------------

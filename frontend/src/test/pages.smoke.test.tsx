@@ -12,7 +12,6 @@ import { screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "./utils";
 
 import Login from "../pages/Login";
-import Dashboard from "../pages/Dashboard";
 import CaseList from "../pages/CaseList";
 import CaseView from "../pages/CaseView";
 import SampleList from "../pages/SampleList";
@@ -40,11 +39,6 @@ describe("page smoke tests", () => {
   it("Login renders", async () => {
     renderWithProviders(<Login />, { authenticated: false });
     expect(screen.getByText(/meta-vis/i)).toBeInTheDocument();
-  });
-
-  it("Dashboard renders", async () => {
-    renderWithProviders(<Dashboard />, { route: "/" });
-    await settled();
   });
 
   it("CaseList renders empty state", async () => {

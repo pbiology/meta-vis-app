@@ -6,7 +6,6 @@ import SampleList from "./pages/SampleList";
 import SampleDetail from "./pages/SampleDetail";
 import CaseList from "./pages/CaseList";
 import CaseView from "./pages/CaseView";
-import Dashboard from "./pages/Dashboard";
 import Admin from "./pages/Admin";
 import MetavalDetails from "./pages/MetavalDetails";
 import Alerts from "./pages/Alerts";
@@ -66,7 +65,7 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<Dashboard />} />
+            <Route index element={<Navigate to="/cases" replace />} />
             <Route path="cases" element={<CaseList />} />
             <Route path="cases/:caseId" element={<LegacyCaseRedirect />} />
             <Route path="samples" element={<SampleList />} />

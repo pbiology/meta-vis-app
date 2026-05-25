@@ -94,7 +94,19 @@ async def case_stats(
     total = await db["cases"].estimated_document_count()
     pending = await db["cases"].count_documents({"review.reviewed": {"$ne": True}})
     reviewed = await db["cases"].count_documents({"review.reviewed": True})
-    return {"total": total, "pending": pending, "reviewed": reviewed}
+    pending_shotgun = await db["cases"].count_documents(
+        {"review.reviewed": {"$ne": True}, "analysis_type": "shotgun"}
+    )
+    pending_amplicon = await db["cases"].count_documents(
+        {"review.reviewed": {"$ne": True}, "analysis_type": "amplicon"}
+    )
+    return {
+        "total": total,
+        "pending": pending,
+        "reviewed": reviewed,
+        "pending_shotgun": pending_shotgun,
+        "pending_amplicon": pending_amplicon,
+    }
 
 
 @router.get(
