@@ -35,7 +35,11 @@ class CaseResponse(_Base):
     classifiers: List[CaseClassifier] = []
     has_krona: bool = False
     has_multiqc: bool = False
+    # Pipeline-info of the producing pipeline — populated for both taxprofiler
+    # and trana cases (the PipelineInfo shape itself is pipeline-agnostic).
     pipeline_info: Optional[PipelineInfo] = None
+    # Separate slot: metaval runs as an additional step on top of taxprofiler,
+    # so its pipeline-info lives alongside the primary one rather than replacing it.
     metaval_pipeline_info: Optional[PipelineInfo] = None
     analysis_type: Optional[AnalysisType] = None
     sequencing_platform: Optional[SequencingPlatform] = None
