@@ -223,14 +223,14 @@ class CaseResponse(_Base):
 # ---------------------------------------------------------------------------
 
 
-class ClassifierMeta(BaseModel):
+class TaxprofilerClassifierMeta(BaseModel):
     """One classifier within a taxprofiler ingest manifest."""
 
     name: str  # e.g. "kraken2" or "centrifuge"
     db: str  # e.g. "k2_pluspf" or "p_compressed+h+v"
 
 
-class SampleIngestRequest(BaseModel):
+class TaxprofilerSampleIngestRequest(BaseModel):
     subject_id: Optional[str] = None
     sample_id: str
     sample_type: Literal["sample", "positive_ctrl", "negative_ctrl"]
@@ -240,14 +240,14 @@ class SampleIngestRequest(BaseModel):
     columns: dict
 
 
-class IngestMeta(BaseModel):
+class TaxprofilerIngestMeta(BaseModel):
     """Taxprofiler ingest manifest. Carried as manifest.json inside the bundle."""
 
     case_id: str
     ticket_id: Optional[str] = None
     order_date: Optional[date] = None
-    classifiers: List[ClassifierMeta]
-    samples: List[SampleIngestRequest]
+    classifiers: List[TaxprofilerClassifierMeta]
+    samples: List[TaxprofilerSampleIngestRequest]
     # True iff the bundle includes a metaval/ subtree.
     has_metaval: bool = False
     # True iff classifiers/<name>/krona/<file> is present for the named classifier.

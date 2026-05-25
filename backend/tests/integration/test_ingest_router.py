@@ -32,13 +32,17 @@ def _fake_bundle() -> bytes:
 
 
 def _meta_stub(case_id: str = "testcase"):
-    from app.models.sample import ClassifierMeta, IngestMeta, SampleIngestRequest
+    from app.models.sample import (
+        TaxprofilerClassifierMeta,
+        TaxprofilerIngestMeta,
+        TaxprofilerSampleIngestRequest,
+    )
 
-    return IngestMeta(
+    return TaxprofilerIngestMeta(
         case_id=case_id,
-        classifiers=[ClassifierMeta(name="kraken2", db="k2_pluspf")],
+        classifiers=[TaxprofilerClassifierMeta(name="kraken2", db="k2_pluspf")],
         samples=[
-            SampleIngestRequest(
+            TaxprofilerSampleIngestRequest(
                 sample_id="S1",
                 sample_type="sample",
                 material="DNA",
@@ -56,7 +60,7 @@ class TestIngest:
                 new=AsyncMock(return_value=(_meta_stub(), object())),
             ),
             patch(
-                "app.routers.ingest.ingest_case",
+                "app.routers.ingest.ingest_taxprofiler_case",
                 new=AsyncMock(
                     return_value={"case_id": "testcase", "samples_ingested": 1}
                 ),
@@ -111,10 +115,10 @@ class TestIngest:
 
     def test_manifest_validation_returns_422(self, client):
         # Build a real ValidationError instance via Pydantic
-        from app.models.sample import IngestMeta
+        from app.models.sample import TaxprofilerIngestMeta
 
         try:
-            IngestMeta.model_validate({})
+            TaxprofilerIngestMeta.model_validate({})
         except ValidationError as exc:
             ve = exc
 
@@ -140,7 +144,7 @@ class TestIngest:
                 new=AsyncMock(return_value=(_meta_stub(), object())),
             ),
             patch(
-                "app.routers.ingest.ingest_case",
+                "app.routers.ingest.ingest_taxprofiler_case",
                 new=AsyncMock(
                     side_effect=ValueError("Case 'testcase' already exists.")
                 ),
@@ -165,7 +169,7 @@ class TestIngest:
                 new=AsyncMock(return_value=(_meta_stub(), object())),
             ),
             patch(
-                "app.routers.ingest.ingest_case",
+                "app.routers.ingest.ingest_taxprofiler_case",
                 new=AsyncMock(side_effect=RuntimeError("boom")),
             ),
         ):
@@ -191,7 +195,7 @@ class TestIngest:
                 new=AsyncMock(return_value=(_meta_stub(), object())),
             ),
             patch(
-                "app.routers.ingest.ingest_case",
+                "app.routers.ingest.ingest_taxprofiler_case",
                 new=AsyncMock(
                     return_value={"case_id": "testcase", "samples_ingested": 1}
                 ),

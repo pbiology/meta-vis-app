@@ -165,7 +165,7 @@ class MetavalOutput(_StrictBase):
 
 
 @dataclass
-class IngestInputs:
+class TaxprofilerIngestInputs:
     """Parsed inputs for a taxprofiler ingest. All file I/O has already
     happened in the loader (with the exception of metaval IGV/verification-data
     blobs, which are streamed lazily from the loader's temp dir during the
