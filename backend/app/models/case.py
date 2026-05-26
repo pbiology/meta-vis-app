@@ -46,6 +46,10 @@ class CaseResponse(_Base):
     review: ReviewStatus = ReviewStatus()
     notes: List[CaseNote] = []
     sample_ids: List[str] = []
+    # ObjectId of the subject this case belongs to, serialised as str. None
+    # for control-only cases (no clinical sample). Enforced one-per-case at
+    # ingest by app.ingestor.orchestrator._pick_case_subject.
+    subject_id: Optional[str] = None
     report_selections: dict[str, list[int]] = Field(default_factory=dict)
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)

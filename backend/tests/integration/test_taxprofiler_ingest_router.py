@@ -43,6 +43,7 @@ def _meta_stub(case_id: str = "testcase"):
         classifiers=[TaxprofilerClassifierMeta(name="kraken2", db="k2_pluspf")],
         samples=[
             TaxprofilerSampleIngestRequest(
+                subject_id="SUBJ-1",
                 sample_id="S1",
                 sample_type="sample",
                 material="DNA",

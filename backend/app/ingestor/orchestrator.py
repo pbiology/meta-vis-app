@@ -56,6 +56,12 @@ class _PreparedIngest:
     sample_docs: list[dict]
     # subject_id string -> list of sample_doc indices that reference it
     subject_refs: dict[str, list[int]] = field(default_factory=dict)
+    # subject_id string -> sex value to persist on the subject document
+    subject_sex: dict[str, str] = field(default_factory=dict)
+    # The single subject_id this case belongs to, or None for control-only
+    # cases. Resolved to an ObjectId via subject_map at commit time and stored
+    # as case_doc["subject_id"].
+    case_subject_id: str | None = None
     taxa_upsert_ops: list[UpdateOne] = field(default_factory=list)
     metaval_prepared: list[_MetavalPrepared] = field(default_factory=list)
     metaval_pipeline_info: dict | None = None
@@ -183,6 +189,57 @@ def _build_taxa_upsert_ops(all_profiles: list) -> list[UpdateOne]:
 # ---------------------------------------------------------------------------
 # Prepare phase — taxprofiler / metaval ingest
 # ---------------------------------------------------------------------------
+
+
+def _pick_case_subject(samples: list) -> str | None:
+    """Return the single subject_id for clinical samples in this ingest.
+
+    Returns ``None`` when no clinical sample carries a subject (e.g. a
+    control-only validation run). Raises ``ValueError`` when clinical samples
+    reference more than one distinct subject — a case must belong to exactly
+    one subject. Controls (positive_ctrl / negative_ctrl) are ignored.
+    """
+    clinical_subject_ids: list[str] = []
+    seen: set[str] = set()
+    for s in samples:
+        if s.sample_type != "sample" or not s.subject_id:
+            continue
+        if s.subject_id in seen:
+            continue
+        seen.add(s.subject_id)
+        clinical_subject_ids.append(s.subject_id)
+
+    if len(clinical_subject_ids) > 1:
+        raise ValueError(
+            "A case must belong to exactly one subject, but this ingest's "
+            f"clinical samples reference {len(clinical_subject_ids)} distinct "
+            f"subjects: {sorted(clinical_subject_ids)}. "
+            "Split the ingest into one case per subject."
+        )
+    return clinical_subject_ids[0] if clinical_subject_ids else None
+
+
+def _collect_subject_sex(samples: list) -> dict[str, str]:
+    """Build subject_id -> sex map; raise on intra-ingest conflicts.
+
+    Clinical-data rule: rather than silently picking a value when two samples
+    disagree on a subject's sex, surface the discrepancy so the caller can
+    correct the manifest before the data lands in Mongo.
+    """
+    sex_by_id: dict[str, str] = {}
+    for s in samples:
+        if not s.subject_id:
+            continue
+        existing = sex_by_id.get(s.subject_id)
+        if existing is None:
+            sex_by_id[s.subject_id] = s.subject_sex
+        elif existing != s.subject_sex:
+            raise ValueError(
+                f"Subject '{s.subject_id}' has conflicting sex values within "
+                f"this ingest: '{existing}' and '{s.subject_sex}'. "
+                "Reconcile the manifest and re-run."
+            )
+    return sex_by_id
 
 
 def _build_sample_docs_and_profiles(
@@ -456,6 +513,8 @@ async def _prepare_taxprofiler_ingest(
         case_doc=case_doc,
         sample_docs=sample_docs,
         subject_refs=subject_refs,
+        subject_sex=_collect_subject_sex(meta.samples),
+        case_subject_id=_pick_case_subject(meta.samples),
         taxa_upsert_ops=_build_taxa_upsert_ops(all_profiles),
         metaval_prepared=metaval_prepared,
         metaval_pipeline_info=metaval_pipeline_info,
@@ -471,28 +530,36 @@ async def _prepare_taxprofiler_ingest(
 
 async def _resolve_subject_ids(
     db: AsyncIOMotorDatabase,
-    subject_ids: list[str],
+    sex_by_id: dict[str, str],
 ) -> dict[str, ObjectId]:
     """
-    Upsert each subject_id and return a map from subject_id -> ObjectId.
+    Upsert each subject_id (with sex) and return a map from subject_id -> ObjectId.
 
-    Runs outside the transaction — $setOnInsert skeleton docs are idempotent,
-    so a leftover subject row if the txn later aborts is harmless. Running
-    outside the txn lets us fan out all upserts concurrently (MongoDB sessions
-    do not support concurrent operations).
+    Runs outside the transaction — these upserts are idempotent, so a leftover
+    subject row if the ingest txn later aborts is harmless. Running outside the
+    txn lets us fan out all upserts concurrently (MongoDB sessions do not
+    support concurrent operations).
+
+    ``sex`` is applied via ``$set`` (not ``$setOnInsert``) so that re-ingesting
+    with a corrected value updates the stored subject.
     """
     now = datetime.now(timezone.utc)
 
-    async def _upsert_one(subject_id: str) -> tuple[str, ObjectId]:
+    async def _upsert_one(subject_id: str, sex: str) -> tuple[str, ObjectId]:
         doc = await db["subjects"].find_one_and_update(
             {"subject_id": subject_id},
-            {"$setOnInsert": {"subject_id": subject_id, "created_at": now}},
+            {
+                "$setOnInsert": {"subject_id": subject_id, "created_at": now},
+                "$set": {"sex": sex},
+            },
             upsert=True,
             return_document=ReturnDocument.AFTER,
         )
         return subject_id, doc["_id"]
 
-    pairs = await asyncio.gather(*(_upsert_one(sid) for sid in subject_ids))
+    pairs = await asyncio.gather(
+        *(_upsert_one(sid, sex) for sid, sex in sex_by_id.items())
+    )
     return dict(pairs)
 
 
@@ -513,6 +580,11 @@ async def _commit_prepared(
     case_doc = dict(prepared.case_doc)
     if prepared.metaval_pipeline_info is not None:
         case_doc["metaval_pipeline_info"] = prepared.metaval_pipeline_info
+    case_doc["subject_id"] = (
+        subject_map[prepared.case_subject_id]
+        if prepared.case_subject_id is not None
+        else None
+    )
     await db["cases"].insert_one(case_doc, session=session)
 
     # 3. Samples — pre-generated _ids ensure case_doc.sample_ids references
@@ -605,7 +677,7 @@ async def ingest_taxprofiler_case(
 
     subject_map: dict[str, ObjectId] = {}
     if prepared.subject_refs:
-        subject_map = await _resolve_subject_ids(db, list(prepared.subject_refs.keys()))
+        subject_map = await _resolve_subject_ids(db, prepared.subject_sex)
 
     await _upsert_taxa_skeleton(db, prepared.taxa_upsert_ops)
 
@@ -764,6 +836,8 @@ def _prepare_trana_ingest(
         case_doc=case_doc,
         sample_docs=sample_docs,
         subject_refs=subject_refs,
+        subject_sex=_collect_subject_sex(meta.samples),
+        case_subject_id=_pick_case_subject(meta.samples),
         taxa_upsert_ops=_build_taxa_upsert_ops(all_profiles),
         metaval_prepared=[],
         metaval_pipeline_info=None,
@@ -788,7 +862,7 @@ async def ingest_trana_case(
 
     subject_map: dict[str, ObjectId] = {}
     if prepared.subject_refs:
-        subject_map = await _resolve_subject_ids(db, list(prepared.subject_refs.keys()))
+        subject_map = await _resolve_subject_ids(db, prepared.subject_sex)
 
     await _upsert_taxa_skeleton(db, prepared.taxa_upsert_ops)
 

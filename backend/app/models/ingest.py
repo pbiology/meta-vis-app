@@ -8,7 +8,7 @@ model — everything is addressed by arcname inside the bundle
 from datetime import date
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.common import AnalysisType, SequencingPlatform
 
@@ -26,13 +26,27 @@ class TaxprofilerClassifierMeta(BaseModel):
 
 
 class TaxprofilerSampleIngestRequest(BaseModel):
+    # subject_id is required for clinical samples but not for controls (NTC /
+    # positive control) — controls have no clinical subject. The validator
+    # below enforces this. subject_sex is only persisted when a subject_id is
+    # present.
     subject_id: Optional[str] = None
+    subject_sex: Literal["F", "M", "X", "unknown"] = "unknown"
     sample_id: str
     sample_type: Literal["sample", "positive_ctrl", "negative_ctrl"]
     material: Literal["DNA", "RNA"]
     sample_source: str = "N/A"
     # classifier_name -> taxpasta column name
     columns: dict
+
+    @model_validator(mode="after")
+    def _require_subject_for_clinical_samples(self):
+        if self.sample_type == "sample" and not self.subject_id:
+            raise ValueError(
+                f"Sample '{self.sample_id}' has sample_type='sample' and must "
+                "provide a subject_id."
+            )
+        return self
 
 
 class TaxprofilerIngestMeta(BaseModel):
@@ -63,7 +77,9 @@ class TranaSampleIngestRequest(BaseModel):
     optional nanoplot_unprocessed/NanoStats.txt, optional
     nanoplot_processed/NanoStats.txt)."""
 
+    # See TaxprofilerSampleIngestRequest for the subject_id / sample_type rule.
     subject_id: Optional[str] = None
+    subject_sex: Literal["F", "M", "X", "unknown"] = "unknown"
     sample_id: str
     sample_type: Literal["sample", "positive_ctrl", "negative_ctrl"]
     material: Literal["DNA", "RNA"]
@@ -71,6 +87,15 @@ class TranaSampleIngestRequest(BaseModel):
     has_krona: bool = False
     has_nanoplot_unprocessed: bool = False
     has_nanoplot_processed: bool = False
+
+    @model_validator(mode="after")
+    def _require_subject_for_clinical_samples(self):
+        if self.sample_type == "sample" and not self.subject_id:
+            raise ValueError(
+                f"Sample '{self.sample_id}' has sample_type='sample' and must "
+                "provide a subject_id."
+            )
+        return self
 
 
 class TranaIngestMeta(BaseModel):

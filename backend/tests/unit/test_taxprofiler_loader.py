@@ -39,6 +39,7 @@ def _minimal_manifest(**overrides):
         "classifiers": [{"name": "kraken2", "db": "k2_pluspf"}],
         "samples": [
             {
+                "subject_id": "SUBJ-1",
                 "sample_id": "S1",
                 "sample_type": "sample",
                 "material": "DNA",

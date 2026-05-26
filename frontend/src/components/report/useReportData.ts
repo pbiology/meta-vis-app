@@ -1,4 +1,4 @@
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { getProfile } from "../../api/samples";
 import { getSubject, type Subject } from "../../api/subjects";
 import { useCase, useCaseSamples } from "../../hooks/queries/useCases";
@@ -31,8 +31,6 @@ export interface ReportSampleRow {
   sequencing_platform?: string;
   analysis_type?: string;
   case_id?: string;
-  // Subject linkage so the SubjectsSection can resolve labels.
-  subject_id?: string;
 }
 
 export interface ReportTaxonCell {
@@ -65,7 +63,9 @@ export interface ReportData {
   caseDoc: CaseListItem;
   samples: ReportSampleRow[];
   classifiers: string[];
-  subjects: Array<{ sample_id: string; subject: Subject | null }>;
+  // A case belongs to at most one subject (enforced at ingest). null for
+  // control-only cases.
+  subject: Subject | null;
   notes: CaseNote[];
   taxa: ReportTaxon[];
   taxprofilerInfo: PipelineConfig | undefined;
@@ -107,7 +107,6 @@ function buildSampleRow(s: Sample, profiles: SampleProfile[]): ReportSampleRow {
       readNestedString(s, ["sequencing", "platform"]) ?? readString(s, "sequencing_platform"),
     analysis_type: readString(s, "analysis_type"),
     case_id: readString(s, "case_id"),
-    subject_id: readString(s, "subject_id"),
   };
 }
 
@@ -232,14 +231,12 @@ export function useReportData(
     }),
   });
 
-  const subjectIds = Array.from(
-    new Set(samples.map((s) => readString(s, "subject_id")).filter((v): v is string => Boolean(v)))
-  );
-  const subjectQueries = useQueries({
-    queries: subjectIds.map((id) => ({
-      queryKey: subjectKeys.detail(id),
-      queryFn: () => getSubject(id),
-    })),
+  const caseSubjectId =
+    typeof caseQ.data?.subject_id === "string" ? caseQ.data.subject_id : undefined;
+  const subjectQ = useQuery({
+    queryKey: caseSubjectId ? subjectKeys.detail(caseSubjectId) : ["subject", "none"],
+    queryFn: () => getSubject(caseSubjectId as string),
+    enabled: Boolean(caseSubjectId),
   });
 
   const isLoading =
@@ -247,7 +244,7 @@ export function useReportData(
     samplesQ.isLoading ||
     pathogensQ.isLoading ||
     profileQueries.some((q) => q.isLoading) ||
-    subjectQueries.some((q) => q.isLoading);
+    (Boolean(caseSubjectId) && subjectQ.isLoading);
 
   const isError =
     caseQ.isError ||
@@ -279,19 +276,7 @@ export function useReportData(
   }
   const classifiers = Array.from(classifierSet).sort((a, b) => a.localeCompare(b));
 
-  const subjectBy = new Map<string, Subject>();
-  subjectIds.forEach((id, i) => {
-    const s = subjectQueries[i]?.data;
-    if (s) subjectBy.set(id, s);
-  });
-
-  const subjects = orderedSamples.map((s) => {
-    const sid = readString(s, "subject_id");
-    return {
-      sample_id: s.sample_id,
-      subject: sid ? (subjectBy.get(sid) ?? null) : null,
-    };
-  });
+  const subject: Subject | null = caseSubjectId ? (subjectQ.data ?? null) : null;
 
   const pathogenIds = new Set((pathogensQ.data ?? []).map((p) => p.taxon_id));
   const totals = buildTotals(orderedSamples, profilesBySampleId);
@@ -315,7 +300,7 @@ export function useReportData(
       caseDoc,
       samples: sampleRows,
       classifiers,
-      subjects,
+      subject,
       notes: caseDoc.notes ?? [],
       taxa,
       taxprofilerInfo: asPipelineConfig(caseDoc.pipeline_info),

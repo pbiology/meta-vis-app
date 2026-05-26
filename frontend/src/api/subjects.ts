@@ -2,7 +2,7 @@ import client from "./client";
 
 export interface Subject {
   subject_id: string;
-  sex?: "F" | "M" | "X" | "unknown" | null;
+  sex: "F" | "M" | "X" | "unknown";
   [key: string]: unknown;
 }
 

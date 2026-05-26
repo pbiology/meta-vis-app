@@ -30,6 +30,7 @@ async def insert_case(
     reviewed=False,
     order_date="2026-01-01",
     analysis_type=None,
+    subject_id=None,
 ):
     doc = {
         "case_id": case_id,
@@ -49,6 +50,7 @@ async def insert_case(
             "reviewed_at": None,
             "notes": None,
         },
+        "subject_id": subject_id,
     }
     if analysis_type is not None:
         doc["analysis_type"] = analysis_type
@@ -290,6 +292,37 @@ class TestDeleteCase:
     async def test_unknown_case_returns_404(self, client, fake_db):
         resp = client.delete("/api/v1/cases/nonexistent")
         assert resp.status_code == 404
+
+    async def test_orphan_subject_is_pruned(self, client, fake_db):
+        # Subject is referenced only by this case → should be deleted with it.
+        subj_oid = ObjectId()
+        await fake_db["subjects"].insert_one(
+            {"_id": subj_oid, "subject_id": "SUBJ-orphan", "sex": "F"}
+        )
+        await insert_case(fake_db, "soleowner", subject_id=subj_oid)
+
+        resp = client.delete("/api/v1/cases/soleowner")
+        assert resp.status_code == 200
+        assert await fake_db["subjects"].find_one({"_id": subj_oid}) is None
+
+    async def test_shared_subject_is_kept(self, client, fake_db):
+        # Subject is referenced by another case → must survive.
+        subj_oid = ObjectId()
+        await fake_db["subjects"].insert_one(
+            {"_id": subj_oid, "subject_id": "SUBJ-shared", "sex": "M"}
+        )
+        await insert_case(fake_db, "casea", subject_id=subj_oid)
+        await insert_case(fake_db, "caseb", subject_id=subj_oid)
+
+        resp = client.delete("/api/v1/cases/casea")
+        assert resp.status_code == 200
+        assert await fake_db["subjects"].find_one({"_id": subj_oid}) is not None
+
+    async def test_control_only_case_skips_subject_cleanup(self, client, fake_db):
+        # Case with subject_id=None (control-only) deletes cleanly.
+        await insert_case(fake_db, "controlonly", subject_id=None)
+        resp = client.delete("/api/v1/cases/controlonly")
+        assert resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------

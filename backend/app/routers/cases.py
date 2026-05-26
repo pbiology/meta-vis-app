@@ -28,6 +28,8 @@ def _serialise_case(doc: dict) -> dict:
     doc.pop("_id", None)
     if "sample_ids" in doc:
         doc["sample_ids"] = [str(sid) for sid in doc["sample_ids"]]
+    if doc.get("subject_id") is not None:
+        doc["subject_id"] = str(doc["subject_id"])
     ticket_id = doc.get("ticket_id")
     if ticket_id and settings.freshdesk_base_url:
         doc["ticket_url"] = settings.freshdesk_base_url.format(ticket_id=ticket_id)
@@ -264,9 +266,11 @@ async def delete_case(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(require_role("admin")),
 ):
-    case = await db["cases"].find_one({"case_id": case_id}, {"_id": 1})
+    case = await db["cases"].find_one({"case_id": case_id}, {"_id": 1, "subject_id": 1})
     if not case:
         raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
+
+    subject_oid = case.get("subject_id")
 
     await db["samples"].delete_many({"case_id": case_id})
     from app.database import get_blob_store
@@ -277,6 +281,11 @@ async def delete_case(
     await store.delete_prefix(f"multiqc/{case_id}/")
     await db["metaval_results"].delete_many({"case_id": case_id})
     await db["cases"].delete_one({"_id": case["_id"]})
+
+    # Drop the subject if no other case still references it.
+    if subject_oid is not None:
+        if not await db["cases"].find_one({"subject_id": subject_oid}, {"_id": 1}):
+            await db["subjects"].delete_one({"_id": subject_oid})
 
     await log_audit_event(
         db,

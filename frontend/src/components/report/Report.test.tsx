@@ -32,7 +32,7 @@ function makeData(overrides: Partial<ReportData> = {}): ReportData {
       },
     ],
     classifiers: ["bracken", "kraken2"],
-    subjects: [{ sample_id: "S001-DNA", subject: { subject_id: "SUB-1", sex: "F" } }],
+    subject: { subject_id: "SUB-1", sex: "F" },
     notes: [{ id: "n1", author: "alice", created_at: "2026-04-28", text: "Looks suspicious" }],
     taxa: [
       {
@@ -101,7 +101,7 @@ describe("Report", () => {
   });
 
   it("renders 'Not linked' when no subject is linked to any sample", () => {
-    render(<Report data={makeData({ subjects: [{ sample_id: "S001-DNA", subject: null }] })} />);
+    render(<Report data={makeData({ subject: null })} />);
     expect(screen.getByText("Not linked")).toBeInTheDocument();
   });
 

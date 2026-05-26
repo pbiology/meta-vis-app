@@ -57,6 +57,10 @@ async def _ensure_indexes():
     await db["cases"].create_index("ingested_at")
     await db["cases"].create_index("order_date")
     await db["cases"].create_index("review.reviewed")
+    # Sparse: control-only cases have subject_id=None and shouldn't take up
+    # index slots. Powers "cases for subject X" lookups and the orphan-cleanup
+    # check in delete_case.
+    await db["cases"].create_index("subject_id", sparse=True)
     await db["cases"].create_index(
         [
             ("review.reviewed", 1),

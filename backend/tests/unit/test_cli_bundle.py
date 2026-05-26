@@ -94,7 +94,8 @@ async def test_cli_bundle_round_trips_through_loader(tmp_path):
         ],
         samples=[
             {
-                "subject_id": None,
+                "subject_id": "SUBJ-1",
+                "subject_sex": "unknown",
                 "sample_id": "S1",
                 "sample_type": "sample",
                 "material": "DNA",
