@@ -50,7 +50,7 @@ export default function CaseTopBar({
             strokeLinecap="round"
           />
         </svg>
-        Dashboard
+        Cases
       </Link>
       <span className="text-gray-200">/</span>
       <span className="text-[11px] text-gray-500">Case</span>
