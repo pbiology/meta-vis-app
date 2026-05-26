@@ -40,3 +40,27 @@ class TestGetSubject:
         resp = client.get("/api/v1/subjects/does-not-exist")
         assert resp.status_code == 404
         assert "does-not-exist" in resp.json()["detail"]
+
+    async def test_resolves_by_objectid(self, client, fake_db):
+        # Cases/samples carry the subject's ObjectId hex as their FK; the
+        # endpoint must accept that form so the report can fetch in one hop.
+        from bson import ObjectId
+
+        oid = ObjectId()
+        await fake_db["subjects"].insert_one(
+            {"_id": oid, "subject_id": "S-003", "sex": "M"}
+        )
+        resp = client.get(f"/api/v1/subjects/{oid}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["subject_id"] == "S-003"
+        assert data["sex"] == "M"
+
+    async def test_objectid_shaped_string_falls_back_to_subject_id(self, client, fake_db):
+        # An ObjectId-shaped 24-hex string that isn't an actual subject _id
+        # must still resolve when a subject_id field matches literally.
+        hex_id = "aaaaaaaaaaaaaaaaaaaaaaaa"
+        await fake_db["subjects"].insert_one({"subject_id": hex_id, "sex": "X"})
+        resp = client.get(f"/api/v1/subjects/{hex_id}")
+        assert resp.status_code == 200
+        assert resp.json()["subject_id"] == hex_id
