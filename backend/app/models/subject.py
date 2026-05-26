@@ -1,6 +1,6 @@
 # app/models/subject.py
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -14,7 +14,7 @@ class Subject(BaseModel):
     """
 
     subject_id: str
-    sex: Optional[Literal["F", "M", "X", "unknown"]] = None
+    sex: Literal["F", "M", "X", "unknown"] = "unknown"
 
     # extra="allow" keeps room for future fields (birth_year, ward, …) without a
     # model bump — mirrors the posture of SampleResponse.

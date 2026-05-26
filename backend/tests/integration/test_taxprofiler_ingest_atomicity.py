@@ -57,6 +57,7 @@ def make_meta(**overrides) -> TaxprofilerIngestMeta:
         "classifiers": [TaxprofilerClassifierMeta(name="kraken2", db="k2_pluspf")],
         "samples": [
             TaxprofilerSampleIngestRequest(
+                subject_id="SUBJ-1",
                 sample_id="SRR001",
                 sample_type="sample",
                 material="DNA",

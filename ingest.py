@@ -19,13 +19,13 @@ Examples:
         --multiqc  /path/to/multiqc_data.json \\
         --pipeline-info /path/to/software_versions.yml \\
         --classifier "kraken2 db=k2_pluspf taxpasta=/path/kraken2.tsv krona=/path/kraken2.html" \\
-        --sample "sample_id=PE-04-28 type=sample material=DNA column_kraken2=PE-04-28_k2_pluspf" \\
+        --sample "sample_id=PE-04-28 subject_id=SUBJ-01 sex=F type=sample material=DNA column_kraken2=PE-04-28_k2_pluspf" \\
         --password yourpassword
 
     python ingest.py trana \\
         --case-id trana_run1 \\
         --pipeline-info /path/to/software_versions.yml \\
-        --sample "sample_id=S1 type=sample material=DNA abundance_path=/path/to/S1_rel-abundance.tsv" \\
+        --sample "sample_id=S1 subject_id=SUBJ-01 sex=unknown type=sample material=DNA abundance_path=/path/to/S1_rel-abundance.tsv" \\
         --password yourpassword
 
 The bundle layout the CLI produces must match what the server's loader expects.
@@ -166,6 +166,20 @@ def _add_auth_args(parser: argparse.ArgumentParser) -> None:
 
 
 _INGEST_ROLES = {"writer", "admin"}
+_SEX_VALUES = {"F", "M", "X", "unknown"}
+
+
+def _parse_subject_sex(parts: dict, sample_id: str) -> str:
+    """Validate the optional sex= token on a --sample. Defaults to "unknown"
+    when omitted, matching the backend's per-subject default."""
+    sex = parts.get("sex", "unknown")
+    if sex not in _SEX_VALUES:
+        print(
+            f"Sample '{sample_id}' has invalid sex='{sex}'. "
+            f"Allowed: {sorted(_SEX_VALUES)}."
+        )
+        sys.exit(1)
+    return sex
 
 
 def _check_unique_classifier_names(classifier_names: list[str]) -> None:
@@ -487,6 +501,7 @@ def _resolve_trana_sample(s: dict[str, Any]) -> dict[str, Any]:
     return {
         "meta": {
             "subject_id": s.get("subject_id"),
+            "subject_sex": s["subject_sex"],
             "sample_id": sid,
             "sample_type": s["sample_type"],
             "material": s["material"],
@@ -628,6 +643,11 @@ def parse_sample(raw: str, classifier_names: list) -> dict:
         sys.exit(1)
 
     sample_id = parts["sample_id"]
+    if parts["type"] == "sample" and not parts.get("subject_id"):
+        print(
+            f"Sample '{sample_id}' has type=sample and must provide subject_id."
+        )
+        sys.exit(1)
     classifier_set = set(classifier_names)
     columns = {}
     unknown_column_keys = []
@@ -659,6 +679,7 @@ def parse_sample(raw: str, classifier_names: list) -> dict:
 
     return {
         "subject_id": parts.get("subject_id"),
+        "subject_sex": _parse_subject_sex(parts, sample_id),
         "sample_id": sample_id,
         "sample_type": parts["type"],
         "material": parts["material"],
@@ -793,8 +814,15 @@ def parse_trana_sample(raw: str) -> dict:
         print(f"Sample is missing required keys: {missing}")
         sys.exit(1)
 
+    if parts["type"] == "sample" and not parts.get("subject_id"):
+        print(
+            f"Sample '{parts['sample_id']}' has type=sample and must provide subject_id."
+        )
+        sys.exit(1)
+
     return {
         "subject_id": parts.get("subject_id"),
+        "subject_sex": _parse_subject_sex(parts, parts["sample_id"]),
         "sample_id": parts["sample_id"],
         "sample_type": parts["type"],
         "material": parts["material"],
@@ -881,8 +909,9 @@ def _add_trana_args(parser: argparse.ArgumentParser) -> None:
         metavar="KEY=VALUE ...",
         help=(
             "Sample descriptor. Required: sample_id, type, material, abundance_path. "
-            "Optional: subject_id, sample_source, krona_path, "
-            "nanoplot_unprocessed_path, nanoplot_processed_path. "
+            "Required for type=sample: subject_id. "
+            "Optional: sex (F|M|X|unknown, default unknown), sample_source, "
+            "krona_path, nanoplot_unprocessed_path, nanoplot_processed_path. "
             "Repeat for each sample."
         ),
     )

@@ -3,7 +3,12 @@
 import pytest
 
 from app.ingestor.inputs import MultiQCRaw
-from app.ingestor.orchestrator import _extract_classifier_qc, _extract_base_qc
+from app.ingestor.orchestrator import (
+    _collect_subject_sex,
+    _extract_base_qc,
+    _extract_classifier_qc,
+)
+from app.models.ingest import TaxprofilerSampleIngestRequest
 
 
 # ---------------------------------------------------------------------------
@@ -424,3 +429,34 @@ def test_bowtie2_present_fastp_absent():
 def test_empty_qc_data_returns_empty_dict():
     result = _extract_base_qc(make_multiqc(), "SAMPLE1")
     assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# _collect_subject_sex
+# ---------------------------------------------------------------------------
+
+
+def _sample(subject_id: str, subject_sex: str = "unknown"):
+    return TaxprofilerSampleIngestRequest(
+        subject_id=subject_id,
+        subject_sex=subject_sex,
+        sample_id=f"S-{subject_id}",
+        sample_type="sample",
+        material="DNA",
+        columns={"kraken2": f"S-{subject_id}_k2"},
+    )
+
+
+def test_collect_subject_sex_builds_map():
+    result = _collect_subject_sex([_sample("A", "F"), _sample("B", "M")])
+    assert result == {"A": "F", "B": "M"}
+
+
+def test_collect_subject_sex_dedupes_matching_values():
+    result = _collect_subject_sex([_sample("A", "F"), _sample("A", "F")])
+    assert result == {"A": "F"}
+
+
+def test_collect_subject_sex_raises_on_conflict():
+    with pytest.raises(ValueError, match="conflicting sex"):
+        _collect_subject_sex([_sample("A", "F"), _sample("A", "M")])

@@ -291,6 +291,59 @@ class TestDeleteCase:
         resp = client.delete("/api/v1/cases/nonexistent")
         assert resp.status_code == 404
 
+    async def test_orphan_subject_is_pruned(self, client, fake_db):
+        # Subject is referenced only by samples in this case → should be
+        # deleted when the case is deleted.
+        await insert_case(fake_db, "soleowner")
+        subj_oid = ObjectId()
+        await fake_db["subjects"].insert_one(
+            {"_id": subj_oid, "subject_id": "SUBJ-orphan", "sex": "F"}
+        )
+        await fake_db["samples"].insert_one(
+            {
+                "case_id": "soleowner",
+                "sample_id": "S1",
+                "subject_id": subj_oid,
+                "sample_type": "sample",
+                "material": "DNA",
+                "profiles": [],
+                "has_krona": False,
+                "review": {"reviewed": False},
+                "ingested_at": datetime.now(timezone.utc),
+            }
+        )
+
+        resp = client.delete("/api/v1/cases/soleowner")
+        assert resp.status_code == 200
+        assert await fake_db["subjects"].find_one({"_id": subj_oid}) is None
+
+    async def test_shared_subject_is_kept(self, client, fake_db):
+        # Subject is referenced by another case's sample → must survive.
+        await insert_case(fake_db, "casea")
+        await insert_case(fake_db, "caseb")
+        subj_oid = ObjectId()
+        await fake_db["subjects"].insert_one(
+            {"_id": subj_oid, "subject_id": "SUBJ-shared", "sex": "M"}
+        )
+        for case_id, sample_id in (("casea", "Sa"), ("caseb", "Sb")):
+            await fake_db["samples"].insert_one(
+                {
+                    "case_id": case_id,
+                    "sample_id": sample_id,
+                    "subject_id": subj_oid,
+                    "sample_type": "sample",
+                    "material": "DNA",
+                    "profiles": [],
+                    "has_krona": False,
+                    "review": {"reviewed": False},
+                    "ingested_at": datetime.now(timezone.utc),
+                }
+            )
+
+        resp = client.delete("/api/v1/cases/casea")
+        assert resp.status_code == 200
+        assert await fake_db["subjects"].find_one({"_id": subj_oid}) is not None
+
 
 # ---------------------------------------------------------------------------
 # GET /cases/{case_id}/krona
