@@ -15,7 +15,7 @@ function deriveRole(realmRoles: string[] | undefined): Role {
   for (const role of ROLE_PRIORITY) {
     if (lowered.has(role)) return role;
   }
-  return "reader";
+  return "writer";
 }
 
 // Client roles are emitted in the access token (not the ID token), so we
