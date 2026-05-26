@@ -9,7 +9,10 @@ description = "Visualisation backend for nf-core/taxprofiler output"
 requires-python = ">=3.13"
 
 dependencies = [
-    "fastapi>=0.111.0",
+    # 0.136.3 was a malicious release (MAL-2026-4750): added an undocumented
+    # `fastar` dependency under fastapi[standard]. Excluded until upstream
+    # ships a clean replacement.
+    "fastapi>=0.111.0,!=0.136.3",
     "uvicorn[standard]>=0.29.0",
     "motor>=3.4.0",
     "pydantic>=2.7.0",
