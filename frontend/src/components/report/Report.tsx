@@ -27,7 +27,7 @@ export default function Report({ data }: Readonly<ReportProps>) {
           sampleCount={data.samples.length}
           generatedAt={data.generatedAt}
         />
-        <SubjectsSection subjects={data.subjects} />
+        <SubjectsSection subject={data.subject} />
         <SamplesListSection samples={data.samples} />
         <CommentsSection caseNotes={data.notes} sampleNote={null} />
         <TaxaOfInterestSection

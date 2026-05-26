@@ -58,6 +58,10 @@ class _PreparedIngest:
     subject_refs: dict[str, list[int]] = field(default_factory=dict)
     # subject_id string -> sex value to persist on the subject document
     subject_sex: dict[str, str] = field(default_factory=dict)
+    # The single subject_id this case belongs to, or None for control-only
+    # cases. Resolved to an ObjectId via subject_map at commit time and stored
+    # as case_doc["subject_id"].
+    case_subject_id: str | None = None
     taxa_upsert_ops: list[UpdateOne] = field(default_factory=list)
     metaval_prepared: list[_MetavalPrepared] = field(default_factory=list)
     metaval_pipeline_info: dict | None = None
@@ -185,6 +189,34 @@ def _build_taxa_upsert_ops(all_profiles: list) -> list[UpdateOne]:
 # ---------------------------------------------------------------------------
 # Prepare phase — taxprofiler / metaval ingest
 # ---------------------------------------------------------------------------
+
+
+def _pick_case_subject(samples: list) -> str | None:
+    """Return the single subject_id for clinical samples in this ingest.
+
+    Returns ``None`` when no clinical sample carries a subject (e.g. a
+    control-only validation run). Raises ``ValueError`` when clinical samples
+    reference more than one distinct subject — a case must belong to exactly
+    one subject. Controls (positive_ctrl / negative_ctrl) are ignored.
+    """
+    clinical_subject_ids: list[str] = []
+    seen: set[str] = set()
+    for s in samples:
+        if s.sample_type != "sample" or not s.subject_id:
+            continue
+        if s.subject_id in seen:
+            continue
+        seen.add(s.subject_id)
+        clinical_subject_ids.append(s.subject_id)
+
+    if len(clinical_subject_ids) > 1:
+        raise ValueError(
+            "A case must belong to exactly one subject, but this ingest's "
+            f"clinical samples reference {len(clinical_subject_ids)} distinct "
+            f"subjects: {sorted(clinical_subject_ids)}. "
+            "Split the ingest into one case per subject."
+        )
+    return clinical_subject_ids[0] if clinical_subject_ids else None
 
 
 def _collect_subject_sex(samples: list) -> dict[str, str]:
@@ -482,6 +514,7 @@ async def _prepare_taxprofiler_ingest(
         sample_docs=sample_docs,
         subject_refs=subject_refs,
         subject_sex=_collect_subject_sex(meta.samples),
+        case_subject_id=_pick_case_subject(meta.samples),
         taxa_upsert_ops=_build_taxa_upsert_ops(all_profiles),
         metaval_prepared=metaval_prepared,
         metaval_pipeline_info=metaval_pipeline_info,
@@ -547,6 +580,11 @@ async def _commit_prepared(
     case_doc = dict(prepared.case_doc)
     if prepared.metaval_pipeline_info is not None:
         case_doc["metaval_pipeline_info"] = prepared.metaval_pipeline_info
+    case_doc["subject_id"] = (
+        subject_map[prepared.case_subject_id]
+        if prepared.case_subject_id is not None
+        else None
+    )
     await db["cases"].insert_one(case_doc, session=session)
 
     # 3. Samples — pre-generated _ids ensure case_doc.sample_ids references
@@ -799,6 +837,7 @@ def _prepare_trana_ingest(
         sample_docs=sample_docs,
         subject_refs=subject_refs,
         subject_sex=_collect_subject_sex(meta.samples),
+        case_subject_id=_pick_case_subject(meta.samples),
         taxa_upsert_ops=_build_taxa_upsert_ops(all_profiles),
         metaval_prepared=[],
         metaval_pipeline_info=None,

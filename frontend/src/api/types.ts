@@ -48,6 +48,7 @@ export interface CaseListItem extends Case {
   review?: CaseReview;
   notes?: CaseNote[];
   report_selections?: Record<string, number[]>;
+  subject_id?: string | null;
 }
 
 export interface CasesResponse {

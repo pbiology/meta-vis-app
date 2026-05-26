@@ -25,6 +25,7 @@ function seedTwoSampleCase() {
     http.get(`${API}/cases/case-1`, () =>
       HttpResponse.json({
         case_id: "case-1",
+        subject_id: "subj-1",
         notes: [{ id: "n1", text: "A note", author: "a", created_at: "2026-04-29" }],
       })
     ),
@@ -153,7 +154,7 @@ describe("useReportData (case-scoped)", () => {
     expect(ecoli.cells["S001-RNA"]).toBeUndefined();
   });
 
-  it("flags pathogens and resolves a single shared subject", async () => {
+  it("flags pathogens and resolves the case subject", async () => {
     seedTwoSampleCase();
     const { result } = renderHook(() => useReportData("case-1", { "S001-DNA": [11676] }), {
       wrapper: makeWrapper(),
@@ -161,8 +162,7 @@ describe("useReportData (case-scoped)", () => {
     await waitFor(() => expect(result.current.data).toBeDefined());
     const data = result.current.data!;
     expect(data.taxa[0].pathogen).toBe(true);
-    expect(data.subjects.length).toBe(2);
-    expect(data.subjects.every((s) => s.subject?.subject_id === "subj-1")).toBe(true);
+    expect(data.subject?.subject_id).toBe("subj-1");
   });
 
   it("returns no taxa when selections are empty", async () => {

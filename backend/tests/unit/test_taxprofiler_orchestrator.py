@@ -7,6 +7,7 @@ from app.ingestor.orchestrator import (
     _collect_subject_sex,
     _extract_base_qc,
     _extract_classifier_qc,
+    _pick_case_subject,
 )
 from app.models.ingest import TaxprofilerSampleIngestRequest
 
@@ -460,3 +461,34 @@ def test_collect_subject_sex_dedupes_matching_values():
 def test_collect_subject_sex_raises_on_conflict():
     with pytest.raises(ValueError, match="conflicting sex"):
         _collect_subject_sex([_sample("A", "F"), _sample("A", "M")])
+
+
+# ---------------------------------------------------------------------------
+# _pick_case_subject
+# ---------------------------------------------------------------------------
+
+
+def _ctrl(sample_id: str, sample_type: str = "negative_ctrl"):
+    return TaxprofilerSampleIngestRequest(
+        sample_id=sample_id,
+        sample_type=sample_type,
+        material="DNA",
+        columns={"kraken2": f"{sample_id}_k2"},
+    )
+
+
+def test_pick_case_subject_returns_single():
+    assert _pick_case_subject([_sample("A"), _sample("A")]) == "A"
+
+
+def test_pick_case_subject_returns_none_for_control_only():
+    assert _pick_case_subject([_ctrl("NTC1"), _ctrl("NTC2")]) is None
+
+
+def test_pick_case_subject_ignores_controls():
+    assert _pick_case_subject([_sample("A"), _ctrl("NTC1")]) == "A"
+
+
+def test_pick_case_subject_raises_on_multiple_subjects():
+    with pytest.raises(ValueError, match="exactly one subject"):
+        _pick_case_subject([_sample("A"), _sample("B")])

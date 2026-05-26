@@ -28,6 +28,8 @@ def _serialise_case(doc: dict) -> dict:
     doc.pop("_id", None)
     if "sample_ids" in doc:
         doc["sample_ids"] = [str(sid) for sid in doc["sample_ids"]]
+    if doc.get("subject_id") is not None:
+        doc["subject_id"] = str(doc["subject_id"])
     ticket_id = doc.get("ticket_id")
     if ticket_id and settings.freshdesk_base_url:
         doc["ticket_url"] = settings.freshdesk_base_url.format(ticket_id=ticket_id)
@@ -264,13 +266,11 @@ async def delete_case(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(require_role("admin")),
 ):
-    case = await db["cases"].find_one({"case_id": case_id}, {"_id": 1})
+    case = await db["cases"].find_one({"case_id": case_id}, {"_id": 1, "subject_id": 1})
     if not case:
         raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
 
-    # Snapshot the subject ObjectIds this case's samples reference, so we can
-    # prune subjects that become orphaned once the samples are gone.
-    subject_oids = await db["samples"].distinct("subject_id", {"case_id": case_id})
+    subject_oid = case.get("subject_id")
 
     await db["samples"].delete_many({"case_id": case_id})
     from app.database import get_blob_store
@@ -282,13 +282,10 @@ async def delete_case(
     await db["metaval_results"].delete_many({"case_id": case_id})
     await db["cases"].delete_one({"_id": case["_id"]})
 
-    # Drop any subject no longer referenced by any sample (across all cases —
-    # taxprofiler and trana share the subjects collection).
-    for oid in subject_oids:
-        if oid is None:
-            continue
-        if not await db["samples"].find_one({"subject_id": oid}, {"_id": 1}):
-            await db["subjects"].delete_one({"_id": oid})
+    # Drop the subject if no other case still references it.
+    if subject_oid is not None:
+        if not await db["cases"].find_one({"subject_id": subject_oid}, {"_id": 1}):
+            await db["subjects"].delete_one({"_id": subject_oid})
 
     await log_audit_event(
         db,
