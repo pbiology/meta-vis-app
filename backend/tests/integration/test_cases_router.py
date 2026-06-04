@@ -1,5 +1,6 @@
 # tests/integration/test_cases_router.py
 
+import asyncio
 from unittest.mock import patch
 
 import pytest
@@ -30,6 +31,7 @@ class _FakeSession:
 
 class _FakeClient:
     async def start_session(self):
+        await asyncio.sleep(0)
         return _FakeSession()
 
 
