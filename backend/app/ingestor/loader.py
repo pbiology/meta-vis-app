@@ -313,7 +313,9 @@ async def load_taxprofiler_bundle(
     oversized bundles, or ``pydantic.ValidationError`` on a manifest that
     doesn't match :class:`TaxprofilerIngestMeta`.
     """
-    _safe_extract(source, dest_dir, settings.ingest_upload_max_uncompressed_bytes)
+    await asyncio.to_thread(
+        _safe_extract, source, dest_dir, settings.ingest_upload_max_uncompressed_bytes
+    )
     meta = TaxprofilerIngestMeta.model_validate(_read_manifest(dest_dir))
     files = _resolve_taxprofiler_files(meta, dest_dir)
     inputs = await _parse_taxprofiler_inputs(meta, files)
@@ -475,7 +477,9 @@ async def _parse_trana_inputs(
 async def load_trana_bundle(
     source: BinaryIO | Path, dest_dir: Path
 ) -> tuple[TranaIngestMeta, TranaIngestInputs]:
-    _safe_extract(source, dest_dir, settings.ingest_upload_max_uncompressed_bytes)
+    await asyncio.to_thread(
+        _safe_extract, source, dest_dir, settings.ingest_upload_max_uncompressed_bytes
+    )
     meta = TranaIngestMeta.model_validate(_read_manifest(dest_dir))
     files = _resolve_trana_files(meta, dest_dir)
     inputs = await _parse_trana_inputs(meta, files)
