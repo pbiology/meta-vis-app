@@ -19,3 +19,10 @@ CONTAMINANT_NTC_READ_THRESHOLD: int = 5
 CONTAMINANT_ELIGIBLE_RANKS: frozenset[str] = frozenset(
     {"genus", "species", "subspecies", "strain", "serotype", "no rank"}
 )
+
+# Upper bound used when reading curated reference lists (ignorelists,
+# known pathogens, known contaminants) into memory. These lists are
+# manually maintained and expected to stay well under this cap; we read
+# them in one shot but log a warning if the cap is reached so silent
+# truncation surfaces rather than producing wrong clinical results.
+MAX_LIST_ITEMS: int = 10_000
