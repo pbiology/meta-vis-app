@@ -93,9 +93,6 @@ async def test_connect_db_prefers_mongodb_uri(monkeypatch):
         captured["url"] = url
         return MagicMock()
 
-    async def fake_ensure_indexes():
-        return None
-
     def fake_make_blob_store(_db):
         return MagicMock()
 
@@ -105,7 +102,9 @@ async def test_connect_db_prefers_mongodb_uri(monkeypatch):
         "mongodb://u:p@example.internal:27017/meta-vis?authSource=admin",
     )
     monkeypatch.setattr(database, "AsyncIOMotorClient", fake_client)
-    monkeypatch.setattr(database, "_ensure_indexes", fake_ensure_indexes)
+    # _ensure_indexes is awaited inside connect_db — AsyncMock gives an
+    # awaitable without a bare no-await `async def` helper.
+    monkeypatch.setattr(database, "_ensure_indexes", AsyncMock(return_value=None))
     # blob_store import is local inside connect_db — patch at module level.
     import app.blob_store as blob_store
 
