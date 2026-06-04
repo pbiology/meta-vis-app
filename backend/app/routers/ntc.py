@@ -11,6 +11,7 @@ from typing import Literal, Optional
 from app.audit import log_audit_event
 from app.cache import get_cache_version, bump_cache_version
 from app.database import get_db
+from app.db_utils import fetch_capped
 from app.auth.utils import get_current_user, require_role
 from app.constants import HOST_TAXON_IDS
 
@@ -82,7 +83,9 @@ async def get_ntc_ignorelist(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ) -> list:
-    docs = await db["ntc_ignorelist"].find().sort("added_at", -1).to_list(length=1000)
+    docs = await fetch_capped(
+        db["ntc_ignorelist"].find().sort("added_at", -1), "ntc_ignorelist"
+    )
     for doc in docs:
         doc["_id"] = str(doc["_id"])
     return docs
@@ -197,11 +200,9 @@ async def get_ntc_contaminants(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ) -> list:
-    docs = (
-        await db["ntc_known_contaminants"]
-        .find()
-        .sort("added_at", -1)
-        .to_list(length=1000)
+    docs = await fetch_capped(
+        db["ntc_known_contaminants"].find().sort("added_at", -1),
+        "ntc_known_contaminants",
     )
     for doc in docs:
         doc["_id"] = str(doc["_id"])
@@ -347,7 +348,9 @@ async def get_contaminant_alerts(
             if stored_version == current_version:
                 return cached_result
 
-        contaminants = await db["ntc_known_contaminants"].find().to_list(length=1000)
+        contaminants = await fetch_capped(
+            db["ntc_known_contaminants"].find(), "ntc_known_contaminants"
+        )
         if not contaminants:
             result: dict = {"alerts": [], "contaminant_case_ids": []}
             _contaminant_alert_cache[window_days] = (current_version, result)
@@ -357,11 +360,18 @@ async def get_contaminant_alerts(
 
         cutoff = (date.today() - timedelta(days=window_days)).isoformat()
 
-        # For each contaminant find NTC samples where its abundance exceeds min_reads.
-        # We iterate profiles in Python rather than using $unwind because the NTC
-        # sample count is small and we need per-contaminant min_reads thresholds.
-        ntc_docs = (
-            await db["samples"]
+        # Build a lookup: taxon_id -> contaminant doc
+        contaminant_map = {c["taxon_id"]: c for c in contaminants}
+
+        # taxon_id -> list of affected NTC occurrences
+        hits: dict[int, list[dict]] = {c["taxon_id"]: [] for c in contaminants}
+
+        # Stream NTC sample docs so the full profile arrays are never all
+        # resident at once. We iterate profiles in Python rather than using
+        # $unwind because the NTC sample count is small and we need
+        # per-contaminant min_reads thresholds.
+        ntc_cursor = (
+            db["samples"]
             .find(
                 {"sample_type": "negative_ctrl", "order_date": {"$gte": cutoff}},
                 {
@@ -372,16 +382,9 @@ async def get_contaminant_alerts(
                 },
             )
             .sort("order_date", -1)
-            .to_list(None)
         )
 
-        # Build a lookup: taxon_id -> contaminant doc
-        contaminant_map = {c["taxon_id"]: c for c in contaminants}
-
-        # taxon_id -> list of affected NTC occurrences
-        hits: dict[int, list[dict]] = {c["taxon_id"]: [] for c in contaminants}
-
-        for doc in ntc_docs:
+        async for doc in ntc_cursor:
             for p in doc.get("profiles", []):
                 if p.get("classifier") != "kraken2":
                     continue
@@ -444,8 +447,8 @@ async def _compute_ntc_trends(
     """Run the NTC trend aggregations and assemble the result dict."""
     cutoff = (date.today() - timedelta(days=window_days)).isoformat()
 
-    ignore_docs = (
-        await db["ntc_ignorelist"].find({}, {"taxon_id": 1}).to_list(length=1000)
+    ignore_docs = await fetch_capped(
+        db["ntc_ignorelist"].find({}, {"taxon_id": 1}), "ntc_ignorelist"
     )
     ignored_ids: frozenset[int] = frozenset(d["taxon_id"] for d in ignore_docs)
     excluded_ids: list[int] = list(HOST_TAXON_IDS | ignored_ids)

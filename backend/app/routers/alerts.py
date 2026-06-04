@@ -10,6 +10,7 @@ from typing import Optional
 from app.audit import log_audit_event
 from app.cache import get_cache_version, bump_cache_version
 from app.database import get_db
+from app.db_utils import fetch_capped
 from app.auth.utils import get_current_user, require_role
 from app.config import settings
 
@@ -59,11 +60,9 @@ async def get_ignorelist(
     if superkingdom:
         query["superkingdom"] = superkingdom
 
-    docs = (
-        await db["outbreak_ignorelist"]
-        .find(query)
-        .sort("added_at", -1)
-        .to_list(length=1000)
+    docs = await fetch_capped(
+        db["outbreak_ignorelist"].find(query).sort("added_at", -1),
+        "outbreak_ignorelist",
     )
     for doc in docs:
         doc["_id"] = str(doc["_id"])
@@ -252,29 +251,33 @@ async def _compute_outbreaks_for_config(
     not the full profiles array which would require expensive unwinding.
     """
     # Load ignorelist
-    ignored_docs = await db["outbreak_ignorelist"].find({}).to_list(length=1000)
+    ignored_docs = await fetch_capped(
+        db["outbreak_ignorelist"].find({}), "outbreak_ignorelist"
+    )
     ignored_ids = {doc["taxon_id"] for doc in ignored_docs}
 
-    # Only fetch cases within 2× the window
+    # Only fetch cases within 2× the window.
+    # Stream the cursor instead of materializing the full list so that
+    # large windows don't load every case doc into memory at once.
     cutoff = (date.today() - timedelta(days=window_days * 2)).isoformat()
     case_query: dict = {"order_date": {"$gte": cutoff}}
     if analysis_types:
         case_query["analysis_type"] = {"$in": analysis_types}
-    cases = (
-        await db["cases"]
-        .find(case_query, {"_id": 1, "case_id": 1, "order_date": 1})
-        .to_list(None)
-    )
 
-    if not cases:
+    case_map: dict = {}
+    case_id_strs: list[str] = []
+    async for c in db["cases"].find(
+        case_query, {"_id": 1, "case_id": 1, "order_date": 1}
+    ):
+        case_map[c["case_id"]] = c
+        case_id_strs.append(c["case_id"])
+
+    if not case_id_strs:
         return {
             "config_name": config["name"],
             "superkingdoms": config["superkingdoms"],
             "outbreaks": [],
         }
-
-    case_map = {c["case_id"]: c for c in cases}
-    case_id_strs = [c["case_id"] for c in cases]
 
     # Fast aggregation on pre-computed outbreak_taxa
     pipeline: list[dict] = [
@@ -311,6 +314,7 @@ async def _compute_outbreaks_for_config(
         },
     ]
 
+    # Bounded by group-by cardinality (one row per outbreak taxon after filters).
     raw_results = await db["samples"].aggregate(pipeline).to_list(None)
 
     # Build taxon_cases from aggregation results
@@ -386,7 +390,9 @@ async def get_pathogens(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    docs = await db["known_pathogens"].find().sort("added_at", -1).to_list(length=1000)
+    docs = await fetch_capped(
+        db["known_pathogens"].find().sort("added_at", -1), "known_pathogens"
+    )
     for doc in docs:
         doc["_id"] = str(doc["_id"])
     return docs
