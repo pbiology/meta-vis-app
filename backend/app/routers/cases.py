@@ -142,7 +142,7 @@ PAGE_SIZE = 50
 @router.get("", summary="List all cases")
 async def list_cases(
     page: int = 1,
-    search: str = Query("", max_length=128),
+    search: Annotated[str, Query(max_length=128)] = "",
     reviewed: str | None = None,
     analysis_type: str | None = None,
     db: AsyncIOMotorDatabase = Depends(get_db),

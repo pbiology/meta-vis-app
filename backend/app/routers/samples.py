@@ -1,6 +1,7 @@
 # app/routers/samples.py
 
 import re
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
@@ -39,7 +40,7 @@ PAGE_SIZE = 50
 @router.get("", summary="List all samples with pagination")
 async def list_samples(
     page: int = 1,
-    search: str = Query("", max_length=128),
+    search: Annotated[str, Query(max_length=128)] = "",
     filter: str = "",
     analysis_type: str | None = None,
     db: AsyncIOMotorDatabase = Depends(get_db),
