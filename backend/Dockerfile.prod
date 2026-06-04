@@ -48,8 +48,11 @@ RUN groupadd --system --gid 1001 app \
 WORKDIR /app
 
 COPY --from=builder /opt/venv /opt/venv
-COPY --chown=app:app app ./app
-COPY --chown=app:app outbreak_configs.json controls_taxa.json ./
+# Files are left root-owned (world-readable). The non-root `app` user can read
+# and execute its code but cannot modify it at runtime — defense against an
+# attacker persisting changes inside the container (SonarQube docker:S6504).
+COPY app ./app
+COPY outbreak_configs.json controls_taxa.json ./
 
 USER app
 
