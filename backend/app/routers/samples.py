@@ -1,5 +1,6 @@
 # app/routers/samples.py
 
+import logging
 import re
 from typing import Annotated
 
@@ -7,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
+from bson.errors import InvalidId
 from app.models.sample import SampleResponse
 
 from app.audit import log_audit_event
@@ -18,12 +20,14 @@ from app.database import get_db
 from app.auth.utils import get_current_user
 
 router = APIRouter(prefix="/samples", tags=["samples"])
+logger = logging.getLogger(__name__)
 
 
 def _oid(sample_id: str) -> ObjectId:
     try:
         return ObjectId(sample_id)
-    except Exception:
+    except InvalidId:
+        logger.warning("Invalid sample_id received: %r", sample_id)
         raise HTTPException(status_code=422, detail=f"Invalid sample_id: '{sample_id}'")
 
 

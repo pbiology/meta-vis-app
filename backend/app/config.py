@@ -103,8 +103,8 @@ class Settings(BaseSettings):
         except json.JSONDecodeError as e:
             logger.error("Error parsing outbreak_configs.json: %s", e, exc_info=True)
             self.outbreak_configs = []
-        except Exception as e:
-            logger.error("Error loading outbreak_configs.json: %s", e, exc_info=True)
+        except OSError as e:
+            logger.error("Error reading outbreak_configs.json: %s", e, exc_info=True)
             self.outbreak_configs = []
 
     def load_controls_taxa(self) -> None:
@@ -123,8 +123,8 @@ class Settings(BaseSettings):
         except json.JSONDecodeError as e:
             logger.error("Error parsing controls_taxa.json: %s", e, exc_info=True)
             self.controls_taxa = {}
-        except Exception as e:
-            logger.error("Error loading controls_taxa.json: %s", e, exc_info=True)
+        except OSError as e:
+            logger.error("Error reading controls_taxa.json: %s", e, exc_info=True)
             self.controls_taxa = {}
 
 
