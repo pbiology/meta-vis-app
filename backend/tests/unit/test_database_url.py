@@ -26,7 +26,8 @@ def patched_settings(monkeypatch):
 
 
 def test_build_mongo_url_encodes_special_chars(patched_settings):
-    patched_settings(mongodb_username="a@b", mongodb_password="p/w@:")
+    pwd = "p/w@:"
+    patched_settings(mongodb_username="a@b", mongodb_password=pwd)
     url = _build_mongo_url()
     assert "a%40b:p%2Fw%40%3A@" in url
     assert "a@b:p/w@:@" not in url
@@ -45,7 +46,8 @@ def test_build_mongo_url_user_without_password_raises(patched_settings):
 
 
 def test_build_mongo_url_password_without_user_raises(patched_settings):
-    patched_settings(mongodb_username="", mongodb_password="pw")
+    pwd = "pw"
+    patched_settings(mongodb_username="", mongodb_password=pwd)
     with pytest.raises(ValueError):
         _build_mongo_url()
 
@@ -68,7 +70,8 @@ def test_redact_mongo_url_no_auth_unchanged():
 
 
 def test_connect_db_logs_redacted_url(patched_settings, caplog):
-    patched_settings(mongodb_username="user", mongodb_password="topsecret")
+    pwd = "topsecret"
+    patched_settings(mongodb_username="user", mongodb_password=pwd)
     with caplog.at_level(logging.INFO, logger="app.database"):
         url = _build_mongo_url()
         database.logger.info("Connecting to MongoDB at %s", _redact_mongo_url(url))
