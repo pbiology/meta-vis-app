@@ -39,7 +39,7 @@ export default function CaseSidebar({
 
   function handleLogout() {
     logout();
-    navigate("/login");
+    navigate("/");
   }
 
   const groups: NavGroup[] = [

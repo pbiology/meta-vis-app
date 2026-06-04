@@ -37,7 +37,7 @@ export default function Layout() {
 
   function handleLogout() {
     logout();
-    navigate("/login");
+    navigate("/");
   }
 
   return (
