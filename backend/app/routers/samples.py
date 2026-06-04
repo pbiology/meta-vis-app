@@ -1,6 +1,8 @@
 # app/routers/samples.py
 
-from fastapi import APIRouter, Depends, HTTPException
+import re
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
@@ -37,7 +39,7 @@ PAGE_SIZE = 50
 @router.get("", summary="List all samples with pagination")
 async def list_samples(
     page: int = 1,
-    search: str = "",
+    search: str = Query("", max_length=128),
     filter: str = "",
     analysis_type: str | None = None,
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -56,7 +58,7 @@ async def list_samples(
         query["trana"] = {"$exists": True}
 
     if search.strip():
-        query["sample_id"] = {"$regex": search.strip()}
+        query["sample_id"] = {"$regex": re.escape(search.strip()), "$options": "i"}
 
     total = (
         await db["samples"].estimated_document_count()
