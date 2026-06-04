@@ -11,7 +11,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from typing import Any
 from pymongo import ReturnDocument, UpdateOne
 
-from app.database import get_client
+from app.database import get_client, maybe_transaction
 from app.ingestor.inputs import (
     MultiQCRaw,
     TaxprofilerIngestInputs,
@@ -682,9 +682,8 @@ async def ingest_taxprofiler_case(
     await _upsert_taxa_skeleton(db, prepared.taxa_upsert_ops)
 
     client = get_client()
-    async with await client.start_session() as session:
-        async with session.start_transaction():
-            await _commit_prepared(db, prepared, subject_map, session=session)
+    async with maybe_transaction(client) as session:
+        await _commit_prepared(db, prepared, subject_map, session=session)
     t_commit = time.perf_counter()
 
     await _upload_all_blobs(prepared)
@@ -867,9 +866,8 @@ async def ingest_trana_case(
     await _upsert_taxa_skeleton(db, prepared.taxa_upsert_ops)
 
     client = get_client()
-    async with await client.start_session() as session:
-        async with session.start_transaction():
-            await _commit_prepared(db, prepared, subject_map, session=session)
+    async with maybe_transaction(client) as session:
+        await _commit_prepared(db, prepared, subject_map, session=session)
 
     await _upload_all_blobs(prepared)
 
