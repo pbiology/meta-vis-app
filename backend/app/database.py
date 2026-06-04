@@ -1,19 +1,34 @@
+import logging
+import re
+from urllib.parse import quote_plus
+
 from motor.motor_asyncio import (
     AsyncIOMotorClient,
     AsyncIOMotorDatabase,
 )
 from app.config import settings
 
+logger = logging.getLogger(__name__)
+
 client: AsyncIOMotorClient | None = None
 _blob_store = None
 
 
 def _build_mongo_url() -> str:
-    if settings.mongodb_username and settings.mongodb_password:
+    username = settings.mongodb_username
+    password = settings.mongodb_password
+    if bool(username) != bool(password):
+        raise ValueError(
+            "MongoDB username and password must both be set or both be empty"
+        )
+    if username and password:
+        user = quote_plus(username)
+        pwd = quote_plus(password)
+        auth_source = quote_plus(settings.mongodb_auth_source)
         base = (
-            f"mongodb://{settings.mongodb_username}:{settings.mongodb_password}"
+            f"mongodb://{user}:{pwd}"
             f"@{settings.mongodb_host}:{settings.mongodb_port}"
-            f"/{settings.mongodb_db_name}?authSource={settings.mongodb_auth_source}"
+            f"/{settings.mongodb_db_name}?authSource={auth_source}"
         )
     else:
         base = f"mongodb://{settings.mongodb_host}:{settings.mongodb_port}"
@@ -23,9 +38,15 @@ def _build_mongo_url() -> str:
     return base
 
 
+def _redact_mongo_url(url: str) -> str:
+    return re.sub(r"://([^:/@]+):([^@]+)@", r"://\1:***@", url)
+
+
 async def connect_db():
     global client, _blob_store
-    client = AsyncIOMotorClient(_build_mongo_url())
+    url = _build_mongo_url()
+    logger.info("Connecting to MongoDB at %s", _redact_mongo_url(url))
+    client = AsyncIOMotorClient(url)
     await _ensure_indexes()
     from app.blob_store import make_blob_store
 
