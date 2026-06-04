@@ -41,14 +41,14 @@ export default function Landing() {
       >
         <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" className="block h-full w-full">
           <g stroke="#cbced5" strokeWidth="0.5" opacity="0.6">
-            <line x1="16" y1="10.5" x2="16" y2="5.5" />
-            <line x1="20.8" y1="13" x2="25.84" y2="9.61" />
-            <line x1="21" y1="19" x2="25.88" y2="20.88" />
-            <line x1="16" y1="21.5" x2="15" y2="26.5" />
-            <line x1="11.2" y1="19" x2="6.16" y2="22.39" />
-            <line x1="11" y1="13" x2="6.08" y2="9.89" />
+            <line x1="16" y1="16" x2="16" y2="3" />
+            <line x1="16" y1="16" x2="27.5" y2="8.5" />
+            <line x1="16" y1="16" x2="28" y2="23" />
+            <line x1="16" y1="16" x2="15" y2="29" />
+            <line x1="16" y1="16" x2="4.5" y2="23.5" />
+            <line x1="16" y1="16" x2="4" y2="8.5" />
           </g>
-          <g fill="#d3d6dc" opacity="0.4">
+          <g fill="#dadde3">
             <circle cx="16" cy="16" r="5.5" />
             <circle cx="16" cy="3" r="2.5" />
             <circle cx="27.5" cy="8.5" r="2" />
