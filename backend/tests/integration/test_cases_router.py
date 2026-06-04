@@ -1,12 +1,42 @@
 # tests/integration/test_cases_router.py
 
+from unittest.mock import patch
+
 import pytest
 from bson import ObjectId
 from datetime import datetime, timezone
 from fastapi.testclient import TestClient
+from mongomock.not_implemented import ignore_feature
 
+from app.routers import cases as cases_module
 from app.routers.cases import router
 from tests.helpers import make_test_app
+
+# Mongomock has no real sessions/transactions; treat them as no-ops so the
+# delete handler's `start_session()` / `start_transaction()` calls work.
+ignore_feature("session")
+
+
+class _FakeSession:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return None
+
+    def start_transaction(self):
+        return self
+
+
+class _FakeClient:
+    async def start_session(self):
+        return _FakeSession()
+
+
+@pytest.fixture(autouse=True)
+def _patch_mongo_client():
+    with patch.object(cases_module, "get_client", return_value=_FakeClient()):
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -317,6 +347,26 @@ class TestDeleteCase:
         resp = client.delete("/api/v1/cases/casea")
         assert resp.status_code == 200
         assert await fake_db["subjects"].find_one({"_id": subj_oid}) is not None
+
+    async def test_cascades_to_samples_and_metaval(self, client, fake_db):
+        await insert_case(fake_db, "cascadecase")
+        await fake_db["samples"].insert_many(
+            [
+                {"case_id": "cascadecase", "sample_id": "s1"},
+                {"case_id": "cascadecase", "sample_id": "s2"},
+            ]
+        )
+        await fake_db["metaval_results"].insert_one(
+            {"case_id": "cascadecase", "taxid": 9606}
+        )
+
+        resp = client.delete("/api/v1/cases/cascadecase")
+        assert resp.status_code == 200
+        assert await fake_db["samples"].count_documents({"case_id": "cascadecase"}) == 0
+        assert (
+            await fake_db["metaval_results"].count_documents({"case_id": "cascadecase"})
+            == 0
+        )
 
     async def test_control_only_case_skips_subject_cleanup(self, client, fake_db):
         # Case with subject_id=None (control-only) deletes cleanly.
