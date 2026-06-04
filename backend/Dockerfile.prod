@@ -1,0 +1,66 @@
+# Production image for the FastAPI backend.
+#
+# Two stages:
+#   1. builder — installs runtime deps (no [dev] extras) into a venv.
+#   2. runtime — slim image, copies the venv + app, runs as non-root.
+#
+# No --reload, no bind-mounts. The dev Dockerfile alongside this one is still
+# used for `docker compose up` against backend/docker-compose.yml.
+
+# ---------- builder ----------
+FROM python:3.13-slim AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /build
+
+# build-essential is only needed at build time (some wheels compile C ext).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create an isolated venv so we can copy a self-contained tree to the runtime
+# stage. Avoids dragging pip/setuptools/build tooling along.
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY pyproject.toml ./
+COPY app ./app
+
+# Install only runtime deps — no [dev] extras (ruff/mypy/pytest stay out).
+RUN pip install --upgrade pip && pip install .
+
+# ---------- runtime ----------
+FROM python:3.13-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH"
+
+# Non-root user — keeps container compatible with restrictive runtimes
+# (OpenShift / hardened k8s) and avoids running uvicorn as root.
+RUN groupadd --system --gid 1001 app \
+    && useradd --system --uid 1001 --gid app --home-dir /app --shell /sbin/nologin app
+
+WORKDIR /app
+
+COPY --from=builder /opt/venv /opt/venv
+COPY --chown=app:app app ./app
+COPY --chown=app:app outbreak_configs.json controls_taxa.json ./
+
+USER app
+
+EXPOSE 8000
+
+# --proxy-headers + --forwarded-allow-ips=* so Host/Scheme are taken from
+# the upstream nginx (frontend container + the host nginx in front of it).
+# No --reload. Workers tuned for a small VM; bump on a beefier host.
+CMD ["uvicorn", "app.main:app", \
+     "--host", "0.0.0.0", \
+     "--port", "8000", \
+     "--workers", "2", \
+     "--proxy-headers", \
+     "--forwarded-allow-ips=*"]
