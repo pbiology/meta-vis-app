@@ -9,7 +9,7 @@ const ANALYSIS_TYPES: { key: string; label: string; hint: string }[] = [
 ];
 
 export default function UserPreferences() {
-  const { preferences, setPreferences } = useAuth();
+  const { user, role, preferences, setPreferences } = useAuth();
   const [selectedKingdoms, setSelectedKingdoms] = useState<string[]>(
     preferences?.preferred_kingdoms ?? ["Viruses"]
   );
@@ -61,6 +61,20 @@ export default function UserPreferences() {
           <h1 className="text-sm font-semibold text-gray-900 mb-1">Preferences</h1>
           <p className="text-xs text-gray-500">
             These settings apply to your account and persist across sessions.
+          </p>
+        </div>
+
+        <div className="bg-white border border-gray-100 rounded-xl p-5">
+          <h2 className="text-sm font-medium text-gray-800 mb-1">Signed in as</h2>
+          <p className="text-xs text-gray-700">
+            <span className="font-mono">{user ?? "—"}</span>
+          </p>
+          <p className="mt-2 text-xs text-gray-500">
+            Role: <span className="font-mono text-gray-700">{role ?? "none"}</span>
+          </p>
+          <p className="mt-3 text-xs text-gray-400">
+            Username, password and role are managed in Keycloak. Contact an administrator to change
+            them.
           </p>
         </div>
 

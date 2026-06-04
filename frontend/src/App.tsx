@@ -6,7 +6,6 @@ import SampleList from "./pages/SampleList";
 import SampleDetail from "./pages/SampleDetail";
 import CaseList from "./pages/CaseList";
 import CaseView from "./pages/CaseView";
-import Admin from "./pages/Admin";
 import MetavalDetails from "./pages/MetavalDetails";
 import Alerts from "./pages/Alerts";
 import IgnoreList from "./pages/IgnoreList";
@@ -70,7 +69,6 @@ export default function App() {
             <Route path="cases/:caseId" element={<LegacyCaseRedirect />} />
             <Route path="samples" element={<SampleList />} />
             <Route path="samples/:sampleId" element={<SampleDetail />} />
-            <Route path="admin" element={<Admin />} />
             <Route path="samples/:sampleId/metaval/:metavalId" element={<MetavalDetails />} />
             <Route path="alerts" element={<Alerts />} />
             <Route path="alerts/ignorelist" element={<IgnoreList />} />
