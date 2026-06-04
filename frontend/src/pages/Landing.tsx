@@ -206,7 +206,7 @@ export default function Landing() {
                 className="inline-block h-[5px] w-[5px] rounded-full bg-[#22c55e]"
                 style={{ boxShadow: "0 0 0 3px rgba(34,197,94,0.14)" }}
               />
-              Authorized access · single sign-on via Keycloak
+              <span>Authorized access · single sign-on via Keycloak</span>
             </p>
           )}
         </div>
@@ -215,9 +215,9 @@ export default function Landing() {
           className="mt-[26px] text-center font-mono text-[11px] text-[#c7c7cc]"
           style={{ letterSpacing: "0.04em" }}
         >
-          meta-vis
+          <span>meta-vis</span>
           <span className="mx-2 text-[#dcdce0]">·</span>
-          clinical metagenomics platform
+          <span>clinical metagenomics platform</span>
         </div>
       </main>
     </div>
