@@ -105,7 +105,8 @@ class S3BlobStore(BlobStore):
                 max_pool_connections=max_workers,
             ),
         )
-        self._ensure_bucket()
+        self._bucket_ready = False
+        self._bucket_lock: Optional[asyncio.Lock] = None
 
     def _ensure_bucket(self) -> None:
         from botocore.exceptions import ClientError
@@ -115,7 +116,20 @@ class S3BlobStore(BlobStore):
         except ClientError:
             self._s3.create_bucket(Bucket=self._bucket)
 
+    async def _ensure_bucket_async(self) -> None:
+        if self._bucket_ready:
+            return
+        if self._bucket_lock is None:
+            self._bucket_lock = asyncio.Lock()
+        async with self._bucket_lock:
+            if self._bucket_ready:
+                return
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(self._executor, self._ensure_bucket)
+            self._bucket_ready = True
+
     async def put(self, key: str, content: str) -> None:
+        await self._ensure_bucket_async()
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(
             self._executor,
@@ -130,6 +144,7 @@ class S3BlobStore(BlobStore):
     async def get(self, key: str) -> Optional[str]:
         from botocore.exceptions import ClientError
 
+        await self._ensure_bucket_async()
         loop = asyncio.get_running_loop()
         try:
             response = await loop.run_in_executor(
@@ -143,6 +158,7 @@ class S3BlobStore(BlobStore):
             raise
 
     async def delete_prefix(self, prefix: str) -> None:
+        await self._ensure_bucket_async()
         loop = asyncio.get_running_loop()
 
         def _delete() -> None:
