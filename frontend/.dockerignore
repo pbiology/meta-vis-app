@@ -1,8 +1,26 @@
-frontend/.dockerignore__pycache__/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.venv/
-.env
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+dist/
+build/
+.vite/
+
+# Git / editor
+.git/
+.gitignore
+.idea/
+.vscode/
+
+# Tests & docs
 tests/
-*.pyc
+docs/
+*.md
+
+# Env
+.env
+.env.*
+.eslintcache

@@ -1,8 +1,27 @@
+# Python runtime artifacts
 __pycache__/
-.pytest_cache/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
 .mypy_cache/
 .ruff_cache/
-.venv/
-.env
+.pytest_cache/
+
+# Git / editor
+.git/
+.gitignore
+.idea/
+.vscode/
+
+# Tests & docs (not needed at runtime)
 tests/
-*.pyc
+docs/
+*.md
+
+# Local config / data
+.env
+.env.*
+test-data/
+htmlcov/
+.coverage
