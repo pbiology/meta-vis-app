@@ -11,7 +11,7 @@ from typing import Annotated, Optional
 from app.models.case import CaseResponse
 
 from app.audit import log_audit_event
-from app.database import get_db
+from app.database import get_client, get_db
 from app.auth.utils import get_current_user, require_role
 from app.config import settings
 from app.constants import HOST_TAXON_IDS
@@ -273,20 +273,33 @@ async def delete_case(
 
     subject_oid = case.get("subject_id")
 
-    await db["samples"].delete_many({"case_id": case_id})
+    # Mongo state changes happen in a transaction so a mid-sequence failure
+    # cannot leave orphan samples/metaval rows pointing at a deleted case.
+    # Blob-store deletes run after commit: orphaned blobs are recoverable,
+    # inconsistent Mongo state is not.
+    client = get_client()
+    async with await client.start_session() as session:
+        async with session.start_transaction():
+            await db["samples"].delete_many({"case_id": case_id}, session=session)
+            await db["metaval_results"].delete_many(
+                {"case_id": case_id}, session=session
+            )
+            await db["cases"].delete_one({"_id": case["_id"]}, session=session)
+            if subject_oid is not None:
+                still_referenced = await db["cases"].find_one(
+                    {"subject_id": subject_oid}, {"_id": 1}, session=session
+                )
+                if not still_referenced:
+                    await db["subjects"].delete_one(
+                        {"_id": subject_oid}, session=session
+                    )
+
     from app.database import get_blob_store
 
     store = get_blob_store()
     await store.delete_prefix(f"krona/{case_id}/")
     await store.delete_prefix(f"igv/{case_id}/")
     await store.delete_prefix(f"multiqc/{case_id}/")
-    await db["metaval_results"].delete_many({"case_id": case_id})
-    await db["cases"].delete_one({"_id": case["_id"]})
-
-    # Drop the subject if no other case still references it.
-    if subject_oid is not None:
-        if not await db["cases"].find_one({"subject_id": subject_oid}, {"_id": 1}):
-            await db["subjects"].delete_one({"_id": subject_oid})
 
     await log_audit_event(
         db,
