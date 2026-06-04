@@ -1,8 +1,9 @@
 # app/routers/cases.py
 
+import re
 import uuid
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
@@ -141,7 +142,7 @@ PAGE_SIZE = 50
 @router.get("", summary="List all cases")
 async def list_cases(
     page: int = 1,
-    search: str = "",
+    search: Annotated[str, Query(max_length=128)] = "",
     reviewed: str | None = None,
     analysis_type: str | None = None,
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -149,7 +150,7 @@ async def list_cases(
 ):
     query: dict[str, object] = {}
     if search.strip():
-        query["case_id"] = {"$regex": search.strip()}
+        query["case_id"] = {"$regex": re.escape(search.strip()), "$options": "i"}
     if reviewed == "pending":
         query["review.reviewed"] = {"$ne": True}
     elif reviewed == "reviewed":
