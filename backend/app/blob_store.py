@@ -108,9 +108,11 @@ class S3BlobStore(BlobStore):
         self._ensure_bucket()
 
     def _ensure_bucket(self) -> None:
+        from botocore.exceptions import ClientError
+
         try:
             self._s3.head_bucket(Bucket=self._bucket)
-        except Exception:
+        except ClientError:
             self._s3.create_bucket(Bucket=self._bucket)
 
     async def put(self, key: str, content: str) -> None:
@@ -126,6 +128,8 @@ class S3BlobStore(BlobStore):
         )
 
     async def get(self, key: str) -> Optional[str]:
+        from botocore.exceptions import ClientError
+
         loop = asyncio.get_running_loop()
         try:
             response = await loop.run_in_executor(
@@ -133,8 +137,10 @@ class S3BlobStore(BlobStore):
                 lambda: self._s3.get_object(Bucket=self._bucket, Key=key),
             )
             return response["Body"].read().decode("utf-8")
-        except Exception:
-            return None
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") in {"NoSuchKey", "404"}:
+                return None
+            raise
 
     async def delete_prefix(self, prefix: str) -> None:
         loop = asyncio.get_running_loop()

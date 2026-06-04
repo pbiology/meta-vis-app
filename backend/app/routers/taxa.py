@@ -1,6 +1,7 @@
 # app/routers/taxa.py
 
 import asyncio
+import logging
 from datetime import date, timedelta, datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -14,6 +15,7 @@ from app.auth.utils import get_current_user, require_role
 from app.config import settings
 
 router = APIRouter(prefix="/taxa", tags=["taxa"])
+logger = logging.getLogger(__name__)
 
 
 class ClinicalNotesPayload(BaseModel):
@@ -50,7 +52,8 @@ async def get_external_links(
             resp = await client.get(url, headers={"Accept": "application/json"})
             resp.raise_for_status()
             raw = resp.json()
-    except Exception:
+    except (httpx.HTTPError, ValueError) as e:
+        logger.warning("NCBI taxonomy links fetch failed for %s: %s", taxon_id, e)
         return {"taxon_id": taxon_id, "links": []}
 
     # Response is a flat object: {"tax_id": "...", "wikipedia": "https://...", ...}
@@ -174,8 +177,9 @@ async def get_taxon_literature(
                 if pmid in result_dict
             ]
 
-    except Exception:
+    except (httpx.HTTPError, ValueError, KeyError) as e:
         # Network errors, timeouts, or unexpected response shapes — degrade gracefully
+        logger.warning("PubMed literature fetch failed for %s: %s", taxon_id, e)
         return {
             "taxon_id": taxon_id,
             "article_count": 0,
@@ -240,7 +244,8 @@ async def get_bvbrc_genomes(
             resp = await http.get(url, headers={"Accept": "application/json"})
             resp.raise_for_status()
             genomes: list[dict] = resp.json()
-    except Exception:
+    except (httpx.HTTPError, ValueError) as e:
+        logger.warning("BV-BRC genomes fetch failed for %s: %s", taxon_id, e)
         return empty
 
     if not genomes:
@@ -364,7 +369,8 @@ async def get_bvbrc_specialty_genes(
             amr_resp.raise_for_status()
             specialty_genes: list[dict] = sg_resp.json()
             amr_records: list[dict] = amr_resp.json()
-    except Exception:
+    except (httpx.HTTPError, ValueError) as e:
+        logger.warning("BV-BRC AMR/virulence fetch failed for %s: %s", taxon_id, e)
         return empty
 
     # Deduplicate by (gene, property) and split into AMR vs virulence.

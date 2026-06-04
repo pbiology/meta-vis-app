@@ -52,7 +52,7 @@ async def log_audit_event(
 
     try:
         await db["audit_log"].insert_one(doc.copy())
-    except Exception:
+    except Exception:  # noqa: BLE001 — audit must never crash the caller (see docstring)
         logging.getLogger(__name__).warning(
             "Failed to write audit event to database",
             extra={"action": action, "actor": actor},

@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
+from bson.errors import InvalidId
 
 from app.database import get_db
 from app.auth.utils import get_current_user
@@ -19,7 +20,8 @@ logger = logging.getLogger(__name__)
 def _oid(id_str: str) -> ObjectId:
     try:
         return ObjectId(id_str)
-    except Exception:
+    except InvalidId:
+        logger.warning("Invalid metaval id received: %r", id_str)
         raise HTTPException(status_code=422, detail=f"Invalid id: '{id_str}'")
 
 

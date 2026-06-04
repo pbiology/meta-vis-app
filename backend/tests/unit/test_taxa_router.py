@@ -10,6 +10,7 @@
 # the rest of the test suite.
 
 from unittest.mock import AsyncMock, MagicMock, patch
+import httpx
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
 
@@ -183,7 +184,7 @@ class TestGetExternalLinks:
 
         with patch("app.routers.taxa.httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()
-            mock_client.get = AsyncMock(side_effect=Exception("timeout"))
+            mock_client.get = AsyncMock(side_effect=httpx.ConnectTimeout("timeout"))
             mock_client_cls.return_value.__aenter__ = AsyncMock(
                 return_value=mock_client
             )
@@ -300,7 +301,7 @@ class TestGetTaxonLiterature:
         db["taxa"].find_one = AsyncMock(return_value={"name": "Dengue virus"})
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=Exception("connection refused"))
+        mock_client.get = AsyncMock(side_effect=httpx.ConnectError("connection refused"))
 
         with patch("app.routers.taxa.httpx.AsyncClient") as mock_client_cls:
             mock_client_cls.return_value.__aenter__ = AsyncMock(
@@ -497,7 +498,7 @@ class TestGetBvbrcGenomes:
     def test_returns_empty_on_network_error(self):
         app, _ = make_app()
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=Exception("timeout"))
+        mock_client.get = AsyncMock(side_effect=httpx.ConnectTimeout("timeout"))
 
         with patch("app.routers.taxa.httpx.AsyncClient") as mock_cls:
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
@@ -763,7 +764,7 @@ class TestGetBvbrcSpecialtyGenes:
         )
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=Exception("connection refused"))
+        mock_client.get = AsyncMock(side_effect=httpx.ConnectError("connection refused"))
 
         with patch("app.routers.taxa.httpx.AsyncClient") as mock_cls:
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
