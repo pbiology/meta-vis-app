@@ -16,7 +16,6 @@ import CaseList from "../pages/CaseList";
 import CaseView from "../pages/CaseView";
 import SampleList from "../pages/SampleList";
 import SampleDetail from "../pages/SampleDetail";
-import Admin from "../pages/Admin";
 import MetavalDetails from "../pages/MetavalDetails";
 import Alerts from "../pages/Alerts";
 import IgnoreList from "../pages/IgnoreList";
@@ -64,11 +63,6 @@ describe("page smoke tests", () => {
       route: "/samples/sample-1",
       routePath: "/samples/:sampleId",
     });
-    await settled();
-  });
-
-  it("Admin renders", async () => {
-    renderWithProviders(<Admin />, { route: "/admin" });
     await settled();
   });
 
