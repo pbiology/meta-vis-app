@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import { Routes, Route, Navigate, useParams } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import Login from "./pages/Login";
+import Landing from "./pages/Landing";
 import SampleList from "./pages/SampleList";
 import SampleDetail from "./pages/SampleDetail";
 import CaseList from "./pages/CaseList";
@@ -27,7 +28,7 @@ function ProtectedRoute({ children }: Readonly<{ children: ReactNode }>) {
         Loading…
       </div>
     );
-  return user ? <>{children}</> : <Navigate to="/login" replace />;
+  return user ? <>{children}</> : <Navigate to="/" replace />;
 }
 
 // Preserves bookmarks and external links to the legacy /cases/:caseId route by
@@ -42,6 +43,7 @@ export default function App() {
     <ErrorBoundary label="application">
       <ReportBuilderProvider>
         <Routes>
+          <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
 
@@ -57,14 +59,12 @@ export default function App() {
           />
 
           <Route
-            path="/"
             element={
               <ProtectedRoute>
                 <Layout />
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="/cases" replace />} />
             <Route path="cases" element={<CaseList />} />
             <Route path="cases/:caseId" element={<LegacyCaseRedirect />} />
             <Route path="samples" element={<SampleList />} />
