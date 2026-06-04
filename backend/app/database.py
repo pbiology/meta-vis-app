@@ -1,11 +1,15 @@
 import logging
 import re
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Optional
 from urllib.parse import quote_plus
 
 from motor.motor_asyncio import (
     AsyncIOMotorClient,
+    AsyncIOMotorClientSession,
     AsyncIOMotorDatabase,
 )
+
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -44,13 +48,35 @@ def _redact_mongo_url(url: str) -> str:
 
 async def connect_db():
     global client, _blob_store
-    url = _build_mongo_url()
+    # Prefer a full URI when configured (production): it carries replicaSet,
+    # tls, and seed-host params that the host/port/user/pass fields cannot
+    # express. Otherwise fall back to building from parts (dev compose).
+    url = settings.mongodb_uri or _build_mongo_url()
     logger.info("Connecting to MongoDB at %s", _redact_mongo_url(url))
     client = AsyncIOMotorClient(url)
     await _ensure_indexes()
     from app.blob_store import make_blob_store
 
     _blob_store = make_blob_store(client[settings.mongodb_db_name])
+
+
+@asynccontextmanager
+async def maybe_transaction(
+    mongo_client: AsyncIOMotorClient,
+) -> AsyncIterator[Optional[AsyncIOMotorClientSession]]:
+    """Yield a transactional session, or None when transactions are disabled.
+
+    Motor accepts `session=None` on every collection op as a no-op, so call
+    sites can pass the yielded value verbatim. Disable via
+    `settings.mongodb_use_transactions = False` on standalone mongod where
+    `start_transaction()` would raise.
+    """
+    if settings.mongodb_use_transactions:
+        async with await mongo_client.start_session() as session:
+            async with session.start_transaction():
+                yield session
+    else:
+        yield None
 
 
 def get_blob_store():
