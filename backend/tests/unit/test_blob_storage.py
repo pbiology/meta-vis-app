@@ -1,8 +1,11 @@
 # tests/unit/test_blob_store.py
 
+import asyncio
+from unittest.mock import MagicMock, patch
+
 import pytest
 from mongomock_motor import AsyncMongoMockClient
-from app.blob_store import MongoBlobStore, make_blob_store
+from app.blob_store import MongoBlobStore, S3BlobStore, make_blob_store
 
 
 @pytest.fixture
@@ -89,9 +92,47 @@ class TestDeletePrefix:
 
 class TestMakeBlobStore:
     def test_returns_mongo_blob_store_when_no_s3_config(self, db):
-        from unittest.mock import patch
         from app.config import settings
 
         with patch.object(settings, "object_storage_endpoint", None):
             store = make_blob_store(db)
         assert isinstance(store, MongoBlobStore)
+
+
+# ---------------------------------------------------------------------------
+# S3BlobStore lazy bucket check
+# ---------------------------------------------------------------------------
+
+
+def _make_s3_store_with_mock_client():
+    mock_client = MagicMock()
+    with patch("boto3.client", return_value=mock_client):
+        store = S3BlobStore(
+            endpoint="http://localhost:9000",
+            access_key="k",
+            secret_key="s",
+            bucket="b",
+        )
+    return store, mock_client
+
+
+class TestS3LazyBucketCheck:
+    def test_constructor_does_not_call_head_bucket(self):
+        _, mock_client = _make_s3_store_with_mock_client()
+        mock_client.head_bucket.assert_not_called()
+        mock_client.create_bucket.assert_not_called()
+
+    async def test_first_put_triggers_head_bucket_once(self):
+        store, mock_client = _make_s3_store_with_mock_client()
+        await store.put("k1", "v1")
+        await store.put("k2", "v2")
+        assert mock_client.head_bucket.call_count == 1
+
+    async def test_concurrent_first_calls_check_bucket_once(self):
+        store, mock_client = _make_s3_store_with_mock_client()
+        await asyncio.gather(
+            store.put("k1", "v1"),
+            store.put("k2", "v2"),
+            store.get("k3"),
+        )
+        assert mock_client.head_bucket.call_count == 1
