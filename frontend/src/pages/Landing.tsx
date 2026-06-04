@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth as useOidcAuth } from "react-oidc-context";
+import logoMark from "../assets/logo-mark.svg";
 
 // Layered card shadow and tonal vignette aren't expressible with the project's
 // Tailwind config, so they're applied inline. Everything else uses utilities.
@@ -65,75 +66,7 @@ export default function Landing() {
           className="w-full rounded-[18px] border border-[#e9e9ec] bg-white text-center"
           style={{ padding: "40px 38px 34px", boxShadow: CARD_SHADOW }}
         >
-          <div className="mx-auto mb-[22px] block h-[46px] w-[46px]">
-            <svg
-              viewBox="0 0 32 32"
-              xmlns="http://www.w3.org/2000/svg"
-              className="block h-full w-full"
-            >
-              <circle cx="16" cy="16" r="5.5" fill="#3b82f6" />
-              <line
-                x1="16"
-                y1="10.5"
-                x2="16"
-                y2="4"
-                stroke="#3b82f6"
-                strokeWidth="1"
-                opacity="0.4"
-              />
-              <line
-                x1="20.8"
-                y1="13"
-                x2="26"
-                y2="9.5"
-                stroke="#3b82f6"
-                strokeWidth="1"
-                opacity="0.3"
-              />
-              <line
-                x1="21"
-                y1="19"
-                x2="27"
-                y2="22"
-                stroke="#ef4444"
-                strokeWidth="1"
-                opacity="0.35"
-              />
-              <line
-                x1="16"
-                y1="21.5"
-                x2="15"
-                y2="28"
-                stroke="#f59e0b"
-                strokeWidth="1"
-                opacity="0.35"
-              />
-              <line
-                x1="11.2"
-                y1="19"
-                x2="6"
-                y2="22.5"
-                stroke="#f59e0b"
-                strokeWidth="1"
-                opacity="0.3"
-              />
-              <line
-                x1="11"
-                y1="13"
-                x2="5.5"
-                y2="9.5"
-                stroke="#a855f7"
-                strokeWidth="1"
-                opacity="0.35"
-              />
-              <circle cx="16" cy="3" r="2.5" fill="#3b82f6" />
-              <circle cx="27.5" cy="8.5" r="2" fill="#3b82f6" opacity="0.7" />
-              <circle cx="28" cy="23" r="3" fill="#ef4444" />
-              <circle cx="15" cy="29" r="2.5" fill="#f59e0b" />
-              <circle cx="4.5" cy="23.5" r="2" fill="#f59e0b" opacity="0.7" />
-              <circle cx="4" cy="8.5" r="2.5" fill="#a855f7" />
-            </svg>
-          </div>
+          <img src={logoMark} alt="" className="mx-auto mb-[22px] block h-[46px] w-[46px]" />
 
           <h1
             className="font-sans font-semibold leading-none text-gray-900"
