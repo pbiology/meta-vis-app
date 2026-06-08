@@ -1,0 +1,27 @@
+# Production image for the React SPA.
+#
+# Builder runs `npm run build` to produce static assets in /app/dist.
+# Runtime is plain nginx serving those assets and proxying /api/ to the
+# backend container (option X: single upstream per app — the host nginx
+# proxies one upstream and knows nothing about /api routing).
+
+# ---------- builder ----------
+FROM node:20-bullseye AS build
+WORKDIR /app
+
+# Copy lockfile separately for better layer caching.
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+# ---------- runtime ----------
+# nginx-unprivileged runs as non-root (UID 101) and listens on 8080 by
+# default — which matches our nginx.conf and the compose port mapping
+# (SonarQube docker:S6471). Stock `nginx` would run as root.
+FROM nginxinc/nginx-unprivileged:1.27-bookworm
+
+# Replace the stock default server block with ours.
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html

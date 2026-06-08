@@ -1,0 +1,60 @@
+# Production / stage compose stack.
+#
+# Two services only — backend (FastAPI) and frontend (nginx serving the SPA
+# bundle and reverse-proxying /api/ to the backend). MongoDB lives on a
+# separate VM and is reached via MONGODB_URI in backend/.env.prod. No MinIO:
+# blob_store falls back to the MongoDB `blobs` collection when no
+# OBJECT_STORAGE_* env vars are set.
+#
+# The host VM's existing nginx proxies the meta-vis hostname to the frontend
+# container at 127.0.0.1:8080 (option X: single upstream per app — the host
+# nginx is app-agnostic and just forwards everything).
+#
+# Bring up:   docker compose -f docker-compose.prod.yml up -d --build
+# Rebuild:    docker compose -f docker-compose.prod.yml build --no-cache
+# Logs:       docker compose -f docker-compose.prod.yml logs -f
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    image: meta-vis-backend:prod
+    container_name: meta-vis-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env.prod
+    # Internal only — the frontend container reverse-proxies to this on the
+    # compose network. Not exposed on the host.
+    expose:
+      - "8000"
+    networks:
+      - meta-vis
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/docs', timeout=2).status==200 else 1)\""
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    image: meta-vis-frontend:prod
+    container_name: meta-vis-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    # Bind to loopback only — the host nginx forwards public traffic here.
+    ports:
+      - "127.0.0.1:8080:8080"
+    networks:
+      - meta-vis
+
+networks:
+  meta-vis:
+    driver: bridge

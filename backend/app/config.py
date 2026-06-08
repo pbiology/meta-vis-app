@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     mongodb_username: Optional[str] = None
     mongodb_password: Optional[str] = None
     mongodb_auth_source: str = "admin"
+    # Full Mongo connection string override. When set, the host/port/user/pass
+    # fields above are ignored and this URI is passed verbatim to the driver.
+    # Use this in production where the URI carries query params we cannot
+    # express piecemeal (replicaSet=, tls=, multiple seed hosts, etc.).
+    mongodb_uri: Optional[str] = None
     # When True (default), append `directConnection=true` to the Mongo URL.
     # Works for single-node replica sets behind a port mapping (the standard
     # dev setup) — the driver talks directly to the one host we pass without
@@ -23,6 +28,12 @@ class Settings(BaseSettings):
     # set primary in its hello response. Set to False if using a real mongodb+srv
     # URL or a multi-host cluster URL in production.
     mongodb_direct_connection: bool = True
+    # Wrap ingest + case-mutation writes in a multi-document transaction.
+    # Requires the target Mongo to be a replica set or sharded cluster — a
+    # standalone mongod rejects `start_transaction()`. Set to False on
+    # environments running a plain standalone mongod (e.g. the stage VM),
+    # accepting that a mid-sequence failure can leave partial writes behind.
+    mongodb_use_transactions: bool = True
     app_env: str = "development"
     log_level: str = "info"
     controls_taxa_path: str = "controls_taxa.json"
