@@ -10,16 +10,19 @@
 # container at 127.0.0.1:8080 (option X: single upstream per app — the host
 # nginx is app-agnostic and just forwards everything).
 #
-# Bring up:   docker compose -f docker-compose.prod.yml up -d --build
-# Rebuild:    docker compose -f docker-compose.prod.yml build --no-cache
-# Logs:       docker compose -f docker-compose.prod.yml logs -f
+# Images are built locally and pushed to Docker Hub (see README / build
+# commands); the deploy side only pulls them — there is no build step here.
+#
+# Pull + start:  docker compose -f docker-compose.prod.yml pull
+#                docker compose -f docker-compose.prod.yml up -d
+# Logs:          docker compose -f docker-compose.prod.yml logs -f
+#
+# The :stage tag is a moving pointer to the latest stage build. Immutable
+# versioned images (e.g. :stage-0.0.1) are also published for traceability.
 
 services:
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
-    image: meta-vis-backend:prod
+    image: docker.io/clinicalgenomics/metavis-backend:stage
     container_name: meta-vis-backend
     restart: unless-stopped
     env_file:
@@ -40,10 +43,7 @@ services:
       start_period: 30s
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.prod
-    image: meta-vis-frontend:prod
+    image: docker.io/clinicalgenomics/metavis-frontend:stage
     container_name: meta-vis-frontend
     restart: unless-stopped
     depends_on:
