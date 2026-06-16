@@ -87,12 +87,18 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    # `.env.dev` carries committed dev defaults (Mongo + KC URLs, CORS).
+    # `.env.dev` carries committed dev defaults (DB name, CORS, KC issuer).
     # `.env` carries developer secrets and per-machine overrides — last file
     # wins, so a value in `.env` overrides the same key in `.env.dev`.
     env_file:
       - ./backend/.env.dev
       - ./backend/.env
+    # Service-topology addresses are a fact of the compose network, not user
+    # config. Set them here so they win over whatever a developer's bare-metal
+    # `.env` says (which points at localhost).
+    environment:
+      MONGODB_HOST: mongodb
+      OBJECT_STORAGE_ENDPOINT: http://minio:9000
     working_dir: /app
     volumes:
       - ./backend:/app
@@ -108,11 +114,13 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
-    env_file:
-      - ./frontend/.env.dev
+    # OIDC config (incl. which Keycloak to use) is a per-developer choice and
+    # lives in the gitignored frontend/.env, which Vite reads from the mounted
+    # volume. Compose only sets the two values that are specific to running
+    # inside the compose network.
     environment:
-      # Override the bare-metal default (localhost:8000) — inside compose the
-      # backend lives at its service name.
+      # Inside compose the backend is reachable at its service name, not
+      # localhost. This is the dev-server proxy target for /api/* calls.
       VITE_API_PROXY_TARGET: http://backend:8000
       CHOKIDAR_USEPOLLING: "true"
     working_dir: /app
