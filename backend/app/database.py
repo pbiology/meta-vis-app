@@ -19,6 +19,13 @@ _blob_store = None
 
 
 def _build_mongo_url() -> str:
+    # Only reached when `mongodb_uri` is unset; the Settings validator
+    # guarantees `mongodb_host` and `mongodb_db_name` are populated in that
+    # branch, so the assert narrows the Optional for mypy without adding
+    # runtime risk.
+    assert settings.mongodb_host is not None, (
+        "mongodb_host required when mongodb_uri unset"
+    )
     username = settings.mongodb_username
     password = settings.mongodb_password
     if bool(username) != bool(password):

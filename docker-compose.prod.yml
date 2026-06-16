@@ -1,17 +1,29 @@
-# Production / stage compose stack.
+# Example production / stage compose stack.
 #
-# Two services only — backend (FastAPI) and frontend (nginx serving the SPA
-# bundle and reverse-proxying /api/ to the backend). MongoDB lives on a
-# separate VM and is reached via MONGODB_URI in backend/.env.prod. No MinIO:
-# blob_store falls back to the MongoDB `blobs` collection when no
-# OBJECT_STORAGE_* env vars are set.
+# This file ships as ONE example deployment shape — a single host running
+# the two app containers behind an existing host nginx, with MongoDB on a
+# separate VM. It is NOT the canonical prod stack; OpenShift, K8s, ECS, and
+# plain systemd-on-a-VM deploys are equally valid. The canonical contract
+# between the app and its environment is `backend/.env.example` (every key
+# the backend expects) plus the published images on Docker Hub. Adapt this
+# file, or replace it entirely with your own orchestration.
 #
-# The host VM's existing nginx proxies the meta-vis hostname to the frontend
-# container at 127.0.0.1:8080 (option X: single upstream per app — the host
-# nginx is app-agnostic and just forwards everything).
+# Configuration:
+#   backend/.env.prod  — gitignored. Copy backend/.env.example, fill in
+#                        real values for your deploy (MongoDB URI, KC issuer,
+#                        CORS origin, secrets). The frontend image already
+#                        has its config baked in at build time; see
+#                        frontend/Dockerfile.prod + frontend/.env.prod.
 #
-# Images are built locally and pushed to Docker Hub (see README / build
-# commands); the deploy side only pulls them — there is no build step here.
+# In this example, MongoDB lives on a separate VM and is reached via
+# MONGODB_URI in backend/.env.prod. No MinIO: blob_store falls back to the
+# MongoDB `blobs` collection when no OBJECT_STORAGE_* env vars are set. The
+# host VM's existing nginx proxies the meta-vis hostname to the frontend
+# container at 127.0.0.1:8080.
+#
+# Images are built and pushed via `make image-backend-stage` /
+# `make image-frontend-stage` (or the equivalent buildx commands); the
+# deploy side only pulls — there is no build step here.
 #
 # Pull + start:  docker compose -f docker-compose.prod.yml pull
 #                docker compose -f docker-compose.prod.yml up -d

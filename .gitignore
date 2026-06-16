@@ -11,9 +11,14 @@ build/
 venv/
 
 # Environment — NEVER commit .env files with real secrets
+# `.env.*` is broadly ignored; the `!`-prefixed lines un-ignore the files that
+# are explicitly meant to be committed (generic templates and shared dev
+# defaults). Anything matching `.env.stage` / `.env.prod` / `.env` stays out.
 .env
 .env.*
 !.env.example
+!.env.dev
+!.env.prod.template
 
 # MongoDB
 *.db

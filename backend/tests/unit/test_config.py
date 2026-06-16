@@ -24,7 +24,68 @@ def test_cors_origins_parsing():
         "https://another.com",
     ]
 
-    # Test default
+    # No explicit override — value comes from backend/.env.dev (committed
+    # dev defaults). There is no longer a code-level localhost fallback;
+    # required keys missing from both env and env files raise ValidationError.
     settings = Settings()
     origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
     assert origins == ["http://localhost:5173"]
+
+
+# Env vars pydantic-settings would otherwise pull in (ci-check.sh exports
+# some of these). Clear them so these tests exercise only the explicit kwargs.
+_CONFIG_ENV_VARS = (
+    "MONGODB_URI",
+    "MONGODB_HOST",
+    "MONGODB_DB_NAME",
+    "KEYCLOAK_ISSUER",
+    "CORS_ORIGINS",
+    "JWT_SECRET",
+)
+
+
+def _clear_config_env(monkeypatch):
+    for var in _CONFIG_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+
+
+def test_missing_required_keys_raises(monkeypatch):
+    """Settings must fail loud when required keys aren't supplied."""
+    import pytest
+    from pydantic import ValidationError
+
+    _clear_config_env(monkeypatch)
+
+    # No env_file, no env kwargs — keycloak_issuer, cors_origins, and Mongo
+    # config are all missing. Pydantic raises before our validator runs.
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)  # type: ignore[call-arg]
+
+
+def test_mongo_config_validator(monkeypatch):
+    """Either MONGODB_URI alone, or MONGODB_HOST + MONGODB_DB_NAME."""
+    import pytest
+    from pydantic import ValidationError
+
+    _clear_config_env(monkeypatch)
+
+    base = {
+        "_env_file": None,
+        "keycloak_issuer": "https://kc.example/realms/x",
+        "cors_origins": "https://app.example",
+        "jwt_secret": "x" * 32,
+    }
+
+    # URI alone (with db_name) — OK.
+    Settings(**base, mongodb_uri="mongodb://h/db", mongodb_db_name="db")  # type: ignore[arg-type]
+
+    # Host + db_name — OK.
+    Settings(**base, mongodb_host="h", mongodb_db_name="db")  # type: ignore[arg-type]
+
+    # Neither — raises.
+    with pytest.raises(ValidationError):
+        Settings(**base)  # type: ignore[arg-type]
+
+    # URI but no db_name — raises (app still reads db_name directly).
+    with pytest.raises(ValidationError):
+        Settings(**base, mongodb_uri="mongodb://h/db")  # type: ignore[arg-type]

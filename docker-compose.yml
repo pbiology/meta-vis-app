@@ -3,7 +3,10 @@ services:
     image: mongo:7.0
     container_name: meta-vis-mongodb
     restart: unless-stopped
+    # `.env.dev` supplies MONGODB_USERNAME / MONGODB_DB_NAME for mongo-init.js;
+    # `.env` supplies the secrets (MONGO_ROOT_PASSWORD, MONGODB_PASSWORD).
     env_file:
+      - ./backend/.env.dev
       - ./backend/.env
     # Single-node replica set is required for multi-document transactions
     # (used by the ingest orchestrator for atomicity — see CLAUDE_TODO #10).
@@ -52,6 +55,7 @@ services:
     container_name: meta-vis-minio
     restart: unless-stopped
     env_file:
+      - ./backend/.env.dev
       - ./backend/.env
     entrypoint:
       - /bin/sh
@@ -83,17 +87,18 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    # `.env.dev` carries committed dev defaults (DB name, CORS, KC issuer).
+    # `.env` carries developer secrets and per-machine overrides — last file
+    # wins, so a value in `.env` overrides the same key in `.env.dev`.
     env_file:
+      - ./backend/.env.dev
       - ./backend/.env
+    # Service-topology addresses are a fact of the compose network, not user
+    # config. Set them here so they win over whatever a developer's bare-metal
+    # `.env` says (which points at localhost).
     environment:
       MONGODB_HOST: mongodb
-      MONGODB_PORT: 27017
       OBJECT_STORAGE_ENDPOINT: http://minio:9000
-      CORS_ORIGINS: http://localhost:5173
-      # CG stage Keycloak. Same URL works from browser and from the backend
-      # container, so no JWKS-URL override is needed.
-      KEYCLOAK_ISSUER: https://keycloak-stage.cg-orchestration.sys.scilifelab.se/realms/clinical-genomics
-      KEYCLOAK_CLIENT_IDS: meta-vis-frontend,meta-vis-cli
     working_dir: /app
     volumes:
       - ./backend:/app
@@ -109,7 +114,13 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+    # OIDC config (incl. which Keycloak to use) is a per-developer choice and
+    # lives in the gitignored frontend/.env, which Vite reads from the mounted
+    # volume. Compose only sets the two values that are specific to running
+    # inside the compose network.
     environment:
+      # Inside compose the backend is reachable at its service name, not
+      # localhost. This is the dev-server proxy target for /api/* calls.
       VITE_API_PROXY_TARGET: http://backend:8000
       CHOKIDAR_USEPOLLING: "true"
     working_dir: /app

@@ -1,5 +1,18 @@
 # tests/conftest.py
 
+# app.config builds a module-level Settings() on import, and the required
+# fields (Mongo host/db, Keycloak issuer, CORS) have no defaults — by design,
+# so a misconfigured deploy fails fast. Tests use mongomock and never open a
+# real connection, so set harmless placeholders here, before importing app.*.
+# This keeps the suite self-contained: it does not depend on .env files, CWD,
+# or a CI `env:` block. setdefault means an explicit env override still wins.
+import os
+
+os.environ.setdefault("MONGODB_HOST", "localhost")
+os.environ.setdefault("MONGODB_DB_NAME", "test")
+os.environ.setdefault("KEYCLOAK_ISSUER", "http://localhost:8081/realms/test")
+os.environ.setdefault("CORS_ORIGINS", "http://localhost:5173")
+
 import pytest
 from fastapi import FastAPI
 from mongomock_motor import AsyncMongoMockClient
