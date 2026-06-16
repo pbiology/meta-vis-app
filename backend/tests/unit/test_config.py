@@ -32,10 +32,29 @@ def test_cors_origins_parsing():
     assert origins == ["http://localhost:5173"]
 
 
-def test_missing_required_keys_raises():
+# Env vars pydantic-settings would otherwise pull in (ci-check.sh exports
+# some of these). Clear them so these tests exercise only the explicit kwargs.
+_CONFIG_ENV_VARS = (
+    "MONGODB_URI",
+    "MONGODB_HOST",
+    "MONGODB_DB_NAME",
+    "KEYCLOAK_ISSUER",
+    "CORS_ORIGINS",
+    "JWT_SECRET",
+)
+
+
+def _clear_config_env(monkeypatch):
+    for var in _CONFIG_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+
+
+def test_missing_required_keys_raises(monkeypatch):
     """Settings must fail loud when required keys aren't supplied."""
     import pytest
     from pydantic import ValidationError
+
+    _clear_config_env(monkeypatch)
 
     # No env_file, no env kwargs — keycloak_issuer, cors_origins, and Mongo
     # config are all missing. Pydantic raises before our validator runs.
@@ -43,10 +62,12 @@ def test_missing_required_keys_raises():
         Settings(_env_file=None)  # type: ignore[call-arg]
 
 
-def test_mongo_config_validator():
+def test_mongo_config_validator(monkeypatch):
     """Either MONGODB_URI alone, or MONGODB_HOST + MONGODB_DB_NAME."""
     import pytest
     from pydantic import ValidationError
+
+    _clear_config_env(monkeypatch)
 
     base = {
         "_env_file": None,
