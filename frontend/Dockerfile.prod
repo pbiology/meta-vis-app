@@ -9,12 +9,17 @@
 FROM node:22-trixie AS build
 WORKDIR /app
 
+# Pick which Vite mode to build for. Each mode loads `frontend/.env.<mode>`
+# (those files are gitignored — supply your own). Override at build time:
+#   docker buildx build --build-arg VITE_MODE=stage ...
+ARG VITE_MODE=production
+
 # Copy lockfile separately for better layer caching.
 COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
-RUN npm run build
+RUN npm run build -- --mode ${VITE_MODE}
 
 # ---------- runtime ----------
 # nginx-unprivileged runs as non-root (UID 101) and listens on 8080 by

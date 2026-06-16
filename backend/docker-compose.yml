@@ -8,14 +8,17 @@ services:
       - mongodb_data:/data/db
       - mongodb_config:/data/configdb
       - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    # Non-secret values are hardcoded here (and also in .env.dev so the app
+    # sees them); secrets are interpolated from .env at compose parse time.
     environment:
-      MONGO_INITDB_DATABASE: ${MONGODB_DB_NAME}
+      MONGO_INITDB_DATABASE: meta-vis-dev
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGODB_USERNAME: meta_vis_app
+      MONGODB_DB_NAME: meta-vis-dev
       MONGODB_PASSWORD: ${MONGODB_PASSWORD}
-      MONGODB_USERNAME: ${MONGODB_USERNAME}
-      MONGODB_DB_NAME: ${MONGODB_DB_NAME}
     env_file:
+      - .env.dev
       - .env
     # Single-node replica set is required so ingest can use multi-document
     # transactions (mongod only permits txns on a replica-set member).
