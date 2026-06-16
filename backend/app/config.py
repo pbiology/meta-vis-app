@@ -3,13 +3,19 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
-    mongodb_host: str = "localhost"
+    # Connection components. One of these two paths must be configured (see
+    # `_validate_mongo_config` below): either `mongodb_uri` alone, or
+    # `mongodb_host` + `mongodb_db_name`. No localhost fallback — a deploy
+    # missing this config fails fast at boot instead of silently pointing at
+    # a non-existent local Mongo.
+    mongodb_host: Optional[str] = None
     mongodb_port: int = 27017
     mongodb_db_name: str = ""
     mongodb_username: Optional[str] = None
@@ -40,8 +46,8 @@ class Settings(BaseSettings):
 
     # Keycloak OIDC — the realm's issuer URL. The JWKS endpoint and other OIDC
     # metadata are derived from it. Tokens are accepted only if their `iss`
-    # matches this value exactly.
-    keycloak_issuer: str = "http://localhost:8081/realms/meta-vis"
+    # matches this value exactly. Required — no localhost fallback.
+    keycloak_issuer: str
     # Comma-separated list of client IDs whose tokens this API accepts. The
     # `azp` claim of every incoming token must match one of these. Defaults
     # cover the SPA and the ingest CLI.
@@ -58,8 +64,8 @@ class Settings(BaseSettings):
     # Leave unset to derive from the issuer.
     keycloak_jwks_url: Optional[str] = None
 
-    # CORS — comma-separated list of allowed origins
-    cors_origins: str = "http://localhost:5173"
+    # CORS — comma-separated list of allowed origins. Required, no fallback.
+    cors_origins: str
 
     # NCBI E-utilities — optional API key, raises rate limit from 3 to 10 req/s
     ncbi_api_key: Optional[str] = None
@@ -82,10 +88,29 @@ class Settings(BaseSettings):
     object_storage_bucket: str = "meta-vis"
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # Load `.env.dev` first (committed dev defaults), then `.env`
+        # (developer secrets / overrides). Later files win on conflict, so
+        # `.env` overrides `.env.dev`.
+        env_file=(".env.dev", ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def _validate_mongo_config(self) -> "Settings":
+        """Either MONGODB_URI alone, or MONGODB_HOST + MONGODB_DB_NAME."""
+        if self.mongodb_uri:
+            if not self.mongodb_db_name:
+                raise ValueError(
+                    "MONGODB_DB_NAME is required even when MONGODB_URI is set."
+                )
+        else:
+            if not self.mongodb_host or not self.mongodb_db_name:
+                raise ValueError(
+                    "Mongo config missing: set MONGODB_URI, or set both "
+                    "MONGODB_HOST and MONGODB_DB_NAME."
+                )
+        return self
 
     # Outbreak configs loaded from JSON at startup
     outbreak_configs: list[dict] = []
@@ -139,7 +164,9 @@ class Settings(BaseSettings):
             self.controls_taxa = {}
 
 
-settings = Settings()
+# mypy sees the required (default-less) fields as missing kwargs, but
+# pydantic-settings populates them from env / env_file at construction.
+settings = Settings()  # type: ignore[call-arg]
 # Load configs when app starts
 settings.load_outbreak_configs()
 settings.load_controls_taxa()
