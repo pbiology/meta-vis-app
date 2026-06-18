@@ -106,13 +106,6 @@ For developers
 - :doc:`developer/contributing`
 - :doc:`developer/performance`
 
-Reference
-=========
-
-- :doc:`reference/ingest-format`
-- :doc:`reference/faq`
-- :doc:`reference/changelog`
-
 .. toctree::
    :hidden:
    :maxdepth: 2
@@ -155,15 +148,6 @@ Reference
    user-guide/outbreak-detection
    user-guide/ntc-monitoring
    user-guide/user-roles
-
-.. toctree::
-   :hidden:
-   :maxdepth: 2
-   :caption: Reference
-
-   reference/ingest-format
-   reference/faq
-   reference/changelog
 
 .. toctree::
    :hidden:

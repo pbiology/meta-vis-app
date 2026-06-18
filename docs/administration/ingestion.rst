@@ -253,4 +253,3 @@ Next steps
 
 - :doc:`taxonomy-reference` - Load NCBI taxonomy data
 - :doc:`user-management` - Manage ingest user accounts
-- Check :doc:`../reference/ingest-format` for detailed parameter reference
