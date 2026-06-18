@@ -1,33 +1,28 @@
 ===========
-User Roles
+User roles
 ===========
 
-meta-vis-app has three user roles with different capabilities.
+meta-vis-app uses three roles — **reader**, **writer**, **admin** — to gate
+what users can do inside the app. The roles themselves are configured on
+the Keycloak client; the app reads them from the access token and enforces
+authorization in the API.
 
-Role overview
-=============
+Role capability matrix
+======================
 
 .. list-table::
    :header-rows: 1
-   :widths: 25, 25, 25, 25
+   :widths: 40 20 20 20
 
    * - Capability
      - Reader
      - Writer
      - Admin
-   * - View cases/samples
+   * - View cases, samples, taxonomy
      - ✓
      - ✓
      - ✓
-   * - View Krona plots
-     - ✓
-     - ✓
-     - ✓
-   * - View taxonomy tables
-     - ✓
-     - ✓
-     - ✓
-   * - View metaval results
+   * - View Krona plots, metaval results
      - ✓
      - ✓
      - ✓
@@ -35,11 +30,15 @@ Role overview
      - ✗
      - ✓
      - ✓
-   * - Add/edit notes
+   * - Add / edit case notes
      - ✗
      - ✓
      - ✓
-   * - Manage users
+   * - Add to ignorelists / known-contaminants
+     - ✗
+     - ✓
+     - ✓
+   * - Remove from ignorelists / known-contaminants
      - ✗
      - ✗
      - ✓
@@ -47,199 +46,90 @@ Role overview
      - ✗
      - ✗
      - ✓
-   * - Add to ignorelist
-     - ✗
-     - ✓
-     - ✓
-   * - Remove from ignorelist
+   * - Curate clinical notes on taxa
      - ✗
      - ✗
      - ✓
 
 Reader
-======
+------
 
-**Best for:** Clinicians reviewing results without modifying data
-
-**Can:**
-- View all cases and samples
-- See QC metrics and taxonomy tables
-- View Krona interactive plots
-- View metaval verification results
-- Search and filter organisms
-
-**Cannot:**
-- Mark cases as reviewed
-- Add or edit case notes
-- Manage users
-- Delete cases
-- Modify ignorelist
-
-**Example:** Lab director reviewing results before they're released to clinicians
+Read-only access to everything users with higher roles can see. Suitable
+for a colleague who needs to look at results but should not be able to
+edit notes or change review state.
 
 Writer
-======
+------
 
-**Best for:** Clinicians actively reviewing and annotating cases
-
-**Can:**
-- Everything a reader can do
-- Mark cases as reviewed/unreviewed
-- Add and edit case notes
-- Add organisms to the outbreak ignorelist
-- (Outbreak detection) see Alerts page
-
-**Cannot:**
-- Delete cases
-- Manage users
-- Remove organisms from ignorelist
-
-**Example:** Clinical microbiologist reviewing daily cases, documenting findings
+Everything a reader can do, plus the day-to-day clinical-review actions:
+mark cases reviewed, edit notes, manage list entries. This is the role
+most clinical microbiologists should have.
 
 Admin
-=====
+-----
 
-**Best for:** System administrators, IT staff
+Everything a writer can do, plus destructive and curatorial actions: case
+deletion, list-entry removal, and curation of clinical notes on taxa.
 
-**Can:**
-- Everything a writer can do
-- Manage users (create, delete, change roles)
-- Delete cases (and associated blobs from storage)
-- Remove organisms from ignorelist
-- Access full API
+User accounts
+=============
 
-**Cannot:**
-- Nothing relevant (admins have full permissions)
+User identities and role assignments live in **Keycloak**, not in this
+app's database. There is no in-app user management screen and no local
+password storage.
 
-**Example:** Lab IT staff or bioinformatics manager
+To grant a user access:
 
-User management
-===============
+1. The user signs in to the configured Keycloak realm with whatever
+   identity provider that realm is federated to (SITHS card, corporate
+   SSO, local KC account…).
+2. A Keycloak admin assigns the user one of the three client roles
+   (``reader`` / ``writer`` / ``admin``) on the app's frontend client.
+3. The user logs in to the app. The role is read from the access token
+   and drives both the API and the UI.
 
-Only admins can manage users. Access the **Admin** panel from the sidebar (visible to admins only).
+If a user gets to the login screen successfully but sees a 403 or a
+near-empty page after login, they have no role assigned yet. The fix is
+in Keycloak, not in this app.
 
-**Admin panel tasks:**
-
-Creating users
---------------
-
-1. Go to Sidebar → Admin
-2. Click "Create User"
-3. Enter:
-   - Username (unique, alphanumeric)
-   - Password (minimum 8 characters)
-   - Role (reader, writer, admin)
-4. Click Create
-
-Users will log in with their username and password.
-
-Changing user roles
--------------------
-
-1. Go to Sidebar → Admin
-2. Find user in the list
-3. Click the role dropdown
-4. Select new role
-5. Confirm
-
-Deleting users
---------------
-
-1. Go to Sidebar → Admin
-2. Find user in the list
-3. Click Delete
-4. Confirm
-
-Deleted users cannot log in. Cases/notes they created remain in the system.
-
-Password management
--------------------
-
-Users should change their password on first login:
-1. Log in
-2. Click profile icon (top right)
-3. Click "Change Password"
-4. Enter current password and new password
-5. Confirm
-
-**Admins can reset passwords:**
-1. Delete the user account
-2. Create a new account with the same username
-3. Tell user the new temporary password
-4. User should change password on first login
-
-Best practices
-==============
-
-**For admins:**
-- Create accounts in advance of user start date
-- Assign least privilege (reader > writer > admin)
-- Remove users when they leave
-- Regularly review who has admin access
-- Enable any monitoring/audit tools your institution has
-
-**For all users:**
-- Change password on first login
-- Use strong, unique passwords
-- Don't share login credentials
-- Log out when done
-- Report unauthorized access immediately
-
-**For writers:**
-- Document observations clearly
-- Be specific about findings
-- Include confidence levels
-- Reference metaval evidence when available
-- Follow your institution's reporting standards
+See :doc:`../deployment/production` for the Keycloak realm configuration
+the app expects.
 
 User preferences
 ================
 
-Each user can personalise certain UI settings. Preferences are stored per account and
-persist across sessions and devices.
+Each user can personalise certain UI settings. Preferences are stored
+per-user (keyed on the Keycloak ``sub`` claim) and persist across sessions
+and devices.
 
-**Accessing preferences:**
+Open the **Preferences** page by clicking your username in the bottom-left
+corner of the sidebar.
 
-Click your username in the bottom-left corner of the sidebar to open the **Preferences**
-page.
-
-**Available settings:**
+Available settings:
 
 Default taxonomy kingdoms
-    Controls which kingdom(s) are pre-selected in the taxonomy table when you open a
-    sample. Choose any combination of *Bacteria*, *Viruses*, *Eukaryota*, and *Archaea*.
-    The default is *Viruses*.
+   Which superkingdom(s) are pre-selected in the taxonomy table when you
+   open a sample. Any combination of *Bacteria*, *Viruses*, *Eukaryota*,
+   *Archaea*. Default: *Viruses*.
 
-    You can still change the kingdom filter temporarily while viewing a sample — the
-    table filter is session-only and does not overwrite your saved preference unless
-    you explicitly save a new value on the Preferences page.
+   The kingdom filter on the taxonomy table itself is session-only —
+   changing it temporarily does not overwrite your saved preference.
 
-User access and data
+What every user sees
 ====================
 
-All users see the same cases and data. There is no per-case or per-user data filtering in meta-vis-app.
+There is no per-case or per-user data partitioning. Every user with any
+role sees every case in the database. There are also no field-level
+permissions — notes written by one user are visible to every other user.
+The audit log (see :doc:`audit-log`) records which user performed each
+write.
 
-**Important implications:**
-- All users can see all cases
-- No field-level permissions
-- All users can see notes from all other users
-- Audit trail shows which user created/modified each case
+If your deployment needs per-case access control, that is not currently
+supported — talk to the development team.
 
-If you need per-case access control (e.g., research user sees only their samples), discuss requirements with the development team.
+See also
+========
 
-Getting help
-============
-
-If you encounter permission issues:
-
-1. Check your role (click profile → "My Role")
-2. Verify you're using a high-enough role for the action
-3. Ask an admin if your role needs upgrading
-4. Report any permission errors to the IT team
-
-Next steps
-==========
-
-- :doc:`cases-and-samples` - Start reviewing cases
-- :doc:`taxonomy-browser` - Learn advanced search
-- :doc:`administration/user-management` - Admin user management guide
+- :doc:`cases-and-samples` — start reviewing cases
+- :doc:`taxonomy-browser` — searching and filtering organisms
+- :doc:`audit-log` — what the app records about each action

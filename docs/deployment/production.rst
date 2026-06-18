@@ -394,4 +394,4 @@ Next steps
 
 - :doc:`environment` — the full environment variable reference
 - :doc:`object-storage` — switching between MongoDB blobs and S3
-- :doc:`../administration/audit-log` — what the audit log captures
+- :doc:`../user-guide/audit-log` — what the audit log captures

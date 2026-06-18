@@ -85,17 +85,18 @@ For clinicians
 - :doc:`user-guide/bvbrc-integration`
 - :doc:`user-guide/outbreak-detection`
 - :doc:`user-guide/ntc-monitoring`
+- :doc:`user-guide/ingesting-data`
+- :doc:`user-guide/taxonomy-reference`
+- :doc:`user-guide/user-roles`
+- :doc:`user-guide/audit-log`
 
-For administrators
-==================
+For deployment
+==============
 
 - :doc:`deployment/local-dev`
 - :doc:`deployment/environment`
-- :doc:`administration/ingestion`
-- :doc:`administration/taxonomy-reference`
-- :doc:`administration/user-management`
-- :doc:`administration/audit-log`
-- :doc:`administration/troubleshooting`
+- :doc:`deployment/object-storage`
+- :doc:`deployment/production`
 
 For developers
 ==============
@@ -122,17 +123,6 @@ For developers
 .. toctree::
    :hidden:
    :maxdepth: 2
-   :caption: Administration
-
-   administration/ingestion
-   administration/taxonomy-reference
-   administration/user-management
-   administration/audit-log
-   administration/troubleshooting
-
-.. toctree::
-   :hidden:
-   :maxdepth: 2
    :caption: User Guide
 
    user-guide/cases-and-samples
@@ -141,7 +131,10 @@ For developers
    user-guide/bvbrc-integration
    user-guide/outbreak-detection
    user-guide/ntc-monitoring
+   user-guide/ingesting-data
+   user-guide/taxonomy-reference
    user-guide/user-roles
+   user-guide/audit-log
 
 .. toctree::
    :hidden:

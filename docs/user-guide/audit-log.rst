@@ -47,12 +47,10 @@ What is audited
 - Adding / updating / removing NTC ignorelist entries (``ntc_ignorelist_add``, ``ntc_ignorelist_update``, ``ntc_ignorelist_remove``)
 - Adding / updating / removing known contaminants (``ntc_contaminant_add``, ``ntc_contaminant_update``, ``ntc_contaminant_remove``)
 
-**User management** (admin only)
-
-- Creating a user (``user_create``)
-- Changing a user's role (``user_role_change``)
-- Resetting a user's password (``user_password_reset``)
-- Deleting a user (``user_delete``)
+User management (creation, role changes, deletion) happens in Keycloak and
+is audited there, not here. Keycloak also records successful logins in its
+own event log; this app only records failed Bearer-token validation against
+the API as ``login_failed``.
 
 Audit event structure
 =====================
@@ -136,7 +134,7 @@ Connect to MongoDB and query the ``audit_log`` collection directly.
 .. code-block:: javascript
 
    db.audit_log.find({
-     action: { $in: ["delete_case", "user_delete", "ignorelist_remove", "pathogen_remove"] },
+     action: { $in: ["delete_case", "ignorelist_remove", "pathogen_remove"] },
      timestamp: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
    }).sort({ timestamp: -1 })
 
