@@ -163,7 +163,7 @@ Collection                  Purpose
 ``known_pathogens``         Curated pathogen reference list
 ``ntc_ignorelist``          Taxa excluded from NTC tracking
 ``ntc_known_contaminants``  Known contaminants tracked in NTC QC
-``audit_log``               Append-only event log (see :doc:`../user-guide/audit-log`)
+``audit_log``               Append-only event log (see :doc:`../user-guide/administration`)
 ==========================  ========================================================
 
 Indexes are created in ``database.py::_ensure_indexes()`` and run at every
@@ -261,7 +261,7 @@ The same events are also emitted as structured JSON log lines, so a log
 aggregator (Loki / ELK / Splunk) holds a second independent copy. If the
 DB write fails, the log line includes ``"message": "Failed to write audit
 event to database"`` so you can alert on it. See
-:doc:`../user-guide/audit-log`.
+:doc:`../user-guide/administration`.
 
 External API integrations
 =========================
@@ -305,5 +305,5 @@ Where to look next
 
 - :doc:`../deployment/local-dev` — get the stack running
 - :doc:`../deployment/environment` — every config knob
-- :doc:`../user-guide/audit-log` — what the audit log captures
+- :doc:`../user-guide/administration` — what the audit log captures
 - ``CLAUDE.md`` — short notes on conventions and known fragility

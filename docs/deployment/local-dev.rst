@@ -152,7 +152,7 @@ The ``--password`` flag uses Keycloak's password grant against the local
 realm. If you're authenticating against the stage realm instead, use your
 own account credentials.
 
-Refer to :doc:`../user-guide/ingesting-data` for the full ingest CLI reference.
+Refer to :doc:`../user-guide/loading-data` for the full ingest CLI reference.
 
 Resetting state
 ===============

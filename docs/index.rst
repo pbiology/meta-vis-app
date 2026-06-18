@@ -79,16 +79,11 @@ Quick start
 For clinicians
 ==============
 
-- :doc:`user-guide/cases-and-samples`
-- :doc:`user-guide/taxonomy-browser`
-- :doc:`user-guide/metaval-integration`
-- :doc:`user-guide/bvbrc-integration`
-- :doc:`user-guide/outbreak-detection`
-- :doc:`user-guide/ntc-monitoring`
-- :doc:`user-guide/ingesting-data`
-- :doc:`user-guide/taxonomy-reference`
-- :doc:`user-guide/user-roles`
-- :doc:`user-guide/audit-log`
+- :doc:`user-guide/reviewing-cases`
+- :doc:`user-guide/investigating-detections`
+- :doc:`user-guide/monitoring`
+- :doc:`user-guide/loading-data`
+- :doc:`user-guide/administration`
 
 For deployment
 ==============
@@ -125,16 +120,11 @@ For developers
    :maxdepth: 2
    :caption: User Guide
 
-   user-guide/cases-and-samples
-   user-guide/taxonomy-browser
-   user-guide/metaval-integration
-   user-guide/bvbrc-integration
-   user-guide/outbreak-detection
-   user-guide/ntc-monitoring
-   user-guide/ingesting-data
-   user-guide/taxonomy-reference
-   user-guide/user-roles
-   user-guide/audit-log
+   user-guide/reviewing-cases
+   user-guide/investigating-detections
+   user-guide/monitoring
+   user-guide/loading-data
+   user-guide/administration
 
 .. toctree::
    :hidden:
