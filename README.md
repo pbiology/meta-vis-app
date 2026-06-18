@@ -32,18 +32,6 @@ Open <http://localhost:5173> and sign in with `dev-admin` / `dev-admin`.
 [local-dev guide](https://meta-vis.readthedocs.io/en/latest/deployment/local-dev.html)
 covers configuration, sample ingest, and reset.
 
-## Pre-commit hooks
-
-Run formatters and linters before every commit so CI stays green:
-
-```bash
-pip install pre-commit   # or: conda install -c conda-forge pre-commit
-pre-commit install
-```
-
-`ruff`, `ruff-format`, and `prettier` then run automatically on staged files.
-To check the whole repo on demand: `pre-commit run --all-files`.
-
 ## Stack
 
 | Layer          | Technology                                              |
