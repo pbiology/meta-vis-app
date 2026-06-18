@@ -2,7 +2,7 @@
 Architecture
 ==============
 
-A working overview of how meta-vis-app is structured. The goal of this page
+A working overview of how Meta-vis is structured. The goal of this page
 is that a new developer can read it once and know where to look next; the
 specifics live in the code.
 

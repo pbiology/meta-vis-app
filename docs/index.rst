@@ -1,109 +1,84 @@
-.. meta-vis-app documentation master file
+.. Meta-vis documentation master file
 
-========================================
-meta-vis-app Documentation
-========================================
+============================
+Meta-vis
+============================
 
-A web application for visualising and reviewing the output of `nf-core/taxprofiler <https://github.com/nf-core/taxprofiler>`_ metagenomics runs, with optional integration of `metaval <https://github.com/genomic-medicine-sweden/metaval>`_ post-processing results.
+A web application for reviewing the output of clinical metagenomics
+pipelines. It ingests results from
+`nf-core/taxprofiler <https://github.com/nf-core/taxprofiler>`_ (shotgun
+metagenomics) and Trana (16S amplicon, Emu), and optionally enriches them
+with `metaval <https://github.com/genomic-medicine-sweden/metaval>`_
+read-level validation.
 
 .. image:: ../assets/logo.svg
-   :alt: meta-vis logo
-   :width: 600px
-   :align: left
+   :alt: Meta-vis logo
+   :width: 500px
+   :align: center
+
+What it is for
+==============
+
+A clinical interpretation surface on top of metagenomic profiling.
+Pipeline outputs land here as **cases** (one per pipeline run); each case
+contains one or more **samples**; each sample carries the taxonomic
+profile from one or more **classifiers** (Kraken2, Centrifuge, DIAMOND,
+or Emu). Reviewers explore detections, add notes, mark cases reviewed,
+and act on cross-case signals.
 
 What the app does
 =================
 
-meta-vis-app is a **clinical interpretation tool for metagenomic quality control and pathogen detection**. It transforms complex taxonomic profiling data into actionable intelligence for clinicians and lab teams.
+- **Review** cases and samples, with per-classifier QC and interactive
+  Krona plots.
+- **Investigate** individual detections through a searchable taxonomy
+  table, metaval IGV / BLASTN evidence, and BV-BRC reference
+  enrichments.
+- **Monitor** viral outbreak signals across cases and contamination
+  trends across negative controls, with configurable time windows and
+  ignorelists.
+- **Audit** every clinically significant action — written to MongoDB
+  and to structured stdout logs for independent retention.
 
-Core Features
--------------
+Authentication is OIDC against an external Keycloak realm; roles
+(``reader`` / ``writer`` / ``admin``) drive both the API and the UI.
 
-**Organize & Review Cases**
+Who it is for
+=============
 
-- Ingest taxonomic profiling results from nf-core/taxprofiler with a single command
-- Organize results into cases (one per run) with multiple samples
-- Review sample-level quality metrics (read counts, host removal, contamination)
-- Mark cases as reviewed and add clinical notes
+- **Clinical microbiologists** reviewing metagenomic results, verifying
+  organisms, and writing case notes.
+- **Lab managers** monitoring NTC quality trends and contamination.
+- **Bioinformaticians** running ingest, curating taxonomy notes, and
+  supporting clinical teams.
 
-**Interpret Taxonomy Results**
-
-- View organism detection across three classifiers (Kraken2, Centrifuge, DIAMOND)
-- Search and filter organisms by name, kingdom, and abundance
-- Interactive Krona visualizations for intuitive taxonomy exploration
-- Cross-classifier comparison to validate detections
-
-**Verify Findings with Confidence**
-
-- When metaval results available: See IGV coverage plots and BLASTN alignments for detected organisms
-- Confirms organisms are truly present in reads (not artifacts)
-- Links sequence evidence directly to organism calls
-- Reduces false positives and increases confidence in clinical reporting
-
-**Monitor for Outbreaks & Contamination**
-
-- **Outbreak alerts:** Automatically detects when same viral pathogen appears in 2+ cases
-- **Quality control:** Track negative test control (NTC) contamination over time
-- **Flexible monitoring:** Configurable time windows (7/14/30 days) and abundance thresholds
-- **Team communication:** Orange alerts flag problematic patterns for immediate investigation
-
-**Manage Quality Standards**
-
-- Build curated lists of known contaminants to track
-- Exclude environmental organisms from alerting
-- Assign alert thresholds per organism
-- Maintain audit trail of who added/removed list items
-
-Why It Matters
-~~~~~~~~~~~~~~
-
-- ✓ **Clinical confidence** — Verification data (IGV + BLASTN) confirms organisms are real
-- ✓ **Faster interpretation** — Organized interface reduces review time
-- ✓ **Quality assurance** — Built-in contamination monitoring
-- ✓ **Early warning** — Outbreak detection catches patterns before they spread
-- ✓ **Compliance-ready** — Full audit trail and user-level access control
-
-Who Uses It
-~~~~~~~~~~~
-
-- **Clinicians** - Review metagenomic results, verify organisms, make treatment decisions
-- **Lab managers** - Monitor quality trends, manage contamination, ensure standards
-- **Bioinformaticians** - Organize pipelines, verify results, support clinical teams
-
-Quick start
-===========
-
-1. **New users**: Start with :doc:`getting-started/overview`
-2. **Run it locally**: Follow :doc:`deployment/local-dev`
-
-For clinicians
+Where to start
 ==============
 
-- :doc:`user-guide/reviewing-cases`
-- :doc:`user-guide/investigating-detections`
-- :doc:`user-guide/monitoring`
-- :doc:`user-guide/loading-data`
-- :doc:`user-guide/administration`
+Run the app locally
+   :doc:`deployment/local-dev` — Docker-first dev stack via ``make up``.
 
-For deployment
-==============
+Use the app
+   :doc:`user-guide/reviewing-cases` — the day-to-day clinician
+   workflow.
 
-- :doc:`deployment/local-dev`
-- :doc:`deployment/environment`
-- :doc:`deployment/object-storage`
-- :doc:`deployment/production`
+Deploy or run it in production
+   :doc:`deployment/production` — the single-host compose deployment
+   shape.
 
-For developers
-==============
-
-- :doc:`developer/architecture`
+Read the architecture
+   :doc:`developer/architecture` — how the pieces fit together.
 
 .. toctree::
    :hidden:
    :maxdepth: 2
-   :caption: Getting Started
+   :caption: Use the app
 
-   getting-started/overview
+   user-guide/reviewing-cases
+   user-guide/investigating-detections
+   user-guide/monitoring
+   user-guide/loading-data
+   user-guide/administration
 
 .. toctree::
    :hidden:
@@ -114,17 +89,6 @@ For developers
    deployment/environment
    deployment/object-storage
    deployment/production
-
-.. toctree::
-   :hidden:
-   :maxdepth: 2
-   :caption: User Guide
-
-   user-guide/reviewing-cases
-   user-guide/investigating-detections
-   user-guide/monitoring
-   user-guide/loading-data
-   user-guide/administration
 
 .. toctree::
    :hidden:
