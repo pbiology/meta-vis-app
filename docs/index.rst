@@ -74,8 +74,7 @@ Quick start
 ===========
 
 1. **New users**: Start with :doc:`getting-started/overview`
-2. **Installation**: Follow :doc:`getting-started/installation`
-3. **First run**: Check out :doc:`getting-started/quick-start`
+2. **Run it locally**: Follow :doc:`deployment/local-dev`
 
 For clinicians
 ==============
@@ -102,9 +101,6 @@ For developers
 ==============
 
 - :doc:`developer/architecture`
-- :doc:`developer/data-model`
-- :doc:`developer/contributing`
-- :doc:`developer/performance`
 
 .. toctree::
    :hidden:
@@ -112,8 +108,6 @@ For developers
    :caption: Getting Started
 
    getting-started/overview
-   getting-started/installation
-   getting-started/quick-start
 
 .. toctree::
    :hidden:
@@ -155,6 +149,3 @@ For developers
    :caption: Developer
 
    developer/architecture
-   developer/data-model
-   developer/contributing
-   developer/performance
