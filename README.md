@@ -76,7 +76,7 @@ Make sure you have:
 
 ### 1. Quick-start
 
-See the [Installation Guide](https://meta-vis-app.readthedocs.io/en/latest/getting-started/installation.html).
+See the [Installation Guide](https://meta-vis.readthedocs.io/en/latest/getting-started/installation.html).
 
 ```bash
 git clone <repo-url>
@@ -134,22 +134,22 @@ python ingest.py \
 
 ## Documentation
 
-Full documentation is available at: **https://meta-vis-app.readthedocs.io**
+Full documentation is available at: **https://meta-vis.readthedocs.io/**
 
 ### For users:
-- [Getting Started](https://meta-vis-app.readthedocs.io/en/latest/getting-started/overview.html)
-- [User Guide](https://meta-vis-app.readthedocs.io/en/latest/user-guide/cases-and-samples.html)
-- [Outbreak Detection](https://meta-vis-app.readthedocs.io/en/latest/user-guide/outbreak-detection.html)
+- [Getting Started](https://meta-vis.readthedocs.io/en/latest/getting-started/overview.html)
+- [User Guide](https://meta-vis.readthedocs.io/en/latest/user-guide/cases-and-samples.html)
+- [Outbreak Detection](https://meta-vis.readthedocs.io/en/latest/user-guide/outbreak-detection.html)
 
 ### For administrators:
-- [Deployment](https://meta-vis-app.readthedocs.io/en/latest/deployment/docker-compose.html)
-- [Data Ingestion](https://meta-vis-app.readthedocs.io/en/latest/administration/ingestion.html)
-- [Troubleshooting](https://meta-vis-app.readthedocs.io/en/latest/administration/troubleshooting.html)
+- [Deployment](https://meta-vis.readthedocs.io/en/latest/deployment/docker-compose.html)
+- [Data Ingestion](https://meta-vis.readthedocs.io/en/latest/administration/ingestion.html)
+- [Troubleshooting](https://meta-vis.readthedocs.io/en/latest/administration/troubleshooting.html)
 
 ### For developers:
-- [Architecture](https://meta-vis-app.readthedocs.io/en/latest/developer/architecture.html)
-- [Contributing](https://meta-vis-app.readthedocs.io/en/latest/developer/contributing.html)
-- [Data Model](https://meta-vis-app.readthedocs.io/en/latest/developer/data-model.html)
+- [Architecture](https://meta-vis.readthedocs.io/en/latest/developer/architecture.html)
+- [Contributing](https://meta-vis.readthedocs.io/en/latest/developer/contributing.html)
+- [Data Model](https://meta-vis.readthedocs.io/en/latest/developer/data-model.html)
 
 ## Stack
 
@@ -167,4 +167,4 @@ See LICENSE file for details.
 
 ## Contact
 
-Developed by Genomic Medicine Sweden. For questions or issues, please refer to the [documentation](https://meta-vis-app.readthedocs.io) or contact the development team.
+Developed by Genomic Medicine Sweden. For questions or issues, please refer to the [documentation](https://meta-vis.readthedocs.io) or contact the development team.

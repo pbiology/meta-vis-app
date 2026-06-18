@@ -2,413 +2,308 @@
 Architecture
 ==============
 
-High-level overview of meta-vis-app's design.
+A working overview of how Meta-vis is structured. The goal of this page
+is that a new developer can read it once and know where to look next; the
+specifics live in the code.
 
-System components
-=================
-
-.. code-block:: text
-
-   ┌─────────────────────────────────────────┐
-   │      Frontend (React 18 + Vite)        │
-   │     http://localhost:5173              │
-   └──────────────────┬──────────────────────┘
-                      │
-                      │ HTTP/REST
-                      │ CORS enabled
-                      │
-   ┌──────────────────▼──────────────────────┐
-   │      Backend (FastAPI + Uvicorn)       │
-   │      http://localhost:8000             │
-   │      - Authentication (JWT)            │
-   │      - API endpoints                   │
-   │      - Business logic                  │
-   └──────────────────┬──────────────────────┘
-                      │
-          ┌───────────┼───────────┐
-          │           │           │
-          │           │           │
-          ▼           ▼           ▼
-      MongoDB      MinIO/S3    NCBI FTP
-      (localhost)  (optional)  (taxonomy)
-      (Docker)     (Docker)
-
-   External APIs (on-demand, cached 24 h):
-      NCBI Datasets API   — external links per taxon
-      NCBI E-Utilities    — PubMed literature per taxon
-      BV-BRC API          — genome summary, AMR genes, virulence factors per taxon
-
-Frontend architecture
-=====================
-
-**Technology:**
-- React 18 (UI framework)
-- Vite (build tool, dev server)
-- Tailwind CSS (styling)
-- Axios (HTTP client)
-- React Router (navigation)
-
-**Key directories:**
-
-.. code-block:: text
-
-   frontend/src/
-   ├── api/           - API client modules
-   ├── components/    - Reusable React components
-   ├── context/       - React Context (auth state)
-   ├── pages/         - Full-page components
-   ├── App.jsx        - Main app component
-   └── main.jsx       - Entry point
-
-**Data flow:**
-
-1. User interacts with UI (click, type, submit)
-2. Component calls API function (e.g., ``getCases()``)
-3. API function makes HTTP request to backend
-4. Backend responds with JSON
-5. Component updates state with response
-6. React re-renders component
-
-**Authentication:**
-- JWT token stored in localStorage
-- Included in all API requests as ``Authorization: Bearer <token>``
-- Refreshed on login
-- Cleared on logout
-
-Backend architecture
-====================
-
-**Technology:**
-- FastAPI (web framework)
-- Motor (async MongoDB driver)
-- Pydantic (data validation)
-- PyYAML (config parsing)
-- Boto3 (S3 client)
-
-**Key directories:**
-
-.. code-block:: text
-
-   backend/app/
-   ├── main.py              - FastAPI app setup
-   ├── config.py            - Configuration
-   ├── database.py          - MongoDB client
-   ├── blob_store.py        - S3/blob storage
-   ├── auth/                - Authentication utils
-   ├── ingestor/            - Ingestion logic
-   ├── models/              - Pydantic models
-   └── routers/             - API endpoints
-       ├── auth.py          - Login/logout
-       ├── cases.py         - Case operations
-       ├── samples.py       - Sample operations
-       ├── taxonomy/        - Taxonomy operations
-       ├── metaval.py       - metaval integration
-       ├── alerts.py        - Outbreak detection
-       ├── users.py         - User management
-       └── ingest.py        - Ingest endpoint
-
-**Async design:**
-- All I/O operations are async (database, file uploads)
-- Uses ``asyncio`` for concurrent operations
-- Motor driver provides async MongoDB access
-- Faster response times, handles more concurrent requests
-
-**API design:**
-- RESTful endpoints (GET, POST, PUT, DELETE)
-- JSON request/response format
-- Pydantic models for validation
-- OpenAPI/Swagger docs at ``/docs``
-
-Database design
+System overview
 ===============
 
-**MongoDB:**
-- Document-oriented (JSON-like data)
-- No fixed schema (flexible)
-- Indexes on frequently queried fields
-
-**Collections:**
-
 .. code-block:: text
 
-   cases/            - One doc per pipeline run
-   samples/          - One doc per sample
-   blobs/            - Krona HTML, IGV reports (if using MongoDB backend)
-   metaval_results/  - BLAST results, metadata
-   users/            - User accounts, hashed passwords
-   taxa/             - NCBI taxonomy reference
-   outbreak_ignorelist/  - Ignored taxa for alerts
+   ┌─────────────────────────────────────────────┐
+   │  Frontend — React 18 + TypeScript + Vite    │
+   │  Auth: OIDC (PKCE) against Keycloak         │
+   └──────────────────┬──────────────────────────┘
+                      │ HTTPS, JSON, Bearer token
+                      ▼
+   ┌─────────────────────────────────────────────┐
+   │  Backend — FastAPI + Motor (async)          │
+   │  Auth: validates Bearer tokens (Keycloak    │
+   │  JWKS); roles read from resource_access     │
+   └─┬──────────┬─────────────┬──────────────────┘
+     │          │             │
+     ▼          ▼             ▼
+   MongoDB   MinIO / S3    External APIs
+   (cases,   (Krona HTML,  (on-demand, 24 h cache):
+   samples,  IGV reports — NCBI Datasets, NCBI
+   audit,    optional;     E-Utilities (PubMed),
+   blobs…)   falls back    BV-BRC genome / sp_gene
+             to MongoDB    / genome_amr
+             ``blobs``
+             collection)
 
-**Key fields:**
+The frontend is a single-page app served as a static bundle. The backend
+exposes a JSON API under ``/api/v1``; everything except a couple of public
+health probes requires a Keycloak-issued Bearer token.
 
-Cases collection:
+Frontend
+========
 
-.. code-block:: javascript
+Stack: React 18, TypeScript (``.tsx`` / ``.ts``), Vite, Tailwind CSS,
+React Router, Axios, ``oidc-client-ts`` for the auth flow.
 
-   {
-     _id: ObjectId,
-     case_id: "case-001",
-     order_date: ISODate,
-     samples: [sample_id_list],
-     classifiers: ["kraken2", "centrifuge"],
-     reviewed: false,
-     notes: "...",
-     created_at: ISODate,
-     created_by: "admin"
-   }
+Layout::
 
-Samples collection:
+   frontend/src/
+   ├── api/           Axios modules per backend resource (cases.ts, samples.ts, …)
+   ├── components/    Reusable UI (Badge, Layout, MetricCard, …)
+   ├── context/       AuthContext.tsx — token + user, localStorage-backed
+   ├── hooks/         Custom React hooks
+   ├── lib/           Small utilities
+   ├── oidc.ts        OIDC client setup (issuer, client, redirect URIs)
+   ├── pages/         Full-page route components
+   ├── App.tsx        Routes
+   └── main.tsx       Entry point
 
-.. code-block:: javascript
+Authentication is OIDC against Keycloak with PKCE. The SPA redirects to the
+realm, gets an access token, and includes it as ``Authorization: Bearer …``
+on every API call. The token's ``resource_access[<role_client>].roles``
+claim drives UI authz (``reader`` / ``writer`` / ``admin``) — there are no
+local credentials.
 
-   {
-     _id: ObjectId,
-     case_id: "case-001",
-     sample_id: "SRR001",
-     type: "sample",
-     material: "DNA",
-     qc_metrics: {
-       read_count: 1000000,
-       q30_percentage: 95.5,
-       host_removal_percentage: 42.1
-     },
-     profiles: {
-       kraken2: [...]  // taxonomy data
-     }
-   }
+The Vite-bundled OIDC config (authority, client id, redirect URIs) is
+**baked into the build**. Changing it means rebuilding the image. See
+:doc:`../deployment/environment` for which ``VITE_*`` variables matter.
 
-Authentication flow
-===================
+Backend
+=======
 
-**Login:**
+Stack: FastAPI, Motor (async MongoDB), Pydantic v2, PyJWT (with
+``PyJWKClient``), Boto3 (S3), httpx (external APIs).
 
-.. code-block:: text
+Layout::
 
-   1. User submits username + password
-   2. Backend hashes password, compares to stored hash
-   3. If match, generates JWT token
-   4. Returns token to frontend
-   5. Frontend stores in localStorage
-   6. Subsequent requests include token
+   backend/app/
+   ├── main.py             FastAPI app, CORS, router registration
+   ├── config.py           Pydantic Settings (.env, outbreak configs)
+   ├── database.py         Motor client, index creation, blob store init
+   ├── blob_store.py       S3 / MongoDB blob abstraction
+   ├── audit.py            Append-only audit-log writes
+   ├── cache.py            Per-collection in-memory caches (e.g. outbreak alerts)
+   ├── db_utils.py         Shared Mongo query helpers
+   ├── middleware.py       Request-scoped context (request id, user)
+   ├── logging_config.py   Structured JSON-line logging
+   ├── taxonomy_utils.py   Shared taxonomy helpers (ranks, parents)
+   ├── constants.py
+   ├── auth/
+   │   └── utils.py        Keycloak token validation, role extraction
+   ├── ingestor/           See "Ingest" below
+   ├── models/             Pydantic models — case, sample, qc, taxonomy, …
+   └── routers/            Resource-shaped API endpoints
 
-**JWT token:**
-- Signed with JWT_SECRET from .env
-- Contains user info (username, role)
-- Expires after configured time
-- Used for API authentication
+Routers, one file per resource: ``auth``, ``cases``, ``samples``,
+``subjects``, ``ingest``, ``metaval``, ``alerts``, ``taxa``, ``ntc``,
+``users``, ``config``, ``health``.
 
-**Password hashing:**
-- Using bcrypt (industry standard)
-- Salted and iterated for security
-- No plaintext passwords stored
+Everything is async — Motor for the database, httpx for outbound HTTP, and
+asyncio-aware blob uploads. The event loop is never blocked by I/O.
 
-Ingestion pipeline
-==================
+Validation at every boundary
+----------------------------
 
-**High-level flow:**
+This is the load-bearing rule. The app handles clinical data and must fail
+loudly on bad input rather than silently corrupting state:
 
-.. code-block:: text
+- Every API request and response body is a Pydantic model in ``app/models/``.
+- Every ingest file (MultiQC JSON, taxpasta TSV, Emu rel-abundance TSV,
+  pipeline-info YAML, metaval JSON) is parsed *into* a Pydantic model before
+  any database write — see ``app/ingestor/inputs.py`` and the per-reader
+  modules.
+- The same models are reused for response bodies, so the shape that comes
+  out of the API matches the shape that went in.
 
-   1. User runs ingest.py with parameters
-   2. Script reads input files:
-      - MultiQC JSON (QC metrics)
-      - Software versions YAML (pipeline info)
-      - taxpasta TSV (taxonomy)
-      - Krona HTML (visualization)
-      - metaval results (optional)
-   3. Parses and validates data
-   4. Creates Case and Sample documents
-   5. Uploads Krona/IGV HTML to blob store
-   6. Inserts documents into MongoDB
-   7. Invalidates outbreak alert cache
+Configuration is itself a Pydantic ``Settings`` class — a malformed or
+incomplete ``.env`` fails fast at startup with a validation error, not a
+500 mid-request.
 
-**Key components:**
+Authentication
+==============
 
-.. code-block:: text
+Keycloak / OIDC. The backend has no user store of its own and no password
+hashing — both lived in earlier versions and are gone.
 
-   ingest.py                - CLI entry point
-   orchestrator.py          - Orchestrates ingest steps
-   multiqc_reader.py        - Parses MultiQC output
-   pipeline_info_reader.py  - Parses version files
-   taxpasta_reader.py       - Parses taxonomy TSV
-   metaval_reader.py        - Parses metaval results
+On every protected request:
+
+1. ``Authorization: Bearer …`` is extracted (FastAPI dependency).
+2. The token's signature is verified against the realm's JWKS (cached via
+   ``PyJWKClient`` — handles key rotation through the ``kid`` header).
+3. ``iss`` must equal ``KEYCLOAK_ISSUER``; ``azp`` must be in
+   ``KEYCLOAK_CLIENT_IDS``.
+4. The user's role is the highest of
+   ``resource_access[KEYCLOAK_ROLE_CLIENT].roles`` intersected with
+   ``{admin, writer, reader}`` — see ``ROLE_PRIORITY`` in
+   ``app/auth/utils.py``.
+
+The CLI follows the same model: ``ingest.py`` obtains a token from Keycloak
+(client-credentials grant for automation, password grant for local dev) and
+posts the bundle to ``/api/v1/ingest/...`` with that token.
+
+The ``users`` MongoDB collection still exists, but it holds app-side
+metadata (display name, last seen) keyed on the Keycloak ``sub``. It is
+not an identity source.
+
+Database
+========
+
+MongoDB 7.0. Document-oriented; we lean into that — the per-sample
+taxonomic profile is embedded directly in the sample document.
+
+==========================  ========================================================
+Collection                  Purpose
+==========================  ========================================================
+``cases``                   One doc per pipeline run (unique index on ``case_id``)
+``samples``                 One doc per sample, with the full taxonomic profile
+``subjects``                Patient/subject metadata shared across cases
+``blobs``                   Krona HTML / IGV reports — fallback when S3 is unset
+``metaval_results``         BLASTN alignments + IGV metadata per detection
+``users``                   App-side user metadata, keyed by Keycloak ``sub``
+``taxa``                    NCBI taxonomy reference (populated by ``load_taxonomy.py``)
+``outbreak_ignorelist``     Taxa excluded from outbreak alerts
+``known_pathogens``         Curated pathogen reference list
+``ntc_ignorelist``          Taxa excluded from NTC tracking
+``ntc_known_contaminants``  Known contaminants tracked in NTC QC
+``audit_log``               Append-only event log (see :doc:`../user-guide/administration`)
+==========================  ========================================================
+
+Indexes are created in ``database.py::_ensure_indexes()`` and run at every
+startup — the function is idempotent, so it's safe to point the backend at
+a new database without a separate migration step.
+
+For prod deployments the recommended topology is a replica set so
+multi-document transactions (used by the ingest orchestrator for
+case-level atomicity) work. With ``MONGODB_USE_TRANSACTIONS=false`` a
+mid-ingest failure can leave partial writes behind. See
+:doc:`../deployment/production`.
+
+Blob storage
+============
+
+Krona HTML and IGV reports are large (can be > 100 MB each). ``app/blob_store.py``
+abstracts over two backends:
+
+- **MongoDB** (default if ``OBJECT_STORAGE_ENDPOINT`` is unset) — blobs go
+  into the ``blobs`` collection. Zero setup; bloats the working set.
+- **S3-compatible** (MinIO, AWS S3, …) — preferred for production. Keys are
+  hierarchical: ``meta-vis/krona/{case_oid}/{classifier}.html``,
+  ``meta-vis/igv/{case_oid}/{sample}/{classifier}/{organism}.html``.
+
+The backend chooses based on environment alone; no code change is required
+to switch. Blobs ingested under one backend are not visible to the other —
+switching production backends means re-ingestion. See
+:doc:`../deployment/object-storage`.
+
+Ingest
+======
+
+Two supported pipelines, each with its own CLI subcommand and reader
+modules. The CLI runs anywhere with network access to the backend; the
+heavy lifting is server-side.
+
+::
+
+   python ingest.py taxprofiler --case-id … --multiqc … --classifier … --sample …
+   python ingest.py trana       --case-id … --pipeline-info … --sample …
+
+Wire flow:
+
+1. **CLI** (``ingest.py``) packages every referenced file into a tar.gz and
+   POSTs it as multipart to ``/api/v1/ingest/{taxprofiler,trana}``.
+2. **Loader** (``app/ingestor/loader.py``) materialises the bundle into a
+   tmp dir and constructs the Pydantic ``IngestInputs`` model.
+3. **Orchestrator** (``app/ingestor/orchestrator.py``) drives the
+   per-pipeline reader chain:
+
+   - taxprofiler: ``multiqc_reader`` (QC stats), ``taxpasta_reader``
+     (per-classifier profiles), ``pipeline_info_reader``, optional
+     ``metaval_reader``.
+   - trana: ``emu_reader`` (16S abundance), optional ``nanoplot_reader``
+     (ONT QC), ``pipeline_info_reader``.
+
+4. Each reader returns Pydantic models. The orchestrator wraps the Mongo
+   inserts in a single transaction (when transactions are enabled) so a
+   case is either fully ingested or not at all.
+5. On success the outbreak-alert cache is invalidated.
+
+Sample-name normalisation is the known fragile spot — taxprofiler appends
+classifier/db suffixes to sample names, so the CLI requires explicit
+``column_*=`` mappings per sample. See ``TECHNICAL_DEBT.md``.
 
 Outbreak detection
 ==================
 
-**Architecture:**
+Surfaced via the ``alerts`` router. Mostly Mongo aggregation, then a small
+Python pass:
 
-1. **MongoDB aggregation** - Runs query entirely in database
-2. **Sliding window** - In-memory clustering by order_date
-3. **Caching** - Results cached for 1 hour
-4. **Invalidation** - Cache cleared on new ingest or ignorelist change
+1. Pull configurable time window (7 / 14 / 30 days) and per-taxon thresholds
+   from ``settings.outbreak_configs`` (loaded once from
+   ``outbreak_configs.json``).
+2. Aggregation pipeline: match cases in window → unwind sample profiles →
+   filter to qualifying viral taxa → group by taxon → keep taxa in ≥ 2
+   cases.
+3. Python: cluster the matching cases by ``order_date`` (sliding window) to
+   produce the alerts list.
+4. Result is cached in-memory for one hour. Cache is invalidated on any
+   new ingest or ignorelist change.
 
-**Query flow:**
+The hot path is bounded by the time window, not the total case count, so
+the dataset can grow without slowing alerts.
 
-.. code-block:: text
+Audit log
+=========
 
-   1. Get time window (7, 14, or 30 days)
-   2. MongoDB aggregation:
-      a. Match cases in time window
-      b. Unwind sample arrays
-      c. Filter to qualifying viral taxa
-      d. Group by taxon, collect cases
-      e. Filter to taxa in 2+ cases
-   3. Return to Python
-   4. Cluster cases by order_date
-   5. Cache for 1 hour
-   6. Return to API
+``app/audit.py`` writes append-only events to the ``audit_log`` collection
+for every state-changing action: logins (success and failure), case
+ingest, case mutation, ignorelist edits, user-role changes. Events carry
+the request id, user ``sub``, action name, and a structured payload.
 
-**Performance:**
-- Query time O(n) where n = cases in window
-- Caching makes repeated queries instant
-- Bounded by time window, not total case count
-
-Object storage
-==============
-
-**Two backends:**
-
-1. **MongoDB** (default)
-   - Stores blobs in ``blobs`` collection
-   - Simple, no external service
-   - Limited for large deployments
-
-2. **S3-compatible** (recommended for production)
-   - MinIO (local Docker) or AWS S3
-   - Key structure: ``meta-vis/krona/{case_id}/{classifier}.html``
-   - Keeps MongoDB lean and fast
-
-**Abstraction:**
-
-``blob_store.py`` provides unified interface:
-
-.. code-block:: python
-
-   async def upload_blob(path: str, data: bytes) -> None
-   async def download_blob(path: str) -> bytes
-
-Automatically chooses MongoDB or S3 based on config.
-
-Error handling
-==============
-
-**Strategy:**
-- Validation at API boundaries (Pydantic models)
-- Try/except around I/O operations
-- Log errors with context
-- Return appropriate HTTP status codes
-- Frontend displays errors to user
-
-**Status codes:**
-- 200 OK - Success
-- 400 Bad Request - Validation failed
-- 401 Unauthorized - Not authenticated
-- 403 Forbidden - Not authorized
-- 404 Not Found - Resource doesn't exist
-- 500 Internal Server Error - Server error
-
-Testing
-=======
-
-**Structure:**
-
-.. code-block:: text
-
-   tests/
-   ├── unit/           - Unit tests (isolated functions)
-   ├── integration/    - Integration tests (with database)
-   └── conftest.py     - Pytest fixtures
-
-**Running tests:**
-
-.. code-block:: bash
-
-   pytest tests/                    # All tests
-   pytest tests/unit/               # Unit only
-   pytest tests/integration/        # Integration only
-   pytest -v                        # Verbose
-   pytest --cov                     # Coverage report
-
-**Mocking:**
-- ``mongomock`` for MongoDB
-- Fixtures for common test data
-- See ``conftest.py`` for setup
+The same events are also emitted as structured JSON log lines, so a log
+aggregator (Loki / ELK / Splunk) holds a second independent copy. If the
+DB write fails, the log line includes ``"message": "Failed to write audit
+event to database"`` so you can alert on it. See
+:doc:`../user-guide/administration`.
 
 External API integrations
 =========================
 
-Several ``/taxa/{id}/`` sub-routes proxy requests to external databases, aggregate the
-results, and return them to the frontend. All use the same pattern:
+Several ``/taxa/{id}/`` sub-routes aggregate data from public sources. All
+follow the same pattern: ``httpx.AsyncClient`` with a 15-second timeout,
+in-memory cache keyed by taxon id (and any query params, TTL 24 h), and
+graceful degradation — a network error returns an empty result, never a
+500.
 
-- **httpx.AsyncClient** for async HTTP calls with a 15-second timeout
-- **In-memory cache** keyed by ``taxon_id`` (and any query params), TTL 24 hours
-- **Graceful degradation** — any network error returns an empty result rather than a 500
+==========================================  ===================================  =======
+Endpoint                                    External service                     Cache
+==========================================  ===================================  =======
+``GET /taxa/{id}/external_links``           NCBI Datasets API                    24 h
+``GET /taxa/{id}/literature``               NCBI E-Utilities (PubMed)            24 h
+``GET /taxa/{id}/bvbrc/genomes``            BV-BRC ``/api/genome/``              24 h
+``GET /taxa/{id}/bvbrc/specialty_genes``    BV-BRC ``sp_gene`` + ``genome_amr``  24 h
+==========================================  ===================================  =======
 
-.. code-block:: text
+The BV-BRC genomes route uses ``eq(taxon_lineage_ids, {id})`` to capture
+strain-level genomes under a species (bounded at 1 000 records). The
+specialty-genes route fires two concurrent requests via
+``asyncio.gather``; the ``property`` field is filtered client-side
+because BV-BRC's SOLR ``in()`` operator does not handle multi-word text
+values correctly. Caches live in module-level dicts in
+``app/routers/taxa.py``.
 
-   Endpoint                               External service         Cache TTL
-   ─────────────────────────────────────────────────────────────────────────
-   GET /taxa/{id}/external_links          NCBI Datasets API        24 h
-   GET /taxa/{id}/literature              NCBI E-Utilities PubMed  24 h
-   GET /taxa/{id}/bvbrc/genomes           BV-BRC genome API        24 h
-   GET /taxa/{id}/bvbrc/specialty_genes   BV-BRC sp_gene           24 h
-                                          + genome_amr APIs
+Testing
+=======
 
-**BV-BRC (Bacterial and Viral Bioinformatics Resource Center)**
-  Public REST API at ``https://www.bv-brc.org/api/``. No API key required.
-  Uses NCBI taxon IDs natively, so the local ``taxon_id`` maps directly.
+``pytest`` with ``asyncio_mode = "auto"``. MongoDB is mocked via
+``mongomock-motor``; tests live under ``backend/tests/`` mirroring the
+source tree (``unit/`` and ``integration/``). Fixtures are in
+``tests/conftest.py``.
 
-  Two routes:
+Test inputs are inline or built into ``tmp_path`` — tests must not depend
+on real pipeline output files on disk.
 
-  ``GET /taxa/{id}/bvbrc/genomes``
-    Queries ``/api/genome/`` with ``eq(taxon_lineage_ids, {id})`` to capture all
-    strain-level genomes under a species. Aggregates isolation sources, countries,
-    and AMR genome counts (top 10 each, bounded at 1 000 genomes fetched).
+Where to look next
+==================
 
-  ``GET /taxa/{id}/bvbrc/specialty_genes``
-    Fires two concurrent requests via ``asyncio.gather`` using ``eq(taxon_id, {id})``
-    (exact taxon match — unlike the genomes endpoint, lineage IDs are not supported here):
-
-    - ``/api/sp_gene/`` with ``limit(500)`` — returns specialty gene records.
-      The ``property`` field is filtered client-side to *Antibiotic Resistance* and
-      *Virulence Factor* because BV-BRC's SOLR ``in()`` operator does not handle
-      multi-word text values correctly; all records are fetched and filtered in Python.
-      Results are deduplicated by ``(gene, property)``.
-    - ``/api/genome_amr/`` with ``limit(1000)`` — aggregated into per-antibiotic
-      resistant/susceptible counts.
-
-  Cache keys: ``_bvbrc_genomes_cache`` and ``_bvbrc_specialty_cache`` in
-  ``app/routers/taxa.py``.
-
-Scaling considerations
-======================
-
-**Horizontal scaling:**
-- Multiple backend instances behind load balancer
-- Shared MongoDB (managed service recommended)
-- Shared object storage (MinIO cluster or AWS S3)
-- No local state on backend
-
-**Vertical scaling:**
-- Increase server RAM
-- More backend workers: ``--workers 8``
-- MongoDB index optimization
-- SSD storage for better I/O
-
-**Caching:**
-- Outbreak alerts cached in-memory
-- Could be distributed (Redis) for multi-instance
-
-**Database optimization:**
-- Indexes on frequently queried fields
-- Periodic index rebuild
-- Archive old cases to separate database
-- Monitor query performance
-
-Next steps
-==========
-
-- :doc:`data-model` - Detailed data structure reference
-- :doc:`contributing` - Development setup and workflow
-- :doc:`performance` - Performance tuning and optimization
+- :doc:`../deployment/local-dev` — get the stack running
+- :doc:`../deployment/environment` — every config knob
+- :doc:`../user-guide/administration` — what the audit log captures
+- ``CLAUDE.md`` — short notes on conventions and known fragility

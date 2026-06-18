@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
 # -- Project information
-project = "meta-vis"
+project = "Meta-vis"
 copyright = "2026, Anders Lind"
 author = "Anders Lind"
 release = "0.1.0"
@@ -28,7 +28,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 # -- Options for HTML output
 html_theme = "furo"
 html_static_path = ["_static"]
-html_title = "meta-vis-app"
+html_title = "Meta-vis"
 html_logo = "../assets/logo.svg"
 html_favicon = "../assets/logo.svg"
 

@@ -1,85 +1,179 @@
 =======================
-Production Deployment
+Production deployment
 =======================
 
-This guide covers deploying meta-vis-app to a production environment.
+This repo ships two things that production consumes:
+
+1. **Container images** for the backend and frontend, built and pushed via
+   ``make image-backend-prod`` / ``make image-frontend-prod``.
+2. **A canonical environment contract** — ``backend/.env.example`` is the
+   list of every variable the backend expects.
+
+It also ships ``docker-compose.prod.yml`` as **one** worked example of how
+to run those images on a single host. That file is the basis for this guide.
+Other shapes (Kubernetes, OpenShift, systemd-on-a-VM) are equally valid;
+adapt the example to your platform.
+
+What this guide assumes
+=======================
+
+- A single Linux host with Docker Engine + Compose v2.
+- A separate, pre-existing **MongoDB** server (replica set recommended).
+  The dev compose file's MongoDB container is **not** suitable for production
+  — see :ref:`prod-mongodb` below.
+- An existing **Keycloak** instance with a realm you can configure.
+- An existing **nginx** (or other reverse proxy) on the host, terminating
+  TLS and forwarding the meta-vis hostname to the frontend container at
+  ``127.0.0.1:8080``.
+- Outbound network access to the image registry (Docker Hub by default).
 
 Pre-deployment checklist
 ========================
 
-- [ ] SSL/TLS certificates configured
-- [ ] MongoDB running on dedicated server(s), not the Docker Compose container
-- [ ] MongoDB connection URI set in ``.env`` (``MONGODB_HOST`` or full URI)
-- [ ] MongoDB automated backups configured and a restore tested end-to-end
-- [ ] ``audit_log`` collection verified to survive a full app redeployment
-- [ ] Object storage configured (S3 or MinIO)
-- [ ] Application logs (stdout) routed to a persistent destination
-- [ ] Email alerting configured (if desired)
-- [ ] Monitoring and logging set up
-- [ ] Database and application secrets secured
-- [ ] User authentication provider configured (if SSO used)
-- [ ] Firewall rules allow required ports
-- [ ] Load balancing configured (if multi-instance)
+- [ ] MongoDB running on dedicated server(s), with automated backups and a
+      tested restore procedure
+- [ ] Keycloak realm configured with the SPA and CLI clients (see
+      :ref:`prod-keycloak`)
+- [ ] TLS certificates issued for the frontend and backend hostnames
+- [ ] ``backend/.env.prod`` populated from ``backend/.env.example``
+- [ ] ``frontend/.env.prod`` populated from ``frontend/.env.example``
+- [ ] Frontend image rebuilt with the production ``.env.prod`` baked in
+- [ ] Object storage decided (MongoDB blobs vs S3) and configured
+- [ ] Reverse-proxy config in place, including ``X-Forwarded-*`` headers
+- [ ] Log aggregation forwarding the backend's stdout off the host
+- [ ] Audit-log survival verified end-to-end (see :ref:`audit-log-policy`)
 
-Security considerations
+.. _prod-keycloak:
+
+Keycloak configuration
+======================
+
+The backend validates incoming Bearer tokens against your Keycloak realm.
+You need:
+
+- **One public SPA client** (PKCE, standard flow):
+
+  - ``client_id``: ``meta-vis-frontend`` (or whatever you set as
+    ``VITE_OIDC_CLIENT_ID``)
+  - Redirect URI: ``https://<frontend-host>/auth/callback``
+  - Web origins: the frontend's exact origin (no trailing slash)
+  - Client roles: ``reader``, ``writer``, ``admin``
+
+- **One confidential CLI client** for ingest:
+
+  - ``client_id``: ``meta-vis-cli``
+  - ``service_accounts_enabled = true``
+  - Its service account needs the ``admin`` client role on the SPA client
+    (so the CLI's tokens carry authz)
+  - Add the SPA client as a **client scope** on the CLI client so the
+    service-account token actually contains
+    ``resource_access["meta-vis-frontend"].roles``
+
+After applying the realm config, verify the CLI's token includes the role:
+
+.. code-block:: bash
+
+   TOKEN=$(curl -s -d "grant_type=client_credentials" \
+       -d "client_id=meta-vis-cli" -d "client_secret=$KEYCLOAK_CLIENT_SECRET" \
+       "$KEYCLOAK_ISSUER/protocol/openid-connect/token" \
+       | jq -r .access_token)
+   echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq .resource_access
+
+Building images
+===============
+
+Both images are built and pushed via the Makefile. They target
+``linux/amd64`` by default; override ``PLATFORM`` for ARM hosts.
+
+.. code-block:: bash
+
+   make image-backend-prod    # → $BACKEND_IMAGE:prod
+   make image-frontend-prod   # → $FRONTEND_IMAGE:prod (uses --mode prod)
+
+By default the images are tagged
+``docker.io/clinicalgenomics/metavis-backend:prod`` and
+``docker.io/clinicalgenomics/metavis-frontend:prod``. Override the repo with:
+
+.. code-block:: bash
+
+   BACKEND_IMAGE=registry.example.com/meta-vis-backend make image-backend-prod
+   FRONTEND_IMAGE=registry.example.com/meta-vis-frontend make image-frontend-prod
+
+.. important::
+
+   **The frontend image is built with its config baked in.** The frontend
+   build reads ``frontend/.env.prod`` (loaded automatically by Vite's
+   ``--mode prod``) and the resulting bundle hardcodes the OIDC authority,
+   API URL, etc. If those values change, you must rebuild the image — there
+   is no runtime override.
+
+The ``:prod`` tag is a moving pointer. The Makefile target overwrites it on
+every build. For traceability, also push an immutable versioned tag
+(``:prod-0.1.0``, ``:prod-<git-sha>``) and reference that from your runtime.
+
+Configuring the backend
 =======================
 
-1. **Environment variables** - Use secrets management (Docker secrets, Kubernetes secrets, environment service)
-2. **JWT secret** - Must be long, random, and securely generated. Never hardcode.
-3. **Database authentication** - Use strong passwords, restrict network access
-4. **API authentication** - All API calls require valid JWT tokens
-5. **HTTPS only** - Configure TLS/SSL for all traffic
-6. **Firewall rules** - Only expose ports 80/443 for HTTPS, restrict MongoDB/MinIO access to internal networks
-
-Backend deployment
-==================
-
-**Using Docker:**
+Copy the canonical template and fill it in:
 
 .. code-block:: bash
 
-   docker run -d \
-     --name meta-vis-app \
-     -p 8000:8000 \
-     --env-file .env \
-     -v /data/uploads:/app/uploads \
-     meta-vis-app:latest
+   cp backend/.env.example backend/.env.prod
+   # Edit backend/.env.prod — set MONGODB_URI, KEYCLOAK_*, CORS_ORIGINS,
+   # JWT_SECRET, and (if using S3) OBJECT_STORAGE_*.
 
-**Using systemd:**
+See :doc:`environment` for the full list of variables and which are required.
 
-Create ``/etc/systemd/system/meta-vis-app.service``:
+Configuring the frontend
+========================
 
-.. code-block:: ini
-
-   [Unit]
-   Description=meta-vis-app backend
-   After=network.target mongodb.service
-
-   [Service]
-   Type=simple
-   User=meta-vis
-   WorkingDirectory=/opt/meta-vis-app
-   EnvironmentFile=/opt/meta-vis-app/.env
-   ExecStart=/opt/meta-vis-app/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
-   Restart=always
-   RestartSec=10
-
-   [Install]
-   WantedBy=multi-user.target
-
-Frontend deployment
-===================
-
-**Build for production:**
+The frontend image is built with its config inside. Before
+``make image-frontend-prod``:
 
 .. code-block:: bash
 
-   cd frontend
-   npm run build
+   cp frontend/.env.example frontend/.env.prod
+   # Edit frontend/.env.prod:
+   #   VITE_OIDC_AUTHORITY=https://<kc-host>/realms/<realm>
+   #   VITE_OIDC_CLIENT_ID=meta-vis-frontend
+   #   VITE_OIDC_REDIRECT_URI=https://<frontend-host>/auth/callback
+   #   VITE_OIDC_POST_LOGOUT_REDIRECT_URI=https://<frontend-host>/
 
-This creates an optimized ``dist/`` directory.
+Then run the build. The values above are baked into the bundle.
 
-**Serve with nginx:**
+Running the stack
+=================
+
+``docker-compose.prod.yml`` runs the two containers, joins them on an
+internal bridge network, and binds the frontend to ``127.0.0.1:8080`` so a
+host nginx can proxy public traffic to it. Backend is internal only.
+
+.. code-block:: bash
+
+   # Pull and start
+   docker compose -f docker-compose.prod.yml pull
+   docker compose -f docker-compose.prod.yml up -d
+
+   # Logs
+   docker compose -f docker-compose.prod.yml logs -f
+
+   # Stop
+   docker compose -f docker-compose.prod.yml down
+
+.. note::
+
+   The shipped ``docker-compose.prod.yml`` references the
+   ``clinicalgenomics`` images at the ``:stage`` tag. Override the ``image:``
+   field (or the ``BACKEND_IMAGE`` / ``FRONTEND_IMAGE`` makefile defaults)
+   for your own deployment. Treat the file as a template, not a hard
+   contract.
+
+Reverse proxy
+=============
+
+The frontend container serves the built bundle and proxies ``/api/*`` to the
+backend container internally. The host nginx only needs to terminate TLS and
+forward to ``127.0.0.1:8080``:
 
 .. code-block:: nginx
 
@@ -87,87 +181,63 @@ This creates an optimized ``dist/`` directory.
        listen 443 ssl http2;
        server_name meta-vis.example.com;
 
-       ssl_certificate /etc/ssl/certs/meta-vis.crt;
+       ssl_certificate     /etc/ssl/certs/meta-vis.crt;
        ssl_certificate_key /etc/ssl/private/meta-vis.key;
 
-       # Serve static frontend assets
-       root /opt/meta-vis-app/frontend/dist;
-       index index.html;
+       client_max_body_size 100M;   # ingest bundles can be large
 
-       # React Router: route all non-file requests to index.html
        location / {
-           try_files $uri $uri/ /index.html;
-       }
-
-       # Proxy API requests to backend
-       location /api/ {
-           proxy_pass http://localhost:8000;
-           proxy_set_header Host $host;
-           proxy_set_header X-Real-IP $remote_addr;
-           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_pass http://127.0.0.1:8080;
+           proxy_set_header Host              $host;
+           proxy_set_header X-Real-IP         $remote_addr;
+           proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
            proxy_set_header X-Forwarded-Proto $scheme;
        }
    }
 
-   # Redirect HTTP to HTTPS
    server {
        listen 80;
        server_name meta-vis.example.com;
        return 301 https://$server_name$request_uri;
    }
 
-**Using Docker:**
+.. _prod-mongodb:
 
-.. code-block:: dockerfile
-
-   FROM node:18 as build
-   WORKDIR /app
-   COPY frontend/package*.json ./
-   RUN npm ci
-   COPY frontend ./
-   RUN npm run build
-
-   FROM nginx:alpine
-   COPY --from=build /app/dist /usr/share/nginx/html
-   COPY nginx.conf /etc/nginx/conf.d/default.conf
-   EXPOSE 80
-   CMD ["nginx", "-g", "daemon off;"]
-
-MongoDB deployment
-==================
+MongoDB
+=======
 
 .. warning::
 
-   The ``docker-compose.yml`` MongoDB container is intended for **development
-   only**. Never use it as your production database — a single container has no
-   replication, no automated backups, and its data is destroyed by
-   ``docker compose down -v``. The ``audit_log`` collection in particular is a
-   compliance record that must not be at risk from a routine deployment step.
+   The MongoDB container in ``docker-compose.yml`` (the dev stack) is for
+   **development only**. A single container has no replication, no automated
+   backups, and its data is destroyed by ``docker compose down -v``. The
+   ``audit_log`` collection in particular is a compliance record that must
+   not be exposed to that risk.
 
-**Recommended: dedicated server(s)**
+Recommended topology
+--------------------
 
-The intended production topology is a standalone MongoDB 7.0 server or a
-three-node replica set running on dedicated VMs. The application connects to it
-via a standard MongoDB URI in ``.env`` — no code changes are required to switch
-from the Docker container to an external server.
+A three-node MongoDB 7.0 replica set on dedicated VMs. It provides:
 
-Switching from the Docker container to a dedicated MongoDB server:
+- Automatic failover if the primary node goes down
+- A readable secondary for backups without impacting the primary
+- Point-in-time recovery via the oplog
 
-1. Set up MongoDB on the target server(s) and create the application database
-   and user (see :ref:`mongo-user-setup` below).
-2. Update ``MONGODB_HOST`` (and optionally ``MONGODB_PORT``) in
-   ``backend/.env`` to point at the new server. For a replica set, supply the
-   full connection URI directly — Motor (the MongoDB driver) accepts any valid
-   MongoDB URI string.
-3. Restart the application. ``_ensure_indexes()`` runs at startup and is
-   idempotent — it will create any missing indexes on the new server without
-   touching existing data.
-4. Decommission the Docker container only after verifying the application is
-   healthy against the new server.
+Point the backend at it via ``MONGODB_URI``:
 
-.. _mongo-user-setup:
+.. code-block:: ini
 
-**Creating the application user on a dedicated MongoDB server**
+   MONGODB_URI=mongodb://meta-vis-app:<pw>@vm1.internal:27017,vm2.internal:27017,vm3.internal:27017/meta-vis?authSource=admin&replicaSet=rs0
+   MONGODB_DB_NAME=meta-vis
+   MONGODB_DIRECT_CONNECTION=false
+   MONGODB_USE_TRANSACTIONS=true
+
+For a standalone mongod, set ``MONGODB_USE_TRANSACTIONS=false`` — multi-doc
+transactions are rejected without a replica set, and ingest will fail
+otherwise.
+
+Creating the application user
+-----------------------------
 
 Run the following in the MongoDB shell as an admin user:
 
@@ -175,9 +245,9 @@ Run the following in the MongoDB shell as an admin user:
 
    use admin
    db.createUser({
-     user: "<MONGODB_USERNAME>",
+     user: "meta-vis-app",
      pwd:  "<MONGODB_PASSWORD>",
-     roles: [{ role: "readWrite", db: "<MONGODB_DB_NAME>" }]
+     roles: [{ role: "readWrite", db: "meta-vis" }]
    })
 
 For tighter security, grant ``read`` + ``insert`` on ``audit_log`` only (no
@@ -185,136 +255,96 @@ For tighter security, grant ``read`` + ``insert`` on ``audit_log`` only (no
 This prevents any code path — including a compromised application account —
 from modifying or deleting audit records.
 
-**Replica set (three-node)**
+The backend's ``_ensure_indexes()`` runs at startup and is idempotent — it
+creates any missing indexes on the target server without touching existing
+data. No migration step is required when pointing at a new database.
 
-A three-node replica set is the recommended production topology. It provides:
+Object storage in production
+============================
 
-- Automatic failover if the primary node goes down
-- A readable secondary for backup operations without impacting the primary
-- Point-in-time recovery via the oplog
+In production prefer S3-compatible object storage over the MongoDB ``blobs``
+collection — Krona HTML and IGV reports are large and bloat the database
+working set. Set the four ``OBJECT_STORAGE_*`` variables in
+``backend/.env.prod`` and ensure the configured bucket exists. See
+:doc:`object-storage` for details.
 
-When using a replica set, supply the full connection URI in ``.env``:
+Logging
+=======
 
-.. code-block:: ini
-
-   MONGODB_HOST=vm1.internal:27017,vm2.internal:27017,vm3.internal:27017
-
-Motor discovers all nodes from the URI and handles failover automatically.
-
-**Minimum specs (single node):**
-
-- 4 GB RAM
-- 20 GB SSD storage (adjust for case volume — see :doc:`../administration/audit-log` for sizing guidance)
-- Daily automated backups
-
-Monitoring and logging
-======================
-
-**Application logs**
-
-The backend emits structured JSON lines on stdout (one JSON object per line).
-In production, stdout must be routed to a persistent destination — logs written
-only to a container's stdout are lost when the container restarts.
+The backend emits structured JSON lines on stdout (one JSON object per
+line). In production, stdout **must** be routed to a persistent destination
+— logs written only to a container's stdout are lost when the container
+restarts.
 
 .. code-block:: bash
 
-   # View live logs (Docker)
-   docker logs -f meta-vis-app
+   docker compose -f docker-compose.prod.yml logs -f backend
 
-   # View live logs (systemd)
-   journalctl -u meta-vis-app -f
+Forward the container's stdout to a log aggregator (ELK/OpenSearch, Loki,
+CloudWatch, Splunk, etc.). This gives you an independent copy of every
+audit event in addition to the ``audit_log`` MongoDB collection — useful if
+the database is unreachable during an incident investigation.
 
-Configure your deployment to forward stdout to a log aggregation system
-(ELK/OpenSearch, Loki, CloudWatch, Splunk, etc.). This gives you a second,
-independent copy of all audit events in addition to the ``audit_log`` MongoDB
-collection — useful if database access is unavailable during an incident
-investigation.
-
-To alert on audit write failures, watch for log lines containing:
+To alert on audit-write failures, watch for log lines containing:
 
 .. code-block:: text
 
    "message": "Failed to write audit event to database"
 
-This indicates the MongoDB ``audit_log`` collection is not receiving events and
+This means the ``audit_log`` collection is not receiving events and
 requires immediate attention.
 
-**Metrics to monitor:**
+Metrics worth monitoring:
 
-- API response times
-- Database query performance
+- API response times and error rates
+- MongoDB query latency
 - Storage usage (MongoDB + S3)
-- Blob upload/download times
-- Error rates
 - Failed login attempts (``action: "login_failed"`` in ``audit_log``)
 
-**Tools:**
+.. _audit-log-policy:
 
-- Prometheus + Grafana (metrics and dashboards)
-- ELK Stack / OpenSearch (logs)
-- Sentry (error tracking)
-- New Relic, Datadog, etc. (managed solutions)
+Audit-log integrity policy
+==========================
 
-Performance tuning
-==================
+The ``audit_log`` collection is a compliance record. Treat it accordingly:
 
-**Backend:**
+- **Before any deployment that touches the database** (schema change,
+  index rebuild, server move), record the current document count and
+  verify it after:
 
-.. code-block:: bash
+  .. code-block:: bash
 
-   # Increase workers for parallel requests
-   uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 8
+     mongosh "<MONGODB_URI>" --eval "db.audit_log.countDocuments()"
 
-**Database:**
-- Enable indexing on frequently queried fields
-- Monitor slow queries
-- Consider read replicas for read-heavy workloads
+  If the count drops unexpectedly, stop and investigate.
+- **Back up ``audit_log`` independently** of the rest of the database, so
+  you can restore it without reverting recent application state.
+- **Forward audit events to your log aggregator** as a second, independent
+  copy.
 
-**Frontend:**
-- Enable gzip compression in nginx
-- Cache static assets with long TTLs
-- Use a CDN for global distribution
+Backups and disaster recovery
+=============================
 
-Scaling considerations
-======================
-
-**Horizontal scaling (multiple servers):**
-- Load balance requests with nginx or HAProxy
-- Use managed MongoDB (no local database)
-- Use shared object storage (MinIO cluster or AWS S3)
-- Ensure sessions don't rely on local state
-
-**Vertical scaling (bigger server):**
-- Increase backend workers
-- Allocate more RAM to MongoDB
-- Use faster disk storage (SSD)
-
-Disaster recovery
-==================
-
-**Backups**
-
-Back up the entire MongoDB database with ``mongodump``. Run this from a machine
-with network access to the MongoDB server:
+Back up the entire database with ``mongodump``. From a machine with network
+access to the MongoDB server:
 
 .. code-block:: bash
 
    # Full database backup
    mongodump \
-     --uri="mongodb://user:pass@host:27017/meta-vis?authSource=admin" \
+     --uri="<MONGODB_URI>" \
      --out=/backups/mongo-$(date +%Y%m%d)
 
-   # audit_log only (for a quick compliance snapshot)
+   # audit_log only (compliance snapshot)
    mongodump \
-     --uri="mongodb://user:pass@host:27017/meta-vis?authSource=admin" \
+     --uri="<MONGODB_URI>" \
      --collection=audit_log \
      --out=/backups/audit-$(date +%Y%m%d)
 
-Store backups off-site (a separate server, S3 bucket, or tape). A backup held
-on the same VM as the database is not a backup — it is lost in the same failure.
+Store backups off-host. A backup held on the same VM as the database is not
+a backup — it is lost in the same failure.
 
-If running a replica set, run ``mongodump`` against a secondary node to avoid
-any impact on the primary:
+For a replica set, target a secondary to avoid impact on the primary:
 
 .. code-block:: bash
 
@@ -322,51 +352,46 @@ any impact on the primary:
      --uri="mongodb://user:pass@vm2.internal:27017/meta-vis?authSource=admin&readPreference=secondary" \
      --out=/backups/mongo-$(date +%Y%m%d)
 
-**Backup frequency:**
-
-- Daily full backup (the database is small — see :doc:`../administration/audit-log` for sizing)
-- Retain daily backups for 30 days, monthly backups for the duration of your retention policy
-
-**Verifying backups**
-
-A backup that has never been tested is not a backup. Monthly, restore to a
-scratch database and verify the collections are intact:
+Verify backups monthly by restoring to a scratch database and spot-checking:
 
 .. code-block:: bash
 
-   # Restore to a test database
    mongorestore \
      --uri="mongodb://user:pass@testhost:27017/?authSource=admin" \
      --nsFrom="meta-vis.*" \
      --nsTo="meta-vis-restore.*" \
      /backups/mongo-YYYYMMDD
 
-   # Spot-check audit_log
    mongosh "mongodb://user:pass@testhost:27017/meta-vis-restore" \
      --eval "db.audit_log.countDocuments()"
 
-**Protecting the audit_log collection specifically**
+A backup that has never been tested is not a backup.
 
-Before decommissioning or redeploying any component, verify the ``audit_log``
-collection is intact on the production database:
+**Targets:**
 
-.. code-block:: bash
+- RTO (Recovery Time Objective): < 4 hours
+- RPO (Recovery Point Objective): < 1 day, or < 1 hour with a replica-set oplog
 
-   mongosh "mongodb://user:pass@host:27017/meta-vis" \
-     --eval "db.audit_log.countDocuments()"
+Upgrade flow
+============
 
-Compare this count against the previous backup. If the count drops unexpectedly,
-stop and investigate before proceeding.
+1. Build and push new versioned image tags
+   (``make image-backend-prod`` / ``make image-frontend-prod``, with an
+   immutable ``:prod-<version>`` tag).
+2. Update the ``image:`` references in ``docker-compose.prod.yml`` (or your
+   ops repo) to the new tag.
+3. ``docker compose -f docker-compose.prod.yml pull``
+4. ``docker compose -f docker-compose.prod.yml up -d`` — recreates only the
+   containers whose images changed.
+5. Verify the backend is healthy (``/docs`` returns 200) and the
+   ``audit_log`` count hasn't regressed.
 
-**RTO/RPO targets:**
-
-- Recovery Time Objective (RTO): < 4 hours
-- Recovery Point Objective (RPO): < 1 day (< 1 hour if using a replica set oplog)
+Mutable ``:prod`` tags + ``imagePullPolicy: Always`` are unreliable for
+in-place updates. Use immutable versioned tags and bump the tag explicitly.
 
 Next steps
 ==========
 
-- Work with DevOps/infrastructure team for your environment
-- Set up monitoring and alerting
-- Test disaster recovery procedures
-- Document your deployment for the operations team
+- :doc:`environment` — the full environment variable reference
+- :doc:`object-storage` — switching between MongoDB blobs and S3
+- :doc:`../user-guide/administration` — roles and the audit log
