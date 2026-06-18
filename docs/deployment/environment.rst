@@ -1,147 +1,199 @@
 ======================
-Environment Variables
+Environment variables
 ======================
 
-meta-vis-app configuration is managed through environment variables in ``backend/.env``.
+This page is the configuration reference. For step-by-step setup, see
+:doc:`local-dev` (development) or :doc:`production` (deployment).
 
-Getting started
-===============
+How config is layered
+=====================
 
-Copy the example file:
+The backend reads its config from environment variables. Compose loads them
+from one or more ``.env`` files; each subsequent file overrides keys defined
+earlier. The repo ships three files for three different roles:
+
+==========================  ================  ===================================================
+File                        In git?           Purpose
+==========================  ================  ===================================================
+``backend/.env.example``    yes               Canonical contract — every key the backend expects.
+                                              Copy to a gitignored file for a real deploy.
+``backend/.env.dev``        yes               Committed dev defaults loaded by compose. Holds
+                                              values that are identical for every developer.
+``backend/.env``            **no**            Your secrets and per-machine overrides. Overrides
+                                              ``.env.dev``. Required for local dev.
+==========================  ================  ===================================================
+
+``docker-compose.yml`` loads ``.env.dev`` first, then ``.env`` — so anything
+in ``.env`` wins. Service-topology values that are facts of the compose
+network (``MONGODB_HOST=mongodb``, ``OBJECT_STORAGE_ENDPOINT=http://minio:9000``)
+are set in the compose file's ``environment:`` block, which beats both files.
+
+For production, ``backend/.env.example`` is your starting point — copy it to
+``backend/.env.prod`` (gitignored), fill in real values, and point your
+runtime at it via ``env_file:`` in ``docker-compose.prod.yml``.
+
+The frontend follows the same pattern: ``frontend/.env.example`` (committed
+template), ``frontend/.env`` (gitignored dev config), ``frontend/.env.prod``
+(gitignored, used at image-build time). Frontend variables are **baked into
+the bundle at build time** by Vite — they are not runtime-configurable.
+
+Backend variables
+=================
+
+No localhost fallbacks live in code. Every required key below must be set or
+the backend fails fast at startup with a Pydantic validation error.
+
+MongoDB
+-------
+
+Pick **either** ``MONGODB_URI`` (preferred for prod) **or** the discrete
+host/port/user/password fields. When ``MONGODB_URI`` is set the discrete
+fields are ignored.
+
+================================  ==========  ==============================================================
+Variable                          Required    Description
+================================  ==========  ==============================================================
+``MONGODB_URI``                   prod        Full connection string. Carries replicaSet, tls, multiple
+                                              seed hosts, query params. Example:
+                                              ``mongodb://user:pass@mongo-1:27017,mongo-2:27017/meta-vis?authSource=admin&replicaSet=rs0``
+``MONGODB_HOST``                  dev         Hostname or IP, when not using ``MONGODB_URI``.
+``MONGODB_PORT``                  dev         Port. Default ``27017``.
+``MONGODB_USERNAME``              dev         App user (created by ``mongo-init.js`` in dev).
+``MONGODB_PASSWORD``              dev         App user password.
+``MONGODB_AUTH_SOURCE``           dev         Auth DB. Usually ``admin``.
+``MONGO_ROOT_PASSWORD``           dev only    Root password for the dev MongoDB container.
+                                              **Not used in production** — set up your DB user
+                                              independently. See :doc:`production`.
+``MONGODB_DB_NAME``               yes         Database name (``meta-vis-dev`` / ``meta-vis``).
+``MONGODB_DIRECT_CONNECTION``     yes         ``true`` for a single-node replica set behind a port
+                                              mapping. ``false`` for a real ``mongodb+srv`` URL or a
+                                              multi-host cluster URI.
+``MONGODB_USE_TRANSACTIONS``      yes         Wrap ingest + case-mutation writes in a multi-document
+                                              transaction. Requires a replica set. Set ``false`` on a
+                                              standalone mongod (transactions are rejected otherwise)
+                                              and accept that a mid-sequence failure can leave partial
+                                              writes behind.
+================================  ==========  ==============================================================
+
+Application
+-----------
+
+==================  ==========  ==============================================================
+Variable            Required    Description
+==================  ==========  ==============================================================
+``APP_ENV``         yes         ``development`` or ``production``.
+``LOG_LEVEL``       yes         One of ``debug``, ``info``, ``warning``, ``error``, ``critical``.
+==================  ==========  ==============================================================
+
+Auth (Keycloak / OIDC)
+----------------------
+
+The backend validates incoming Bearer tokens against a Keycloak realm. Tokens
+are signed by Keycloak — ``JWT_SECRET`` is a legacy field that ``Settings``
+still demands but no longer signs anything.
+
+============================  ==========  ==============================================================
+Variable                      Required    Description
+============================  ==========  ==============================================================
+``KEYCLOAK_ISSUER``           yes         Realm public URL. Must equal the ``iss`` claim of incoming
+                                          tokens exactly. The SPA also uses this, so use the
+                                          browser-facing hostname.
+``KEYCLOAK_CLIENT_IDS``       yes         Comma-separated ``azp`` allowlist. Defaults cover the SPA
+                                          and the ingest CLI:
+                                          ``meta-vis-frontend,meta-vis-cli``.
+``KEYCLOAK_ROLE_CLIENT``      yes         KC client whose client-roles drive authorization. Tokens
+                                          are inspected at
+                                          ``resource_access[<role_client>].roles``.
+``KEYCLOAK_JWKS_URL``         optional    Override for the JWKS endpoint. Use when the backend pod
+                                          can't reach the public KC hostname. ``iss`` is still
+                                          validated against ``KEYCLOAK_ISSUER``.
+``JWT_SECRET``                yes         32+ random chars. Legacy. Generate with
+                                          ``python -c "import secrets; print(secrets.token_urlsafe(48))"``.
+============================  ==========  ==============================================================
+
+CORS
+----
+
+================  ==========  ==============================================================
+Variable          Required    Description
+================  ==========  ==============================================================
+``CORS_ORIGINS``  yes         Comma-separated list of allowed origins. List the deployed
+                              frontend's origin exactly (scheme + host, no trailing slash).
+================  ==========  ==============================================================
+
+Object storage
+--------------
+
+Optional. Leave unset to fall back to the MongoDB ``blobs`` collection. See
+:doc:`object-storage` for the trade-off.
+
+=================================  ==========  ==============================================================
+Variable                           Required    Description
+=================================  ==========  ==============================================================
+``OBJECT_STORAGE_ENDPOINT``        opt         S3-compatible endpoint. Setting this activates the
+                                               S3/MinIO path in ``app/blob_store.py``.
+``OBJECT_STORAGE_ACCESS_KEY``      opt         Access key. Required when ``OBJECT_STORAGE_ENDPOINT`` is set.
+``OBJECT_STORAGE_SECRET_KEY``      opt         Secret key. Required when ``OBJECT_STORAGE_ENDPOINT`` is set.
+``OBJECT_STORAGE_BUCKET``          opt         Bucket name. Default ``meta-vis``.
+=================================  ==========  ==============================================================
+
+Optional integrations
+---------------------
+
+==========================  ==========  ==============================================================
+Variable                    Required    Description
+==========================  ==========  ==============================================================
+``NCBI_API_KEY``            no          Raises NCBI E-utilities rate limit from 3 to 10 req/s.
+``FRESHDESK_BASE_URL``      no          Ticket-link template. Must include ``{ticket_id}``. Leave
+                                        unset to disable ticket links in the UI.
+==========================  ==========  ==============================================================
+
+Frontend variables
+==================
+
+Vite reads ``frontend/.env`` for ``npm run dev`` and ``frontend/.env.prod``
+(or ``.env.stage``) for image builds via the ``--mode`` flag. **All ``VITE_*``
+variables are baked into the bundle at build time** — you cannot change them
+after the image is built.
+
+====================================  ==========  ==============================================================
+Variable                              Required    Description
+====================================  ==========  ==============================================================
+``VITE_OIDC_AUTHORITY``               yes         Keycloak realm URL the SPA authenticates against.
+``VITE_OIDC_CLIENT_ID``               yes         SPA client ID. Default ``meta-vis-frontend``.
+``VITE_OIDC_REDIRECT_URI``            yes         OIDC callback URL. ``<frontend-origin>/auth/callback``.
+``VITE_OIDC_POST_LOGOUT_REDIRECT_URI``  yes       Where to land after logout. Usually the SPA root.
+``VITE_OIDC_ROLE_CLIENT``             opt         KC client whose client-roles drive UI authz. Defaults to
+                                                  ``VITE_OIDC_CLIENT_ID``.
+``VITE_API_PROXY_TARGET``             dev only    Where ``npm run dev`` proxies ``/api/*`` calls. Compose
+                                                  overrides this to ``http://backend:8000``. Production
+                                                  builds ignore it — the prod nginx config does API proxying.
+====================================  ==========  ==============================================================
+
+Generating secrets
+==================
 
 .. code-block:: bash
 
-   cp backend/.env.example backend/.env
-
-Then edit ``backend/.env`` with your settings.
-
-MongoDB configuration
-=====================
-
-.. code-block:: ini
-
-   MONGODB_HOST=localhost
-   MONGODB_PORT=27017
-   MONGODB_DB_NAME=meta-vis-dev
-   MONGODB_USERNAME=meta_vis_app
-   MONGODB_PASSWORD=<strong-password>
-   MONGO_ROOT_PASSWORD=<strong-root-password>
-   MONGODB_AUTH_SOURCE=admin
-
-- **MONGODB_HOST** - MongoDB server hostname or IP
-- **MONGODB_PORT** - MongoDB server port
-- **MONGODB_DB_NAME** - Database name to use
-- **MONGODB_USERNAME** - App user (created by ``mongo-init.js``)
-- **MONGODB_PASSWORD** - Password for app user
-- **MONGO_ROOT_PASSWORD** - Root password for admin access
-- **MONGODB_AUTH_SOURCE** - Authentication database (usually ``admin``)
-
-Application configuration
-==========================
-
-.. code-block:: ini
-
-   APP_ENV=development
-   LOG_LEVEL=info
-
-- **APP_ENV** - Either ``development`` or ``production``
-- **LOG_LEVEL** - One of ``debug``, ``info``, ``warning``, ``error``, ``critical``
-
-Security
-========
-
-.. code-block:: ini
-
-   JWT_SECRET=<very-long-random-string>
-
-- **JWT_SECRET** - Secret key for JWT token signing. Must be a long, random string. Generate with:
-
-  .. code-block:: bash
-
-     python -c "import secrets; print(secrets.token_urlsafe(32))"
-
-Object storage (optional)
-==========================
-
-Only configure if you want to use S3-compatible storage instead of MongoDB for blobs.
-
-.. code-block:: ini
-
-   OBJECT_STORAGE_ENDPOINT=http://localhost:9000
-   OBJECT_STORAGE_ACCESS_KEY=minioadmin
-   OBJECT_STORAGE_SECRET_KEY=minioadmin
-   OBJECT_STORAGE_BUCKET=meta-vis
-
-- **OBJECT_STORAGE_ENDPOINT** - S3 service endpoint (MinIO, AWS S3, etc.)
-- **OBJECT_STORAGE_ACCESS_KEY** - Access key ID
-- **OBJECT_STORAGE_SECRET_KEY** - Secret access key
-- **OBJECT_STORAGE_BUCKET** - Bucket name to store blobs in
-
-For AWS S3:
-
-.. code-block:: ini
-
-   OBJECT_STORAGE_ENDPOINT=https://s3.amazonaws.com
-   OBJECT_STORAGE_ACCESS_KEY=<your-access-key>
-   OBJECT_STORAGE_SECRET_KEY=<your-secret-key>
-   OBJECT_STORAGE_BUCKET=<your-bucket-name>
-
-See :doc:`object-storage` for details.
-
-Example configuration
-=====================
-
-Development setup:
-
-.. code-block:: ini
-
-   MONGODB_HOST=localhost
-   MONGODB_PORT=27017
-   MONGODB_DB_NAME=meta-vis-dev
-   MONGODB_USERNAME=meta_vis_app
-   MONGODB_PASSWORD=devpassword123
-   MONGO_ROOT_PASSWORD=rootpassword456
-   MONGODB_AUTH_SOURCE=admin
-
-   APP_ENV=development
-   LOG_LEVEL=debug
-
-   JWT_SECRET=super-secret-jwt-key-change-in-production
-
-Production setup (with S3):
-
-.. code-block:: ini
-
-   MONGODB_HOST=mongodb.prod.internal
-   MONGODB_PORT=27017
-   MONGODB_DB_NAME=meta-vis-prod
-   MONGODB_USERNAME=meta_vis_app
-   MONGODB_PASSWORD=<strong-password>
-   MONGO_ROOT_PASSWORD=<strong-password>
-   MONGODB_AUTH_SOURCE=admin
-
-   APP_ENV=production
-   LOG_LEVEL=warning
-
-   JWT_SECRET=<very-long-random-string>
-
-   OBJECT_STORAGE_ENDPOINT=https://s3.amazonaws.com
-   OBJECT_STORAGE_ACCESS_KEY=<access-key>
-   OBJECT_STORAGE_SECRET_KEY=<secret-key>
-   OBJECT_STORAGE_BUCKET=meta-vis-prod
+   # JWT_SECRET, MongoDB passwords, anything else random
+   python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 Best practices
 ==============
 
-1. **Never commit ``.env`` to version control** - It contains secrets
-2. **Use strong passwords** - Especially for production
-3. **Rotate JWT_SECRET regularly** - Invalidates all existing tokens
-4. **Use environment-specific .env files** - ``.env.dev``, ``.env.prod``, etc.
-5. **Use a secrets management system** - In production, use Docker secrets, Kubernetes secrets, or a dedicated secrets manager
+1. Never commit ``.env``, ``.env.prod``, or ``.env.stage``. The ``.example``
+   templates are the only env files that belong in git.
+2. Use distinct ``MONGODB_DB_NAME`` values per environment so a misconfigured
+   client cannot quietly write into the wrong database.
+3. ``CORS_ORIGINS`` is an allowlist — list every public origin explicitly.
+   Wildcards are not accepted.
+4. In production, source secrets from your platform's secret store
+   (Docker secrets, Kubernetes Secrets, Vault) rather than a literal
+   ``.env.prod`` file on disk.
 
 Next steps
 ==========
 
-- :doc:`docker-compose` - Manage services
-- :doc:`object-storage` - Configure external storage
-- :doc:`production` - Production deployment
+- :doc:`local-dev` — getting the dev stack running
+- :doc:`object-storage` — when to switch from MongoDB blobs to S3
+- :doc:`production` — production deployment

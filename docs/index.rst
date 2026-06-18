@@ -90,7 +90,7 @@ For clinicians
 For administrators
 ==================
 
-- :doc:`deployment/docker-compose`
+- :doc:`deployment/local-dev`
 - :doc:`deployment/environment`
 - :doc:`administration/ingestion`
 - :doc:`administration/taxonomy-reference`
@@ -127,7 +127,7 @@ Reference
    :maxdepth: 2
    :caption: Deployment
 
-   deployment/docker-compose
+   deployment/local-dev
    deployment/environment
    deployment/object-storage
    deployment/production

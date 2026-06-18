@@ -25,28 +25,27 @@ MinIO / S3 backend
 
 Store blobs in S3-compatible object storage, keeping MongoDB lean and fast.
 
-Enabling MinIO (included with docker-compose)
-==============================================
+In local dev (included with the dev stack)
+==========================================
 
-1. Uncomment the storage variables in ``backend/.env``:
+The dev compose file already runs MinIO — ``make up`` starts it alongside
+MongoDB and the app containers. To make the backend actually use it instead
+of the MongoDB ``blobs`` collection, set the four ``OBJECT_STORAGE_*``
+variables in ``backend/.env``:
 
-   .. code-block:: ini
+.. code-block:: ini
 
-      OBJECT_STORAGE_ENDPOINT=http://localhost:9000
-      OBJECT_STORAGE_ACCESS_KEY=minioadmin
-      OBJECT_STORAGE_SECRET_KEY=minioadmin
-      OBJECT_STORAGE_BUCKET=meta-vis
+   OBJECT_STORAGE_ENDPOINT=http://localhost:9000
+   OBJECT_STORAGE_ACCESS_KEY=<your-key>
+   OBJECT_STORAGE_SECRET_KEY=<your-secret>
+   OBJECT_STORAGE_BUCKET=meta-vis
 
-2. Start MinIO:
+(Inside the compose network, ``docker-compose.yml`` overrides the endpoint
+to ``http://minio:9000`` automatically — you only need the host-facing
+endpoint above for bare-metal dev.)
 
-   .. code-block:: bash
-
-      cd backend
-      docker compose up -d minio
-
-3. Restart the backend - it auto-detects the env vars and switches to S3 backend
-
-MinIO console is available at ``http://localhost:9001`` with the same credentials.
+Restart the backend (``make restart`` or ``make down && make up``). The MinIO
+console is at ``http://localhost:9001``.
 
 Using AWS S3 or other S3-compatible services
 =============================================
@@ -121,5 +120,6 @@ Best practices
 Next steps
 ==========
 
+- :doc:`local-dev` - Run the dev stack
 - :doc:`environment` - Configure environment variables
 - :doc:`production` - Production deployment considerations
