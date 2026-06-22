@@ -66,6 +66,12 @@ async def connect_db():
 
     _blob_store = make_blob_store(client[settings.mongodb_db_name])
 
+    # Verify the audit pipeline end-to-end. Must run after _ensure_indexes()
+    # so the audit_log indexes exist before we write the sentinel.
+    from app.audit import audit_selftest
+
+    await audit_selftest(client[settings.mongodb_db_name])
+
 
 @asynccontextmanager
 async def maybe_transaction(
