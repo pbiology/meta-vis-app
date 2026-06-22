@@ -68,7 +68,7 @@ async def log_audit_event(
         await db["audit_log"].insert_one(doc.copy())
     except Exception:  # noqa: BLE001 — audit must never crash the caller (see docstring)
         _audit_insert_failures += 1
-        logger.error(
+        logger.exception(
             "Failed to write audit event to database",
             extra={
                 "action": action,
@@ -78,7 +78,6 @@ async def log_audit_event(
                 "outcome": outcome,
                 "audit_insert_failures_total": _audit_insert_failures,
             },
-            exc_info=True,
         )
 
 
