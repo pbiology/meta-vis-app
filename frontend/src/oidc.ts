@@ -8,8 +8,13 @@
 
 import { UserManager, WebStorageStateStore } from "oidc-client-ts";
 
-const authority = import.meta.env.VITE_OIDC_AUTHORITY as string;
-const clientId = import.meta.env.VITE_OIDC_CLIENT_ID as string;
+// Runtime env vars injected by docker-entrypoint.d/10-inject-env.sh take
+// precedence over values baked in at build time.
+const runtimeEnv = (globalThis as unknown as { __ENV__?: Record<string, string> }).__ENV__ ?? {};
+const runtimeOr = (key: string) => runtimeEnv[key] || (import.meta.env[key] as string);
+
+const authority = runtimeOr("VITE_OIDC_AUTHORITY");
+const clientId = runtimeOr("VITE_OIDC_CLIENT_ID");
 
 if (!authority || !clientId) {
   // Surface misconfiguration loudly during dev — the only remedy is to set
@@ -21,10 +26,10 @@ export const userManager = new UserManager({
   authority,
   client_id: clientId,
   redirect_uri:
-    (import.meta.env.VITE_OIDC_REDIRECT_URI as string | undefined) ??
+    runtimeOr("VITE_OIDC_REDIRECT_URI") ??
     `${globalThis.location.origin}/auth/callback`,
   post_logout_redirect_uri:
-    (import.meta.env.VITE_OIDC_POST_LOGOUT_REDIRECT_URI as string | undefined) ??
+    runtimeOr("VITE_OIDC_POST_LOGOUT_REDIRECT_URI") ??
     globalThis.location.origin,
   userStore: new WebStorageStateStore({ store: globalThis.localStorage }),
   monitorSession: false,
