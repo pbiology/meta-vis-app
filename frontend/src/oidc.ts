@@ -26,11 +26,9 @@ export const userManager = new UserManager({
   authority,
   client_id: clientId,
   redirect_uri:
-    runtimeOr("VITE_OIDC_REDIRECT_URI") ??
-    `${globalThis.location.origin}/auth/callback`,
+    runtimeOr("VITE_OIDC_REDIRECT_URI") ?? `${globalThis.location.origin}/auth/callback`,
   post_logout_redirect_uri:
-    runtimeOr("VITE_OIDC_POST_LOGOUT_REDIRECT_URI") ??
-    globalThis.location.origin,
+    runtimeOr("VITE_OIDC_POST_LOGOUT_REDIRECT_URI") ?? globalThis.location.origin,
   userStore: new WebStorageStateStore({ store: globalThis.localStorage }),
   monitorSession: false,
 });
