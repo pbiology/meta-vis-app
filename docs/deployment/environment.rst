@@ -34,8 +34,17 @@ runtime at it via ``env_file:`` in ``docker-compose.prod.yml``.
 
 The frontend follows the same pattern: ``frontend/.env.example`` (committed
 template), ``frontend/.env`` (gitignored dev config), ``frontend/.env.prod``
-(gitignored, used at image-build time). Frontend variables are **baked into
-the bundle at build time** by Vite — they are not runtime-configurable.
+(gitignored, used at image-build time). Vite bakes these into the bundle at
+build time. The prod image (``frontend/Dockerfile.prod``) additionally
+ships an entrypoint script
+(``frontend/docker-entrypoint.d/10-inject-env.sh``) that reads the
+``VITE_OIDC_*`` keys from the container's environment at startup and
+writes them into ``/usr/share/nginx/html/config.js``; the SPA loads that
+file before its main bundle and any value found there overrides the
+baked-in default. This means OIDC config can be set per environment at
+deploy time without a rebuild — see :doc:`production` for the deploy
+pattern. ``VITE_API_PROXY_TARGET`` is dev-only and is *not* part of this
+runtime-override path.
 
 Backend variables
 =================
@@ -152,9 +161,12 @@ Frontend variables
 ==================
 
 Vite reads ``frontend/.env`` for ``npm run dev`` and ``frontend/.env.prod``
-(or ``.env.stage``) for image builds via the ``--mode`` flag. **All ``VITE_*``
-variables are baked into the bundle at build time** — you cannot change them
-after the image is built.
+(or ``.env.stage``) for image builds via the ``--mode`` flag. ``VITE_*``
+values are baked into the bundle at build time, but the prod image's
+startup script re-reads the ``VITE_OIDC_*`` keys below from the
+container's environment and overrides the baked-in values with them.
+``VITE_API_PROXY_TARGET`` is dev-only and is *not* covered by the
+runtime override.
 
 ====================================  ==========  ==============================================================
 Variable                              Required    Description
@@ -164,7 +176,9 @@ Variable                              Required    Description
 ``VITE_OIDC_REDIRECT_URI``            yes         OIDC callback URL. ``<frontend-origin>/auth/callback``.
 ``VITE_OIDC_POST_LOGOUT_REDIRECT_URI``  yes       Where to land after logout. Usually the SPA root.
 ``VITE_OIDC_ROLE_CLIENT``             opt         KC client whose client-roles drive UI authz. Defaults to
-                                                  ``VITE_OIDC_CLIENT_ID``.
+                                                  ``VITE_OIDC_CLIENT_ID``. Build-time only — the runtime
+                                                  override script forwards the four ``VITE_OIDC_*`` keys
+                                                  above but not this one.
 ``VITE_API_PROXY_TARGET``             dev only    Where ``npm run dev`` proxies ``/api/*`` calls. Compose
                                                   overrides this to ``http://backend:8000``. Production
                                                   builds ignore it — the prod nginx config does API proxying.

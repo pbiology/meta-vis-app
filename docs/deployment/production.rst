@@ -36,8 +36,13 @@ Pre-deployment checklist
       :ref:`prod-keycloak`)
 - [ ] TLS certificates issued for the frontend and backend hostnames
 - [ ] ``backend/.env.prod`` populated from ``backend/.env.example``
-- [ ] ``frontend/.env.prod`` populated from ``frontend/.env.example``
-- [ ] Frontend image rebuilt with the production ``.env.prod`` baked in
+- [ ] Frontend OIDC config supplied by **one** of:
+
+      - ``frontend/.env.prod`` populated from ``frontend/.env.example`` and
+        the frontend image rebuilt with those values baked in, **or**
+      - ``VITE_OIDC_*`` set as container env vars on the frontend service in
+        ``docker-compose.prod.yml`` (no rebuild needed; see
+        :ref:`prod-frontend-config`)
 - [ ] Object storage decided (MongoDB blobs vs S3) and configured
 - [ ] Reverse-proxy config in place, including ``X-Forwarded-*`` headers
 - [ ] Log aggregation forwarding the backend's stdout off the host
@@ -101,11 +106,12 @@ By default the images are tagged
 
 .. important::
 
-   **The frontend image is built with its config baked in.** The frontend
-   build reads ``frontend/.env.prod`` (loaded automatically by Vite's
-   ``--mode prod``) and the resulting bundle hardcodes the OIDC authority,
-   API URL, etc. If those values change, you must rebuild the image — there
-   is no runtime override.
+   **The frontend build bakes ``frontend/.env.prod`` values into the
+   bundle.** The bundle hardcodes the OIDC authority, redirect URIs, etc.
+   For the OIDC keys this default is overridable at deploy time — see
+   :ref:`prod-frontend-config`. Any ``VITE_*`` value not covered by the
+   runtime-override script (e.g. ``VITE_OIDC_ROLE_CLIENT``) still requires
+   a rebuild to change.
 
 The ``:prod`` tag is a moving pointer. The Makefile target overwrites it on
 every build. For traceability, also push an immutable versioned tag
@@ -124,11 +130,19 @@ Copy the canonical template and fill it in:
 
 See :doc:`environment` for the full list of variables and which are required.
 
+.. _prod-frontend-config:
+
 Configuring the frontend
 ========================
 
-The frontend image is built with its config inside. Before
-``make image-frontend-prod``:
+The frontend OIDC config can be supplied two ways. Pick one — they are not
+mutually exclusive, but runtime values override baked-in ones, so the
+deploy-time path always wins when both are set.
+
+Option A — bake values into the image at build time
+----------------------------------------------------
+
+Before ``make image-frontend-prod``:
 
 .. code-block:: bash
 
@@ -139,7 +153,36 @@ The frontend image is built with its config inside. Before
    #   VITE_OIDC_REDIRECT_URI=https://<frontend-host>/auth/callback
    #   VITE_OIDC_POST_LOGOUT_REDIRECT_URI=https://<frontend-host>/
 
-Then run the build. The values above are baked into the bundle.
+Then run the build. The values above are baked into the bundle. You'll
+need a fresh image build per environment whose OIDC config differs.
+
+Option B — inject values at deploy time
+---------------------------------------
+
+The prod image ships a startup script
+(``frontend/docker-entrypoint.d/10-inject-env.sh``) that reads the four
+``VITE_OIDC_*`` keys from the container's environment and writes them
+into ``/usr/share/nginx/html/config.js`` before nginx starts. The SPA
+loads that file before its main bundle and prefers those values over the
+ones baked in at build time. So the same image can be deployed to
+several environments and pointed at different realms via env vars:
+
+.. code-block:: yaml
+
+   # docker-compose.prod.yml
+   services:
+     frontend:
+       image: docker.io/clinicalgenomics/metavis-frontend:prod
+       environment:
+         VITE_OIDC_AUTHORITY: "https://<kc-host>/realms/<realm>"
+         VITE_OIDC_CLIENT_ID: "meta-vis-frontend"
+         VITE_OIDC_REDIRECT_URI: "https://<frontend-host>/auth/callback"
+         VITE_OIDC_POST_LOGOUT_REDIRECT_URI: "https://<frontend-host>/"
+
+If you go this route you can leave the ``VITE_OIDC_*`` lines in
+``frontend/.env.prod`` empty (the build still needs the file to exist).
+``VITE_OIDC_ROLE_CLIENT`` is **not** forwarded by the script and must be
+baked in if you need to override its default.
 
 Running the stack
 =================

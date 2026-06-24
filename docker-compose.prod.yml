@@ -11,9 +11,13 @@
 # Configuration:
 #   backend/.env.prod  — gitignored. Copy backend/.env.example, fill in
 #                        real values for your deploy (MongoDB URI, KC issuer,
-#                        CORS origin, secrets). The frontend image already
-#                        has its config baked in at build time; see
-#                        frontend/Dockerfile.prod + frontend/.env.prod.
+#                        CORS origin, secrets).
+#   Frontend OIDC      — either baked into the image at build time via
+#                        frontend/.env.prod (see frontend/Dockerfile.prod),
+#                        or injected at deploy time via VITE_OIDC_* env vars
+#                        on the frontend service below (the image's entrypoint
+#                        writes them into /usr/share/nginx/html/config.js at
+#                        container start, and they override any baked values).
 #
 # In this example, MongoDB lives on a separate VM and is reached via
 # MONGODB_URI in backend/.env.prod. No MinIO: blob_store falls back to the
@@ -61,6 +65,16 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    # Optional: inject OIDC config at deploy time instead of baking it into
+    # the image. The entrypoint script writes these into a runtime config.js
+    # that the SPA reads on load; any value set here overrides what was baked
+    # in via frontend/.env.prod at build time. Leave the block commented to
+    # keep using the baked-in values.
+    # environment:
+    #   VITE_OIDC_AUTHORITY: "https://<kc-host>/realms/<realm>"
+    #   VITE_OIDC_CLIENT_ID: "meta-vis-frontend"
+    #   VITE_OIDC_REDIRECT_URI: "https://<frontend-host>/auth/callback"
+    #   VITE_OIDC_POST_LOGOUT_REDIRECT_URI: "https://<frontend-host>/"
     # Bind to loopback only — the host nginx forwards public traffic here.
     ports:
       - "127.0.0.1:8080:8080"

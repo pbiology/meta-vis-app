@@ -63,7 +63,10 @@ claim drives UI authz (``reader`` / ``writer`` / ``admin``) — there are no
 local credentials.
 
 The Vite-bundled OIDC config (authority, client id, redirect URIs) is
-**baked into the build**. Changing it means rebuilding the image. See
+baked into the build by default. The prod image also reads the same
+``VITE_OIDC_*`` keys from the container's environment at startup and
+overrides the baked-in values with those, so the same image can be
+re-pointed at a different realm without rebuilding. See
 :doc:`../deployment/environment` for which ``VITE_*`` variables matter.
 
 Backend
