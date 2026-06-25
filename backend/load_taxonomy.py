@@ -43,14 +43,26 @@ BATCH_SIZE = 10_000
 
 
 def _build_mongo_url() -> str:
-    username = os.getenv("MONGO_INITDB_ROOT_USERNAME", "admin")
-    password = os.getenv("MONGO_ROOT_PASSWORD")
+    # Env var names align with the backend's discrete-field config in
+    # `backend/.env.example` so the same `.env` can drive both. `MONGODB_URI`
+    # is intentionally not honored here — this script is invoked from a
+    # systemd unit on the HPC that supplies discrete fields.
+    username = os.getenv("MONGODB_USERNAME")
+    password = os.getenv("MONGODB_PASSWORD")
     host = os.getenv("MONGODB_HOST", "localhost")
     port = os.getenv("MONGODB_PORT", "27017")
-    if password:
+    auth_source = os.getenv("MONGODB_AUTH_SOURCE", "admin")
+
+    if bool(username) != bool(password):
+        raise RuntimeError(
+            "MONGODB_USERNAME and MONGODB_PASSWORD must be set together "
+            "(or both unset for an unauthenticated connection)."
+        )
+
+    if username:
         return (
             f"mongodb://{username}:{password}@{host}:{port}"
-            f"/?authSource=admin&directConnection=true"
+            f"/?authSource={auth_source}&directConnection=true"
         )
     return f"mongodb://{host}:{port}/?directConnection=true"
 
