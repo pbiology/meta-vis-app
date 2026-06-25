@@ -107,9 +107,11 @@ Variable                      Required    Description
 ``KEYCLOAK_ISSUER``           yes         Realm public URL. Must equal the ``iss`` claim of incoming
                                           tokens exactly. The SPA also uses this, so use the
                                           browser-facing hostname.
-``KEYCLOAK_CLIENT_IDS``       yes         Comma-separated ``azp`` allowlist. Defaults cover the SPA
-                                          and the ingest CLI:
-                                          ``meta-vis-frontend,meta-vis-cli``.
+``KEYCLOAK_CLIENT_IDS``       optional    Comma-separated ``azp`` allowlist. Defaults to
+                                          ``meta-vis-frontend,meta-vis-cli`` (SPA + ingest CLI). Only
+                                          set this to narrow or extend the allowlist; do not drop
+                                          ``meta-vis-cli`` unless you also intend to block
+                                          ``ingest.py`` uploads.
 ``KEYCLOAK_ROLE_CLIENT``      yes         KC client whose client-roles drive authorization. Tokens
                                           are inspected at
                                           ``resource_access[<role_client>].roles``.
