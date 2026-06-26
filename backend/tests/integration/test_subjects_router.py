@@ -69,7 +69,7 @@ class TestGetSubject:
 
 
 class TestListSubjects:
-    async def test_empty_list(self, client):
+    def test_empty_list(self, client):
         resp = client.get("/api/v1/subjects")
         assert resp.status_code == 200
         data = resp.json()

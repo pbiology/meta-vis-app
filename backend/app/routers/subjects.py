@@ -58,10 +58,10 @@ async def _analysis_counts_by_subject(
 
 @router.get("", summary="List subjects with per-subject analysis counts")
 async def list_subjects(
+    db: Annotated[AsyncIOMotorDatabase, Depends(get_db)],
+    _user: Annotated[dict, Depends(get_current_user)],
     page: int = 1,
     search: Annotated[str, Query(max_length=128)] = "",
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(get_current_user),
 ) -> SubjectsResponse:
     query: dict[str, object] = {}
     if search.strip():
@@ -116,11 +116,15 @@ async def _resolve_subject_oid(
     return doc["_id"] if doc else None
 
 
-@router.get("/{subject_id}/cases", summary="List cases for a subject")
+@router.get(
+    "/{subject_id}/cases",
+    summary="List cases for a subject",
+    responses={404: {"description": "Subject not found"}},
+)
 async def list_subject_cases(
     subject_id: str,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(get_current_user),
+    db: Annotated[AsyncIOMotorDatabase, Depends(get_db)],
+    _user: Annotated[dict, Depends(get_current_user)],
 ) -> list[CaseResponse]:
     oid = await _resolve_subject_oid(db, subject_id)
     if oid is None:

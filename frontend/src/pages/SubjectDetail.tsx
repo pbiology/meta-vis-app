@@ -15,6 +15,12 @@ function analysisLabel(type: unknown): string {
   return "—";
 }
 
+function sexLabel(isLoading: boolean, sex?: string): string {
+  if (isLoading) return "…";
+  if (sex) return SEX_LABELS[sex] ?? sex;
+  return "—";
+}
+
 export default function SubjectDetail() {
   const { subjectId = "" } = useParams();
   const subjectQ = useSubject(subjectId);
@@ -44,7 +50,7 @@ export default function SubjectDetail() {
           <div className="flex flex-col gap-1">
             <span className="text-xs text-gray-400">Sex</span>
             <span className="text-sm text-gray-800">
-              {subjectQ.isLoading ? "…" : subject ? (SEX_LABELS[subject.sex] ?? subject.sex) : "—"}
+              {sexLabel(subjectQ.isLoading, subject?.sex)}
             </span>
           </div>
         </div>
@@ -114,7 +120,7 @@ export default function SubjectDetail() {
                       className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap"
                       title={(c.sample_names ?? []).join(", ") || undefined}
                     >
-                      {c.sample_count ?? 0} sample{(c.sample_count ?? 0) !== 1 ? "s" : ""}
+                      {c.sample_count ?? 0} sample{(c.sample_count ?? 0) === 1 ? "" : "s"}
                       {(c.control_count ?? 0) > 0 && (
                         <span className="text-gray-300 ml-1">+{c.control_count} ctrl</span>
                       )}
