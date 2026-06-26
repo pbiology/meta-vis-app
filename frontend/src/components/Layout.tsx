@@ -82,6 +82,21 @@ export default function Layout() {
             }
           />
           <NavItem
+            to="/subjects"
+            label="Subjects"
+            icon={
+              <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="5" r="2.75" stroke="currentColor" strokeWidth="1.3" />
+                <path
+                  d="M2.5 14c0-2.5 2.46-4 5.5-4s5.5 1.5 5.5 4"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                  strokeLinecap="round"
+                />
+              </svg>
+            }
+          />
+          <NavItem
             to="/samples"
             label="All samples"
             icon={

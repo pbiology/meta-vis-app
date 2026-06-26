@@ -48,6 +48,8 @@ export const defaultHandlers = [
   ),
 
   // subjects
+  http.get(`${API}/subjects`, () => HttpResponse.json({ total: 0, page: 1, pages: 1, items: [] })),
+  http.get(`${API}/subjects/:subjectId/cases`, () => HttpResponse.json([])),
   http.get(`${API}/subjects/:subjectId`, ({ params }) =>
     HttpResponse.json({ subject_id: params.subjectId })
   ),
