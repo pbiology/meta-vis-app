@@ -72,6 +72,9 @@ export interface Sample {
   _id?: string;
   sample_id: string;
   case_id?: string;
+  // True when a metaval analysis was ingested for the parent case. Derived
+  // server-side; lets the UI tell "no metaval run" from "metaval run, no hits".
+  has_metaval?: boolean;
   [key: string]: unknown;
 }
 
