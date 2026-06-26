@@ -32,19 +32,21 @@ async def insert_sample(
     has_krona=False,
     profiles=None,
     case_reviewed=False,
+    metaval_pipeline_info=None,
 ):
-    await db["cases"].insert_one(
-        {
-            "_id": ObjectId(),
-            "case_id": "testcase",
-            "review": {
-                "reviewed": case_reviewed,
-                "reviewed_by": None,
-                "reviewed_at": None,
-                "notes": None,
-            },
-        }
-    )
+    case_doc = {
+        "_id": ObjectId(),
+        "case_id": "testcase",
+        "review": {
+            "reviewed": case_reviewed,
+            "reviewed_by": None,
+            "reviewed_at": None,
+            "notes": None,
+        },
+    }
+    if metaval_pipeline_info is not None:
+        case_doc["metaval_pipeline_info"] = metaval_pipeline_info
+    await db["cases"].insert_one(case_doc)
     result = await db["samples"].insert_one(
         {
             "case_id": "testcase",
@@ -161,6 +163,20 @@ class TestGetSample:
     async def test_invalid_id_returns_422(self, client, fake_db):
         resp = client.get("/api/v1/samples/not-an-objectid")
         assert resp.status_code == 422
+
+    async def test_has_metaval_false_without_metaval(self, client, fake_db):
+        oid, _ = await insert_sample(fake_db, "SRR001")
+        resp = client.get(f"/api/v1/samples/{oid}")
+        assert resp.status_code == 200
+        assert resp.json()["has_metaval"] is False
+
+    async def test_has_metaval_true_when_case_has_metaval(self, client, fake_db):
+        oid, _ = await insert_sample(
+            fake_db, "SRR001", metaval_pipeline_info={"version": "1.0"}
+        )
+        resp = client.get(f"/api/v1/samples/{oid}")
+        assert resp.status_code == 200
+        assert resp.json()["has_metaval"] is True
 
 
 # ---------------------------------------------------------------------------

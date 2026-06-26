@@ -4,6 +4,7 @@ import type { MetavalResult, SampleProfile } from "../../api/types";
 interface SampleMetavalSectionProps {
   classifiers: SampleProfile[];
   metavalResults: MetavalResult[];
+  hasMetavalAnalysis: boolean;
   activeTab: string | null;
   onTabChange: (classifier: string) => void;
   onSelectMetaval: (metavalId: string) => void;
@@ -12,6 +13,7 @@ interface SampleMetavalSectionProps {
 export default function SampleMetavalSection({
   classifiers,
   metavalResults,
+  hasMetavalAnalysis,
   activeTab,
   onTabChange,
   onSelectMetaval,
@@ -57,7 +59,11 @@ export default function SampleMetavalSection({
         )}
       </div>
       {metavalResults.length === 0 ? (
-        <p className="px-4 py-6 text-xs text-gray-300 text-center">No viral taxon found</p>
+        <p className="px-4 py-6 text-xs text-gray-300 text-center">
+          {hasMetavalAnalysis
+            ? "No taxa identified by metaval"
+            : "No metaval analysis associated with this case"}
+        </p>
       ) : (
         <>
           <div className="overflow-x-auto">
@@ -65,7 +71,7 @@ export default function SampleMetavalSection({
               <thead>
                 <tr>
                   <th className="px-4 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100">
-                    Viral taxon
+                    Taxon
                   </th>
                 </tr>
               </thead>
