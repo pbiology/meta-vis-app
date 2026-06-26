@@ -192,6 +192,7 @@ export default function SampleDetailContent({
           <SampleMetavalSection
             classifiers={classifiers}
             metavalResults={metavalResults}
+            hasMetavalAnalysis={!!sample?.has_metaval}
             activeTab={activeTab}
             onTabChange={setActiveTab}
             onSelectMetaval={setActiveMetavalId}
