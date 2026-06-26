@@ -5,6 +5,8 @@ import Login from "./pages/Login";
 import Landing from "./pages/Landing";
 import SampleList from "./pages/SampleList";
 import SampleDetail from "./pages/SampleDetail";
+import SubjectList from "./pages/SubjectList";
+import SubjectDetail from "./pages/SubjectDetail";
 import CaseList from "./pages/CaseList";
 import CaseView from "./pages/CaseView";
 import MetavalDetails from "./pages/MetavalDetails";
@@ -67,6 +69,8 @@ export default function App() {
           >
             <Route path="cases" element={<CaseList />} />
             <Route path="cases/:caseId" element={<LegacyCaseRedirect />} />
+            <Route path="subjects" element={<SubjectList />} />
+            <Route path="subjects/:subjectId" element={<SubjectDetail />} />
             <Route path="samples" element={<SampleList />} />
             <Route path="samples/:sampleId" element={<SampleDetail />} />
             <Route path="samples/:sampleId/metaval/:metavalId" element={<MetavalDetails />} />
