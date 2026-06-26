@@ -16,6 +16,11 @@ Core concepts
    One sequencing sample inside a case. Has its own metadata (type,
    material, subject id) and the per-classifier taxonomic profile.
 
+**Subject**
+   A patient/research subject. One subject can span many cases; each
+   clinical case belongs to exactly one subject. Browse subjects and
+   drill into their cases from the **Subjects** sidebar entry.
+
 **Classifier**
    A taxonomic classification tool. For taxprofiler cases that's
    typically Kraken2, Centrifuge, and/or DIAMOND; for Trana cases it's
@@ -69,6 +74,19 @@ Click a sample name from the case to open the sample page. You get:
 - Read counts and quality metrics.
 - One tab per classifier, each with that classifier's QC summary and a
   taxonomy table for the sample.
+
+Subjects
+========
+
+Sidebar → **Subjects**. One row per subject, showing the subject id,
+sex, and the number of shotgun and amplicon analyses (cases) associated
+with that subject. The list is searchable by subject id.
+
+- Click a row to open the subject page.
+- The subject page shows the basic subject info (id, sex) and a table
+  of every case the subject appears in, with the same core stats as the
+  case list (date, analysis type, platform, samples, review status).
+- Click a case row to open it in a new tab.
 
 Notes
 =====
