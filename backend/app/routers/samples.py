@@ -132,6 +132,13 @@ async def get_sample(
         resource_id=sample_id,
         outcome="success",
     )
+    # Metaval is a case-level analysis; surface whether it ran so the UI can
+    # tell "no metaval run" apart from "metaval run, no taxa found".
+    case = await db["cases"].find_one(
+        {"case_id": doc.get("case_id")},
+        {"metaval_pipeline_info": 1},
+    )
+    doc["has_metaval"] = bool(case and case.get("metaval_pipeline_info"))
     doc = _serialise(doc)
     return SampleResponse.model_validate(doc).model_dump(mode="json")
 

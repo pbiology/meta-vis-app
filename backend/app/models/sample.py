@@ -48,6 +48,11 @@ class SampleResponse(_Base):
     trana: Optional[TranaStats] = None
     profiles: List[ClassifierProfile] = []
     has_krona: bool = False
+    # Derived at read time from the parent case: true when a metaval analysis
+    # was ingested for the case. Lets the UI distinguish "no metaval run" from
+    # "metaval run but no taxa found". Metaval is case-level, so this is the
+    # same for every sample in a case.
+    has_metaval: bool = False
     review: ReviewStatus = ReviewStatus()
     ingested_at: Optional[datetime] = None
 
