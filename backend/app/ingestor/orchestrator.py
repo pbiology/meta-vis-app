@@ -12,6 +12,12 @@ from typing import Any
 from pymongo import ReturnDocument, UpdateOne
 
 from app.database import get_client, maybe_transaction
+from app.ingestor.case_versioning import (
+    assert_subject_matches,
+    demote_previous_analysis,
+    next_analysis_version,
+    upsert_case_identity,
+)
 from app.ingestor.inputs import (
     MultiQCRaw,
     TaxprofilerIngestInputs,
@@ -50,7 +56,12 @@ class _MetavalPrepared:
 
 @dataclass
 class _PreparedIngest:
-    case_doc: dict
+    # Fields for the `cases` upsert — clinical identity, shared by every
+    # analysis of the case.
+    case_identity: dict
+    # Ready-to-insert `case_analysis` document. Its _id is pre-generated so
+    # sample and metaval docs can carry it as `analysis_id`.
+    analysis_doc: dict
     # sample_docs each carry a pre-generated _id and (possibly placeholder)
     # subject_id that is resolved to a real ObjectId inside the transaction.
     sample_docs: list[dict]
@@ -246,6 +257,7 @@ def _build_sample_docs_and_profiles(
     meta: TaxprofilerIngestMeta,
     inputs: TaxprofilerIngestInputs,
     now: datetime,
+    analysis_id: ObjectId,
 ) -> tuple[list[dict], list[dict], dict[str, list[int]]]:
     """Build sample documents, per-classifier profiles, and subject_id groupings.
 
@@ -301,7 +313,12 @@ def _build_sample_docs_and_profiles(
         sample_docs.append(
             {
                 "_id": ObjectId(),
+                "analysis_id": analysis_id,
                 "case_id": meta.case_id,
+                # Set false on the predecessor's samples when the next analysis
+                # is ingested; analytics filter on this rather than excluding
+                # superseded analyses by id.
+                "is_latest_analysis": True,
                 "sample_id": s.sample_id,
                 "sample_source": s.sample_source,
                 "order_date": meta.order_date.isoformat() if meta.order_date else None,
@@ -333,6 +350,8 @@ def _build_sample_docs_and_profiles(
 def _prepare_metaval_result(
     r: MetavalResult,
     case_id: str,
+    analysis_id: ObjectId,
+    version: int,
     sample_name_to_oid: dict[str, ObjectId],
     now: datetime,
 ) -> _MetavalPrepared:
@@ -347,7 +366,8 @@ def _prepare_metaval_result(
         igv_key = None
         if not org.igv_too_large and org.igv_file_path:
             igv_key = (
-                f"igv/{case_id}/{r.sample_name}/{r.classifier}/{org.organism_name}.html"
+                f"igv/{case_id}/v{version}/{r.sample_name}/"
+                f"{r.classifier}/{org.organism_name}.html"
             )
             blob_uploads.append(
                 _BlobUpload(
@@ -375,7 +395,7 @@ def _prepare_metaval_result(
     if vd.type in ("scaffolds", "contigs"):
         if vd.path and Path(vd.path).exists():
             blob_key = (
-                f"verification_data/{case_id}/{r.sample_name}/"
+                f"verification_data/{case_id}/v{version}/{r.sample_name}/"
                 f"{r.classifier}/{r.taxon_name}_{vd.type}.fa"
             )
             blob_uploads.append(
@@ -392,7 +412,7 @@ def _prepare_metaval_result(
         ]:
             if path_val and Path(path_val).exists():
                 blob_key = (
-                    f"verification_data/{case_id}/{r.sample_name}/"
+                    f"verification_data/{case_id}/v{version}/{r.sample_name}/"
                     f"{r.classifier}/{r.taxon_name}_read_{read_num}.fa"
                 )
                 blob_uploads.append(
@@ -406,6 +426,7 @@ def _prepare_metaval_result(
     sample_object_id = sample_name_to_oid.get(r.sample_name)
 
     doc = {
+        "analysis_id": analysis_id,
         "case_id": case_id,
         "sample_id": sample_object_id,
         "sample_name": r.sample_name,
@@ -421,11 +442,22 @@ def _prepare_metaval_result(
 
 
 async def _prepare_taxprofiler_ingest(
-    meta: TaxprofilerIngestMeta, inputs: TaxprofilerIngestInputs, now: datetime
+    meta: TaxprofilerIngestMeta,
+    inputs: TaxprofilerIngestInputs,
+    now: datetime,
+    version: int,
 ) -> _PreparedIngest:
     """Phase 1: build every Mongo doc + blob payload purely from already-parsed
     inputs. No filesystem reads except for metaval IGV/verification-data files,
-    which the loader extracted into the request's tempdir."""
+    which the loader extracted into the request's tempdir.
+
+    ``version`` is resolved against the DB by the caller because blob keys are
+    namespaced per analysis version, so it has to be known before this phase.
+    """
+    # Pre-generated so sample and metaval docs can reference this analysis
+    # before it is inserted, exactly as sample _ids already work.
+    analysis_id = ObjectId()
+
     krona_uploads: list[_BlobUpload] = []
     classifier_docs: list[dict] = []
     for clf in meta.classifiers:
@@ -435,7 +467,7 @@ async def _prepare_taxprofiler_ingest(
             krona_id = clf.name
             krona_uploads.append(
                 _BlobUpload(
-                    key=f"krona/{meta.case_id}/{clf.name}.html",
+                    key=f"krona/{meta.case_id}/v{version}/{clf.name}.html",
                     content=krona_content,
                 )
             )
@@ -444,7 +476,7 @@ async def _prepare_taxprofiler_ingest(
     multiqc_upload: _BlobUpload | None = None
     if inputs.multiqc_html is not None:
         multiqc_upload = _BlobUpload(
-            key=f"multiqc/{meta.case_id}/report.html",
+            key=f"multiqc/{meta.case_id}/v{version}/report.html",
             content=inputs.multiqc_html,
         )
 
@@ -455,19 +487,27 @@ async def _prepare_taxprofiler_ingest(
     )
 
     sample_docs, all_profiles, subject_refs = _build_sample_docs_and_profiles(
-        meta, inputs, now
+        meta, inputs, now, analysis_id
     )
 
-    sample_ids = [doc["_id"] for doc in sample_docs]
     sample_name_to_oid = {doc["sample_id"]: doc["_id"] for doc in sample_docs}
     has_krona = bool(inputs.krona_html)
 
-    case_doc = {
+    case_identity = {
         "case_id": meta.case_id,
         "ticket_id": meta.ticket_id,
         "order_date": meta.order_date.isoformat() if meta.order_date else None,
+    }
+
+    analysis_doc = {
+        "_id": analysis_id,
+        "case_id": meta.case_id,
+        "version": version,
+        "is_latest": True,
         "ingested_at": now,
-        "sample_ids": sample_ids,
+        # Denormalised from the case so the list sort stays index-covered on
+        # this collection; a re-sequencing may carry its own, later order date.
+        "order_date": meta.order_date.isoformat() if meta.order_date else None,
         "sample_count": sample_count,
         "control_count": control_count,
         "sample_names": sample_names,
@@ -485,6 +525,7 @@ async def _prepare_taxprofiler_ingest(
             "reviewed_at": None,
             "notes": None,
         },
+        "report_selections": {},
     }
 
     metaval_prepared: list[_MetavalPrepared] = []
@@ -501,6 +542,8 @@ async def _prepare_taxprofiler_ingest(
                             _prepare_metaval_result,
                             r,
                             meta.case_id,
+                            analysis_id,
+                            version,
                             sample_name_to_oid,
                             now,
                         )
@@ -510,7 +553,8 @@ async def _prepare_taxprofiler_ingest(
             )
 
     return _PreparedIngest(
-        case_doc=case_doc,
+        case_identity=case_identity,
+        analysis_doc=analysis_doc,
         sample_docs=sample_docs,
         subject_refs=subject_refs,
         subject_sex=_collect_subject_sex(meta.samples),
@@ -576,23 +620,40 @@ async def _commit_prepared(
         for idx in indices:
             prepared.sample_docs[idx]["subject_id"] = oid
 
-    # 2. Case — unique index on case_id enforces atomicity inside the txn
-    case_doc = dict(prepared.case_doc)
-    if prepared.metaval_pipeline_info is not None:
-        case_doc["metaval_pipeline_info"] = prepared.metaval_pipeline_info
-    case_doc["subject_id"] = (
+    subject_oid = (
         subject_map[prepared.case_subject_id]
         if prepared.case_subject_id is not None
         else None
     )
-    await db["cases"].insert_one(case_doc, session=session)
+    case_id = prepared.case_identity["case_id"]
 
-    # 3. Samples — pre-generated _ids ensure case_doc.sample_ids references
-    #    exactly these documents.
+    # 2. Case identity — created on the first ingest, refreshed on later ones.
+    await upsert_case_identity(
+        db,
+        prepared.case_identity,
+        subject_oid,
+        prepared.analysis_doc["ingested_at"],
+        session,
+    )
+
+    # 3. Demote the previous analysis BEFORE inserting the new one. The partial
+    #    unique index allows a single latest analysis per case and MongoDB
+    #    rejects the violation at write time, so the reverse order would fail on
+    #    every re-sequencing.
+    await demote_previous_analysis(db, case_id, session)
+
+    # 4. The new analysis — unique (case_id, version) enforces atomicity inside
+    #    the txn.
+    analysis_doc = dict(prepared.analysis_doc)
+    if prepared.metaval_pipeline_info is not None:
+        analysis_doc["metaval_pipeline_info"] = prepared.metaval_pipeline_info
+    await db["case_analysis"].insert_one(analysis_doc, session=session)
+
+    # 5. Samples — each already carries analysis_id from the prepare phase.
     if prepared.sample_docs:
         await db["samples"].insert_many(prepared.sample_docs, session=session)
 
-    # 4. Metaval results
+    # 6. Metaval results
     if prepared.metaval_prepared:
         await db["metaval_results"].insert_many(
             [m.doc for m in prepared.metaval_prepared], session=session
@@ -663,16 +724,15 @@ async def ingest_taxprofiler_case(
     """
     now = datetime.now(timezone.utc)
 
-    # Pre-check: friendlier error than the transaction-time DuplicateKeyError.
-    # The unique index on case_id still enforces atomicity inside the txn.
-    if await db["cases"].find_one({"case_id": meta.case_id}):
-        raise ValueError(
-            f"Case '{meta.case_id}' already exists. "
-            f"Delete the existing case first, or use a unique case_id."
-        )
+    # Ingesting an existing case appends an analysis rather than failing. Both
+    # checks run before the expensive prepare phase: the subject guard is the
+    # one thing that can silently merge two patients' data, and the version is
+    # needed up front because blob keys are namespaced by it.
+    await assert_subject_matches(db, meta.case_id, _pick_case_subject(meta.samples))
+    version = await next_analysis_version(db, meta.case_id)
 
     t0 = time.perf_counter()
-    prepared = await _prepare_taxprofiler_ingest(meta, inputs, now)
+    prepared = await _prepare_taxprofiler_ingest(meta, inputs, now, version)
     t_prepare = time.perf_counter()
 
     subject_map: dict[str, ObjectId] = {}
@@ -703,6 +763,7 @@ async def ingest_taxprofiler_case(
 
     return {
         "case_id": meta.case_id,
+        "analysis_version": version,
         "samples_ingested": len(prepared.sample_docs),
         "sample_ids": [str(doc["_id"]) for doc in prepared.sample_docs],
     }
@@ -714,14 +775,15 @@ async def ingest_taxprofiler_case(
 
 
 def _prepare_trana_ingest(
-    meta: TranaIngestMeta, inputs: TranaIngestInputs, now: datetime
+    meta: TranaIngestMeta, inputs: TranaIngestInputs, now: datetime, version: int
 ) -> _PreparedIngest:
     pipeline_info = inputs.pipeline_info
+    analysis_id = ObjectId()
 
     multiqc_upload: _BlobUpload | None = None
     if inputs.multiqc_html is not None:
         multiqc_upload = _BlobUpload(
-            key=f"multiqc/{meta.case_id}/report.html",
+            key=f"multiqc/{meta.case_id}/v{version}/report.html",
             content=inputs.multiqc_html,
         )
 
@@ -746,7 +808,7 @@ def _prepare_trana_ingest(
             has_krona_any = True
             krona_uploads.append(
                 _BlobUpload(
-                    key=f"krona/{meta.case_id}/{s.sample_id}.html",
+                    key=f"krona/{meta.case_id}/v{version}/{s.sample_id}.html",
                     content=sample_input.krona_html,
                 )
             )
@@ -780,7 +842,9 @@ def _prepare_trana_ingest(
         sample_docs.append(
             {
                 "_id": ObjectId(),
+                "analysis_id": analysis_id,
                 "case_id": meta.case_id,
+                "is_latest_analysis": True,
                 "sample_id": s.sample_id,
                 "sample_source": s.sample_source,
                 "order_date": (
@@ -804,14 +868,19 @@ def _prepare_trana_ingest(
             }
         )
 
-    sample_ids = [doc["_id"] for doc in sample_docs]
-
-    case_doc: dict[str, Any] = {
+    case_identity: dict[str, Any] = {
         "case_id": meta.case_id,
         "ticket_id": meta.ticket_id,
         "order_date": meta.order_date.isoformat() if meta.order_date else None,
+    }
+
+    analysis_doc: dict[str, Any] = {
+        "_id": analysis_id,
+        "case_id": meta.case_id,
+        "version": version,
+        "is_latest": True,
         "ingested_at": now,
-        "sample_ids": sample_ids,
+        "order_date": meta.order_date.isoformat() if meta.order_date else None,
         "sample_count": sample_count,
         "control_count": control_count,
         "sample_names": sample_names,
@@ -829,10 +898,12 @@ def _prepare_trana_ingest(
             "reviewed_at": None,
             "notes": None,
         },
+        "report_selections": {},
     }
 
     return _PreparedIngest(
-        case_doc=case_doc,
+        case_identity=case_identity,
+        analysis_doc=analysis_doc,
         sample_docs=sample_docs,
         subject_refs=subject_refs,
         subject_sex=_collect_subject_sex(meta.samples),
@@ -851,13 +922,10 @@ async def ingest_trana_case(
     """Atomic ingest of a Trana (16S / ONT / Emu) case. See `ingest_taxprofiler_case`."""
     now = datetime.now(timezone.utc)
 
-    if await db["cases"].find_one({"case_id": meta.case_id}):
-        raise ValueError(
-            f"Case '{meta.case_id}' already exists. "
-            f"Delete the existing case first, or use a unique case_id."
-        )
+    await assert_subject_matches(db, meta.case_id, _pick_case_subject(meta.samples))
+    version = await next_analysis_version(db, meta.case_id)
 
-    prepared = _prepare_trana_ingest(meta, inputs, now)
+    prepared = _prepare_trana_ingest(meta, inputs, now, version)
 
     subject_map: dict[str, ObjectId] = {}
     if prepared.subject_refs:
@@ -873,6 +941,7 @@ async def ingest_trana_case(
 
     return {
         "case_id": meta.case_id,
+        "analysis_version": version,
         "samples_ingested": len(prepared.sample_docs),
         "sample_ids": [str(doc["_id"]) for doc in prepared.sample_docs],
     }
