@@ -30,7 +30,7 @@ export default function CaseReportSection({
     selectionsBySampleId[s.sample_id] = selectedFor(s.sample_id);
   }
 
-  const { data, isLoading, isError } = useReportData(caseId, selectionsBySampleId);
+  const { data, isLoading, isError } = useReportData(caseId, selectionsBySampleId, version);
 
   if (samplesWithSelections.length === 0) {
     return (

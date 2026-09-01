@@ -130,6 +130,96 @@ describe("CaseView review targeting", () => {
     expect(await screen.findByText("contamination or real?")).toBeInTheDocument();
   });
 
+  it("shows the copied report draft without a page refresh", async () => {
+    // v2 starts with an empty draft; v1 has one taxon picked for S1.
+    let v2Selections: Record<string, number[]> = {};
+    server.use(
+      http.get(`${API}/cases/:caseId/analyses/:version`, ({ params }) => {
+        const version = Number(params.version);
+        const analysis =
+          version === 1
+            ? { ...V1, review: { reviewed: false }, report_selections: { S1: [1280] } }
+            : { ...V2, review: { reviewed: false }, report_selections: v2Selections };
+        return HttpResponse.json({
+          case: { case_id: params.caseId, notes: [] },
+          analysis,
+          analyses: [V2, V1],
+        });
+      }),
+      http.get(`${API}/cases/:caseId/analyses/:version/samples`, () =>
+        HttpResponse.json([{ _id: "m1", sample_id: "S1", sample_type: "sample" }])
+      ),
+      http.post(`${API}/cases/:caseId/analyses/:version/report/carry-forward`, () => {
+        v2Selections = { S1: [1280] };
+        return HttpResponse.json({
+          case_id: "CASE-1",
+          version: 2,
+          from_version: 1,
+          applied: v2Selections,
+          dropped: [],
+        });
+      })
+    );
+
+    renderWithProviders(<CaseView />, {
+      route: "/case/CASE-1/analyses/2",
+      routePath: "/case/:caseId/analyses/:version",
+    });
+
+    const sidebar = await screen.findByRole("complementary");
+    await userEvent.click(within(sidebar).getByRole("button", { name: /report/i }));
+
+    // Match the section's own empty state, not the report body's "No taxa
+    // selected." — the latter also shows when profiles carry no matching taxa.
+    const emptyDraft = /open a sample and tick taxa/i;
+    expect(await screen.findByText(emptyDraft)).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: /copy from v1/i }));
+
+    // The copied draft must appear straight away: it only does if invalidating
+    // the case refetches the detail the report builder hydrates from.
+    await waitFor(() => expect(screen.queryByText(emptyDraft)).not.toBeInTheDocument());
+  });
+
+  it("reads report data from the run being viewed, not the case's latest", async () => {
+    const sampleFetches: string[] = [];
+    server.use(
+      http.get(`${API}/cases/:caseId/analyses/:version`, ({ params }) =>
+        HttpResponse.json({
+          case: { case_id: params.caseId, notes: [] },
+          analysis: {
+            ...V1,
+            review: { reviewed: false },
+            report_selections: { S1: [1280] },
+          },
+          analyses: [V2, V1],
+        })
+      ),
+      http.get(`${API}/cases/:caseId/analyses/:version/samples`, ({ request }) => {
+        sampleFetches.push(new URL(request.url).pathname);
+        return HttpResponse.json([{ _id: "m1", sample_id: "S1", sample_type: "sample" }]);
+      }),
+      // Registered so an unversioned read is recorded rather than 404ing.
+      http.get(`${API}/cases/:caseId/samples`, ({ request }) => {
+        sampleFetches.push(new URL(request.url).pathname);
+        return HttpResponse.json([{ _id: "m9", sample_id: "S9", sample_type: "sample" }]);
+      })
+    );
+
+    renderWithProviders(<CaseView />, {
+      route: "/case/CASE-1/analyses/1",
+      routePath: "/case/:caseId/analyses/:version",
+    });
+
+    const sidebar = await screen.findByRole("complementary");
+    await userEvent.click(within(sidebar).getByRole("button", { name: /report/i }));
+
+    // Read counts and provenance come from whichever samples are fetched, so
+    // an unversioned read here means the report shows the wrong run's numbers.
+    await waitFor(() => expect(sampleFetches.length).toBeGreaterThan(0));
+    expect(sampleFetches).not.toContain("/api/v1/cases/CASE-1/samples");
+    expect(sampleFetches).toContain("/api/v1/cases/CASE-1/analyses/1/samples");
+  });
+
   it("marks the current run '(latest)' in the tab title, even with one analysis", async () => {
     server.use(
       http.get(`${API}/cases/:caseId`, ({ params }) =>

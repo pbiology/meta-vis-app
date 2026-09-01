@@ -213,10 +213,19 @@ function formatReportDate(d: Date): string {
 
 export function useReportData(
   caseId: string,
-  selectionsBySampleId: Record<string, number[]>
+  selectionsBySampleId: Record<string, number[]>,
+  /**
+   * Analysis to report on; null means the case's latest.
+   *
+   * Load-bearing: without it the report renders the latest run's samples,
+   * read counts and pipeline provenance while claiming to be the run the user
+   * is viewing. Sample _ids are per-analysis, so the profile queries below
+   * follow whichever samples this fetches.
+   */
+  version: number | null = null
 ): UseReportDataResult {
-  const caseQ = useCase(caseId);
-  const samplesQ = useCaseSamples(caseId);
+  const caseQ = useCase(caseId, version);
+  const samplesQ = useCaseSamples(caseId, null, version);
   const pathogensQ = usePathogens();
 
   const samples = samplesQ.data ?? [];
