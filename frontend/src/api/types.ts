@@ -100,11 +100,28 @@ export interface CaseDetail {
  * pipeline info, review) side by side. Merging them once here keeps those
  * consumers from having to know which document each field came from.
  */
-export type CaseAtAnalysis = Case & Partial<CaseAnalysis>;
+export type CaseAtAnalysis = Case &
+  Partial<CaseAnalysis> & {
+    /**
+     * The viewed run's own order date, kept separate from the case's.
+     *
+     * `order_date` exists on both documents and means different things: the
+     * case's is when the order was placed, the analysis's is the date supplied
+     * with that run. A plain spread silently picked one, so the case list (run
+     * date) and the case page (case date) disagreed for re-sequenced cases.
+     */
+    analysis_order_date?: string | null;
+  };
 
 /** Flatten a detail response into the merged view model. */
 export function flattenCaseDetail(detail: CaseDetail): CaseAtAnalysis {
-  return { ...detail.analysis, ...detail.case };
+  return {
+    ...detail.analysis,
+    ...detail.case,
+    // Resolve the collision explicitly rather than by spread order.
+    order_date: detail.case.order_date ?? detail.analysis?.order_date ?? null,
+    analysis_order_date: detail.analysis?.order_date ?? null,
+  };
 }
 
 export interface CasesResponse {
