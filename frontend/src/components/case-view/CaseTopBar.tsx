@@ -2,6 +2,8 @@ import { Link } from "react-router-dom";
 import Badge from "../Badge";
 import SignalPill, { type SignalKind } from "../SignalPill";
 import CaseReportPill from "./CaseReportPill";
+import CaseVersionSwitcher from "./CaseVersionSwitcher";
+import type { AnalysisSummary } from "../../api/types";
 
 interface CaseTopBarProps {
   caseId: string;
@@ -16,6 +18,10 @@ interface CaseTopBarProps {
   canReview: boolean;
   reportCount: number;
   onOpenReport: () => void;
+  analyses?: AnalysisSummary[];
+  currentVersion?: number | null;
+  /** True when a newer analysis of this case exists. */
+  isSuperseded?: boolean;
 }
 
 // Top bar shown above the case-specific sidebar. Mimics the design's breadcrumb
@@ -34,7 +40,11 @@ export default function CaseTopBar({
   canReview,
   reportCount,
   onOpenReport,
+  analyses = [],
+  currentVersion = null,
+  isSuperseded = false,
 }: Readonly<CaseTopBarProps>) {
+  const latestVersion = analyses.find((a) => a.is_latest)?.version;
   return (
     <header className="bg-white border-b border-gray-100 px-6 py-3 flex items-center gap-3 flex-shrink-0">
       <Link
@@ -55,6 +65,24 @@ export default function CaseTopBar({
       <span className="text-gray-200">/</span>
       <span className="text-[11px] text-gray-500">Case</span>
       <h1 className="font-mono text-sm font-semibold text-gray-900 m-0">{caseId}</h1>
+      {currentVersion != null && (
+        <CaseVersionSwitcher caseId={caseId} analyses={analyses} currentVersion={currentVersion} />
+      )}
+      {isSuperseded && (
+        <span className="flex items-center gap-1 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-md px-2 py-1">
+          Superseded — a newer analysis exists
+          {latestVersion != null && (
+            <a
+              href={`/cases/${caseId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline font-medium"
+            >
+              open v{latestVersion}
+            </a>
+          )}
+        </span>
+      )}
       {ticketId &&
         (ticketUrl ? (
           <a
