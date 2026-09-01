@@ -8,15 +8,44 @@ import CaseList from "./CaseList";
 
 const API = "*/api/v1";
 
-function caseRow(id: string, extra: Record<string, unknown> = {}) {
+// A list row is a case joined to its latest analysis, with older runs nested.
+function caseRow(id: string, extra: Record<string, unknown> = {}, version = 1) {
   return {
-    case_id: id,
-    sample_count: 2,
-    control_count: 0,
-    analysis_type: "shotgun",
-    sequencing_platform: "illumina",
-    review: { reviewed: false },
-    ...extra,
+    case: { case_id: id, notes: [] },
+    latest: {
+      case_id: id,
+      version,
+      is_latest: true,
+      order_date: "2026-01-01",
+      sample_count: 2,
+      control_count: 0,
+      analysis_type: "shotgun",
+      sequencing_platform: "illumina",
+      review: { reviewed: false },
+      ...extra,
+    },
+    superseded_analyses: [],
+  };
+}
+
+/** A case with an earlier, superseded analysis nested beneath its latest. */
+function caseRowWithHistory(id: string) {
+  const row = caseRow(id, {}, 2);
+  return {
+    ...row,
+    superseded_analyses: [
+      {
+        case_id: id,
+        version: 1,
+        is_latest: false,
+        order_date: "2025-12-01",
+        sample_count: 2,
+        control_count: 0,
+        analysis_type: "shotgun",
+        sequencing_platform: "illumina",
+        review: { reviewed: true, reviewed_by: "alice" },
+      },
+    ],
   };
 }
 
@@ -98,6 +127,33 @@ describe("CaseList", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /delete case$/i }));
     await waitFor(() => expect(deleted).toBe(true));
+  });
+
+  it("collapses superseded analyses until the row is expanded", async () => {
+    server.use(
+      http.get(`${API}/cases`, () =>
+        HttpResponse.json({
+          items: [caseRowWithHistory("CASE-9")],
+          total: 1,
+          pages: 1,
+          ticket_links_enabled: false,
+        })
+      )
+    );
+
+    renderWithProviders(<CaseList />, { route: "/cases" });
+
+    // One row per clinical case, badged with its latest version.
+    await waitFor(() => expect(screen.getByText("CASE-9")).toBeInTheDocument());
+    expect(screen.getByText("v2")).toBeInTheDocument();
+    expect(screen.getByText("latest")).toBeInTheDocument();
+    expect(screen.queryByText("v1")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /show earlier analyses/i }));
+
+    // The superseded run appears, keeping its own review status.
+    expect(await screen.findByText("v1")).toBeInTheDocument();
+    expect(screen.getByText("alice")).toBeInTheDocument();
   });
 
   it("renders the empty state when no cases match", async () => {
