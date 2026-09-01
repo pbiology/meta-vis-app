@@ -155,7 +155,9 @@ export default function CaseView() {
 
   async function handleReview() {
     try {
-      await reviewMutation.mutateAsync({ caseId });
+      // `version` must be passed: omitting it resolves to the case's latest
+      // analysis, which would review the wrong run when viewing a superseded one.
+      await reviewMutation.mutateAsync({ caseId, version });
     } catch {
       alert("Failed to mark as reviewed.");
     }
