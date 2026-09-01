@@ -22,11 +22,17 @@ function makeWrapper() {
 // is only in the DNA sample's kraken2 profile.
 function seedTwoSampleCase() {
   server.use(
+    // GET /cases/{id} returns identity, the analysis being viewed, and every
+    // analysis of the case; the report flattens the first two.
     http.get(`${API}/cases/case-1`, () =>
       HttpResponse.json({
-        case_id: "case-1",
-        subject_id: "subj-1",
-        notes: [{ id: "n1", text: "A note", author: "a", created_at: "2026-04-29" }],
+        case: {
+          case_id: "case-1",
+          subject_id: "subj-1",
+          notes: [{ id: "n1", text: "A note", author: "a", created_at: "2026-04-29" }],
+        },
+        analysis: { case_id: "case-1", version: 1, is_latest: true },
+        analyses: [{ case_id: "case-1", version: 1, is_latest: true }],
       })
     ),
     http.get(`${API}/cases/case-1/samples`, () =>
