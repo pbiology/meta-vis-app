@@ -5,7 +5,8 @@ import { useCase, useCaseSamples } from "../../hooks/queries/useCases";
 import { usePathogens } from "../../hooks/queries/useAlerts";
 import { sampleKeys } from "../../hooks/queries/useSamples";
 import { subjectKeys } from "../../hooks/queries/useSubjects";
-import type { CaseListItem, CaseNote, Sample, SampleProfile } from "../../api/types";
+import type { CaseAtAnalysis, CaseNote, Sample, SampleProfile } from "../../api/types";
+import { flattenCaseDetail } from "../../api/types";
 import { compareBySampleType } from "../../utils/sampleOrdering";
 
 // Shapes consumed by the report renderer. Cells carry reads and pct together
@@ -60,7 +61,7 @@ interface PipelineInfoShape {
 
 export interface ReportData {
   generatedAt: string;
-  caseDoc: CaseListItem;
+  caseDoc: CaseAtAnalysis;
   samples: ReportSampleRow[];
   classifiers: string[];
   // A case belongs to at most one subject (enforced at ingest). null for
@@ -232,7 +233,7 @@ export function useReportData(
   });
 
   const caseSubjectId =
-    typeof caseQ.data?.subject_id === "string" ? caseQ.data.subject_id : undefined;
+    typeof caseQ.data?.case?.subject_id === "string" ? caseQ.data.case.subject_id : undefined;
   const subjectQ = useQuery({
     queryKey: caseSubjectId ? subjectKeys.detail(caseSubjectId) : ["subject", "none"],
     queryFn: () => getSubject(caseSubjectId as string),
@@ -288,7 +289,8 @@ export function useReportData(
     totals
   );
 
-  const caseDoc = caseQ.data as CaseListItem;
+  // The report presents a case at one analysis; flatten so sections read one object.
+  const caseDoc = flattenCaseDetail(caseQ.data);
   const asPipelineConfig = (raw: unknown): PipelineConfig | undefined => {
     const info = raw as PipelineInfoShape | undefined;
     return info?.pipeline_configuration;
