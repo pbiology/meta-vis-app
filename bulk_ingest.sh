@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # bulk_ingest.sh
-# Ingests test cases with random adjective-animal names and order dates
-# spread across 2026-02-01 to 2026-04-06.
+# Ingests test cases with random adjective-animal names and order dates spread
+# across the last WINDOW_DAYS days (default 60), so they land inside the
+# lookback windows the Alerts and NTC trends pages use.
 #
 # Usage:
 #   bash bulk_ingest.sh                           # 10 taxprofiler + 3 trana, CG stage KC + local backend
@@ -13,6 +14,8 @@
 #   bash bulk_ingest.sh 10 3 --reingest 4         # 4 of the 10 get a second analysis
 #   bash bulk_ingest.sh 6 0 --reingest 2 --reingest-depth 2
 #                                                 # 2 cases end up with three analyses each
+#   bash bulk_ingest.sh 0 0 --ntc 20              # 20 NTC-only cases for the trends page
+#   WINDOW_DAYS=30 bash bulk_ingest.sh            # tighter date spread
 #
 # A case can be sequenced more than once, so re-ingesting the same --case-id
 # appends an analysis rather than replacing the case. --reingest exercises that:
@@ -20,6 +23,10 @@
 # dated a week later than the last, which is what the UI groups under the
 # current run. The sample specs (and therefore subject_id) are reused verbatim,
 # so the ingest subject cross-check passes.
+#
+# --ntc N ingests N negative-control-only cases whose kraken2 profiles carry
+# planted recurring contaminants, which is what the NTC trends page looks for.
+# Fixtures are generated on demand by backend/test-data/generate_ntc_test_data.py.
 #
 # Prerequisites (cg env):
 #   KEYCLOAK_CLIENT_SECRET is read from .env in the repo root automatically.
@@ -54,6 +61,7 @@ fi
 ENV="cg"
 REINGEST=0
 REINGEST_DEPTH=1
+NTC_COUNT=0
 POSITIONAL=()
 
 while [[ $# -gt 0 ]]; do
@@ -70,6 +78,10 @@ while [[ $# -gt 0 ]]; do
       REINGEST_DEPTH="$2"
       shift 2
       ;;
+    --ntc)
+      NTC_COUNT="$2"
+      shift 2
+      ;;
     *)
       POSITIONAL+=("$1")
       shift
@@ -80,9 +92,9 @@ done
 COUNT="${POSITIONAL[0]:-10}"
 TRANA_COUNT="${POSITIONAL[1]:-3}"
 
-for n in "$REINGEST" "$REINGEST_DEPTH"; do
+for n in "$REINGEST" "$REINGEST_DEPTH" "$NTC_COUNT"; do
   if ! [[ "$n" =~ ^[0-9]+$ ]]; then
-    echo "Error: --reingest and --reingest-depth take a non-negative integer (got: '$n')" >&2
+    echo "Error: --reingest, --reingest-depth and --ntc take a non-negative integer (got: '$n')" >&2
     exit 1
   fi
 done
@@ -192,6 +204,8 @@ REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 
 TD="$REPO_ROOT/backend/test-data/slowowl"
 TD_TRANA="$REPO_ROOT/backend/test-data/16S_trana"
+TD_NTC="$REPO_ROOT/backend/test-data/ntc"
+NTC_GENERATOR="$REPO_ROOT/backend/test-data/generate_ntc_test_data.py"
 
 INGEST_SCRIPT="$REPO_ROOT/ingest.py"
 
@@ -239,12 +253,17 @@ generate_case_id() {
 # ---------------------------------------------------------------------------
 # Date helpers
 # ---------------------------------------------------------------------------
-START_DATE="2026-04-01"
-END_DATE="2026-05-26"
+# Order dates are relative to today, not pinned. The Alerts and NTC views only
+# look back a fixed window (90 days for NTC trends, 2x the outbreak window for
+# alerts), so a hard-coded range silently ages out and every ingested case
+# lands outside it — the data loads fine but those pages stay empty.
+WINDOW_DAYS="${WINDOW_DAYS:-60}"
 
-start_epoch=$(date -j -f "%Y-%m-%d" "$START_DATE" "+%s")
-end_epoch=$(date -j -f "%Y-%m-%d" "$END_DATE" "+%s")
-range_days=$(( (end_epoch - start_epoch) / 86400 ))
+end_epoch=$(date "+%s")
+start_epoch=$(( end_epoch - WINDOW_DAYS * 86400 ))
+START_DATE=$(date -j -r "$start_epoch" "+%Y-%m-%d")
+END_DATE=$(date -j -r "$end_epoch" "+%Y-%m-%d")
+range_days="$WINDOW_DAYS"
 
 random_date() {
   local offset=$(( RANDOM % (range_days + 1) ))
@@ -379,6 +398,85 @@ if [[ "$TRANA_COUNT" -gt 0 ]]; then
 
   echo ""
   echo "Trana: $t_success ingested, $t_fail failed."
+  echo ""
+fi
+
+# ---------------------------------------------------------------------------
+# NTC-only cases — feed the NTC trends page.
+#
+# Each case is a pair of negative controls whose kraken2 profile carries
+# planted persistent contaminants, so recurring-taxa detection has something to
+# find. Fixtures come from generate_ntc_test_data.py; order dates are decided
+# here rather than baked into the fixtures, so they stay inside the trends
+# lookback window instead of ageing out.
+# ---------------------------------------------------------------------------
+if [[ "$NTC_COUNT" -gt 0 ]]; then
+  if [[ ! -f "$NTC_GENERATOR" ]]; then
+    echo "Error: NTC generator not found: $NTC_GENERATOR" >&2
+    exit 1
+  fi
+
+  # Regenerate whenever the fixtures are missing or too few for this run.
+  have=0
+  [[ -d "$TD_NTC" ]] && have=$(find "$TD_NTC" -name 'ntc_case_*_kraken2.tsv' | wc -l | tr -d ' ')
+  if [[ "$have" -lt "$NTC_COUNT" ]]; then
+    echo "Generating $NTC_COUNT NTC fixture(s) (found $have)..."
+    if ! python "$NTC_GENERATOR" --count "$NTC_COUNT"; then
+      echo "Error: NTC fixture generation failed" >&2
+      exit 1
+    fi
+    echo ""
+  fi
+
+  echo "Ingesting $NTC_COUNT NTC-only case(s) ($START_DATE – $END_DATE)..."
+  echo ""
+
+  n_success=0; n_fail=0
+
+  for i in $(seq 1 "$NTC_COUNT"); do
+    idx=$(printf "%02d" "$i")
+    case_id="ntc-test-$idx"
+    taxpasta="$TD_NTC/ntc_case_${idx}_kraken2.tsv"
+
+    if [[ ! -f "$taxpasta" ]]; then
+      n_fail=$(( n_fail + 1 ))
+      echo "  [ntc $i/$NTC_COUNT] $case_id — missing fixture $taxpasta"
+      continue
+    fi
+
+    # Spread evenly across the window so the trend charts have a time axis.
+    offset=$(( range_days - (i - 1) * range_days / NTC_COUNT ))
+    order_date=$(date -j -r $(( start_epoch + (range_days - offset) * 86400 )) "+%Y-%m-%d")
+    t0=$(ms)
+
+    output=$(python "$INGEST_SCRIPT" taxprofiler \
+      --case-id "$case_id" \
+      --order-date "$order_date" \
+      --multiqc       "$TD/taxprofiler/multiqc/multiqc_data/multiqc_data.json" \
+      --pipeline-info "$TD/taxprofiler/pipeline_info/nf_core_taxprofiler_software_mqc_versions.yml" \
+      --analysis-type "shotgun" \
+      --sequencing-platform "illumina" \
+      --classifier "kraken2 db=k2_pluspf taxpasta=$taxpasta" \
+      --sample "sample_id=NTC-DNA-$idx type=negative_ctrl material=DNA column_kraken2=NTC-DNA-${idx}_k2_pluspf.kraken2.kraken2.report" \
+      --sample "sample_id=NTC-RNA-$idx type=negative_ctrl material=RNA column_kraken2=NTC-RNA-${idx}_k2_pluspf.kraken2.kraken2.report" \
+      --yes \
+      --url "$URL" \
+      "${KC_ARGS[@]}" 2>&1) && rc=0 || rc=$?
+
+    elapsed=$(( $(ms) - t0 ))
+
+    if [[ $rc -eq 0 ]]; then
+      n_success=$(( n_success + 1 ))
+      echo "  [ntc $i/$NTC_COUNT] $case_id — $order_date — ${elapsed}ms (ok: $n_success, failed: $n_fail)"
+    else
+      n_fail=$(( n_fail + 1 ))
+      echo "  [ntc $i/$NTC_COUNT] $case_id — $order_date — ${elapsed}ms FAILED (ok: $n_success, failed: $n_fail)"
+      echo "$output" | sed 's/^/    /'
+    fi
+  done
+
+  echo ""
+  echo "NTC: $n_success ingested, $n_fail failed."
   echo ""
 fi
 
