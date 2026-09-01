@@ -120,19 +120,18 @@ export default function CaseListRow({
           )}
           {!superseded && !hasSiblings && <span className="w-4 flex-shrink-0" />}
           <span>{caseId}</span>
-          {hasSiblings && (
-            <span
-              className={`px-1 py-0.5 rounded text-[10px] font-medium flex-shrink-0 ${
-                superseded ? "bg-gray-100 text-gray-400" : "bg-gray-100 text-gray-600"
-              }`}
-            >
-              v{analysis.version}
-            </span>
-          )}
-          {!superseded && hasSiblings && (
-            <span className="px-1 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 flex-shrink-0">
-              latest
-            </span>
+          {/* Only superseded rows are badged. The current run is the default
+              reading of a case, so labelling it adds noise; the disclosure
+              arrow is what signals that earlier runs exist. */}
+          {superseded && (
+            <>
+              <span className="px-1 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 flex-shrink-0">
+                v{analysis.version}
+              </span>
+              <span className="px-1 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 flex-shrink-0">
+                superseded
+              </span>
+            </>
           )}
           {!superseded && signals.outbreak.has(caseId) && <OutbreakIcon />}
           {!superseded && signals.pathogen.has(caseId) && <PathogenIcon />}

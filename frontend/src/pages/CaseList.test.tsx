@@ -143,17 +143,21 @@ describe("CaseList", () => {
 
     renderWithProviders(<CaseList />, { route: "/cases" });
 
-    // One row per clinical case, badged with its latest version.
+    // One row per clinical case. The current run carries no badge — only
+    // superseded runs are labelled, and they are hidden until expanded.
     await waitFor(() => expect(screen.getByText("CASE-9")).toBeInTheDocument());
-    expect(screen.getByText("v2")).toBeInTheDocument();
-    expect(screen.getByText("latest")).toBeInTheDocument();
     expect(screen.queryByText("v1")).not.toBeInTheDocument();
+    expect(screen.queryByText("v2")).not.toBeInTheDocument();
+    expect(screen.queryByText("superseded")).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /show earlier analyses/i }));
 
-    // The superseded run appears, keeping its own review status.
+    // The earlier run appears, badged and keeping its own review status.
     expect(await screen.findByText("v1")).toBeInTheDocument();
+    expect(screen.getByText("superseded")).toBeInTheDocument();
     expect(screen.getByText("alice")).toBeInTheDocument();
+    // Still nothing on the current run.
+    expect(screen.queryByText("v2")).not.toBeInTheDocument();
   });
 
   it("renders the empty state when no cases match", async () => {
