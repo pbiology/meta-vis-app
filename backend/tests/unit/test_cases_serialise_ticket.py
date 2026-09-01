@@ -3,14 +3,13 @@
 from bson import ObjectId
 
 from app.config import settings
-from app.routers.cases import _serialise_case
+from app.case_access import serialise_case as _serialise_case
 
 
 def make_doc(ticket_id=None):
     doc = {
         "_id": ObjectId(),
         "case_id": "testcase",
-        "sample_ids": [],
     }
     if ticket_id is not None:
         doc["ticket_id"] = ticket_id
