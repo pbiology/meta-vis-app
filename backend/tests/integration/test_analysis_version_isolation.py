@@ -13,7 +13,6 @@
 # differ on purpose.
 
 import pytest
-from bson import ObjectId
 from fastapi.testclient import TestClient
 
 from app.routers.analyses import router as analyses_router
@@ -73,12 +72,20 @@ async def two_analyses(fake_db, fake_blob):
     # Same sample name in both runs, with different read counts — the case that
     # makes "which analysis am I reading?" observable.
     await insert_sample(
-        fake_db, v1, CASE, "S1", is_latest_analysis=False,
+        fake_db,
+        v1,
+        CASE,
+        "S1",
+        is_latest_analysis=False,
         taxprofiler={"classifiers": {"kraken2": {"num_species": 11}}},
         all_taxon_ids=[1280],
     )
     await insert_sample(
-        fake_db, v2, CASE, "S1", is_latest_analysis=True,
+        fake_db,
+        v2,
+        CASE,
+        "S1",
+        is_latest_analysis=True,
         taxprofiler={"classifiers": {"kraken2": {"num_species": 22}}},
         all_taxon_ids=[1280, 573],
     )
@@ -134,8 +141,12 @@ class TestVersionIsolation:
         assert "krona v2" in client.get(f"/api/v1/cases/{CASE}/krona").text
 
     async def test_multiqc_serves_the_requested_run(self, client, two_analyses):
-        assert "multiqc v1" in client.get(f"/api/v1/cases/{CASE}/analyses/1/multiqc").text
-        assert "multiqc v2" in client.get(f"/api/v1/cases/{CASE}/analyses/2/multiqc").text
+        assert (
+            "multiqc v1" in client.get(f"/api/v1/cases/{CASE}/analyses/1/multiqc").text
+        )
+        assert (
+            "multiqc v2" in client.get(f"/api/v1/cases/{CASE}/analyses/2/multiqc").text
+        )
         assert "multiqc v2" in client.get(f"/api/v1/cases/{CASE}/multiqc").text
 
     async def test_report_draft_is_per_run(self, client, two_analyses):
@@ -147,7 +158,9 @@ class TestVersionIsolation:
     async def test_reviewing_one_run_leaves_the_other_untouched(
         self, client, two_analyses
     ):
-        resp = client.patch(f"/api/v1/cases/{CASE}/analyses/2/review", json={"notes": None})
+        resp = client.patch(
+            f"/api/v1/cases/{CASE}/analyses/2/review", json={"notes": None}
+        )
         assert resp.status_code == 200
 
         v1 = client.get(f"/api/v1/cases/{CASE}/analyses/1").json()
@@ -158,7 +171,8 @@ class TestVersionIsolation:
 
     async def test_report_update_targets_only_the_named_run(self, client, two_analyses):
         resp = client.patch(
-            f"/api/v1/cases/{CASE}/analyses/2/report", json={"selections": {"S1": [573]}}
+            f"/api/v1/cases/{CASE}/analyses/2/report",
+            json={"selections": {"S1": [573]}},
         )
         assert resp.status_code == 200
 
@@ -167,7 +181,9 @@ class TestVersionIsolation:
         assert v2["analysis"]["report_selections"] == {"S1": [573]}
         assert v1["analysis"]["report_selections"] == {"S1": [1280]}
 
-    async def test_case_list_shows_one_row_with_the_latest_run(self, client, two_analyses):
+    async def test_case_list_shows_one_row_with_the_latest_run(
+        self, client, two_analyses
+    ):
         body = client.get("/api/v1/cases").json()
         rows = [r for r in body["items"] if r["case"]["case_id"] == CASE]
         assert len(rows) == 1
