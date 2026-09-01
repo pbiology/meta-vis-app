@@ -508,11 +508,14 @@ async def get_taxon_occurrences(
     cutoff = (date.today() - timedelta(days=window_days)).isoformat()
 
     pipeline: list[dict] = [
-        # Scope to the time window and samples that contain the taxon
+        # Scope to the time window and samples that contain the taxon.
+        # Latest analyses only: prevalence counts clinical cases, so a
+        # re-sequenced case must not appear once per run.
         {
             "$match": {
                 "order_date": {"$gte": cutoff},
                 "all_taxon_ids": taxon_id,
+                "is_latest_analysis": True,
             }
         },
         # Unwind profiles to find per-classifier read counts
