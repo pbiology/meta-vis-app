@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from app.auth.utils import get_current_user
 from app.database import get_db
 from app.routers.cases import router as cases_router
+from tests.helpers import insert_case as seed_case
 from app.routers.samples import router as samples_router
 
 
@@ -31,9 +32,7 @@ PATHOLOGICAL = ".*.*.*(.+)+.*"
 
 class TestCasesSearchSanitisation:
     async def test_pathological_regex_is_escaped(self, fake_db):
-        await fake_db["cases"].insert_one(
-            {"_id": ObjectId(), "case_id": "CASE-1", "review": {"reviewed": False}}
-        )
+        await seed_case(fake_db, "CASE-1")
         client = TestClient(_make_app(cases_router, fake_db))
         start = time.perf_counter()
         resp = client.get("/api/v1/cases", params={"search": PATHOLOGICAL})
@@ -44,26 +43,14 @@ class TestCasesSearchSanitisation:
         assert elapsed < 0.5
 
     async def test_literal_match_still_works(self, fake_db):
-        await fake_db["cases"].insert_many(
-            [
-                {
-                    "_id": ObjectId(),
-                    "case_id": "CASE-foo",
-                    "review": {"reviewed": False},
-                },
-                {
-                    "_id": ObjectId(),
-                    "case_id": "CASE-bar",
-                    "review": {"reviewed": False},
-                },
-            ]
-        )
+        await seed_case(fake_db, "CASE-foo")
+        await seed_case(fake_db, "CASE-bar")
         client = TestClient(_make_app(cases_router, fake_db))
         resp = client.get("/api/v1/cases", params={"search": "foo"})
         assert resp.status_code == 200
         body = resp.json()
         assert body["total"] == 1
-        assert body["items"][0]["case_id"] == "CASE-foo"
+        assert body["items"][0]["case"]["case_id"] == "CASE-foo"
 
     def test_search_length_capped(self, fake_db):
         client = TestClient(_make_app(cases_router, fake_db))
@@ -81,9 +68,7 @@ class TestSamplesSearchSanitisation:
                 "case_id": "CASE-1",
             }
         )
-        await fake_db["cases"].insert_one(
-            {"_id": ObjectId(), "case_id": "CASE-1", "review": {"reviewed": False}}
-        )
+        await seed_case(fake_db, "CASE-1")
         client = TestClient(_make_app(samples_router, fake_db))
         start = time.perf_counter()
         resp = client.get("/api/v1/samples", params={"search": PATHOLOGICAL})
