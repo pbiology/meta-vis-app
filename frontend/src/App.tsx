@@ -36,8 +36,10 @@ function ProtectedRoute({ children }: Readonly<{ children: ReactNode }>) {
 // Preserves bookmarks and external links to the legacy /cases/:caseId route by
 // redirecting to the new sidebar-less /case/:caseId page.
 function LegacyCaseRedirect() {
-  const { caseId } = useParams();
-  return <Navigate to={`/case/${caseId}`} replace />;
+  const { caseId, version } = useParams();
+  // Preserve the analysis version when one was addressed.
+  const target = version ? `/case/${caseId}/analyses/${version}` : `/case/${caseId}`;
+  return <Navigate to={target} replace />;
 }
 
 export default function App() {
@@ -59,6 +61,15 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          {/* Same view addressing one analysis of the case rather than its latest. */}
+          <Route
+            path="/case/:caseId/analyses/:version"
+            element={
+              <ProtectedRoute>
+                <CaseView />
+              </ProtectedRoute>
+            }
+          />
 
           <Route
             element={
@@ -69,6 +80,7 @@ export default function App() {
           >
             <Route path="cases" element={<CaseList />} />
             <Route path="cases/:caseId" element={<LegacyCaseRedirect />} />
+            <Route path="cases/:caseId/analyses/:version" element={<LegacyCaseRedirect />} />
             <Route path="subjects" element={<SubjectList />} />
             <Route path="subjects/:subjectId" element={<SubjectDetail />} />
             <Route path="samples" element={<SampleList />} />
