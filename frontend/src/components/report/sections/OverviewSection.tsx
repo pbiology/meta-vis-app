@@ -1,14 +1,14 @@
-import type { CaseListItem } from "../../../api/types";
+import type { CaseAtAnalysis } from "../../../api/types";
 import KeyValueGrid, { type KvPair } from "./KeyValueGrid";
 import SectionHeading from "./SectionHeading";
 
 interface OverviewSectionProps {
-  caseDoc: CaseListItem;
+  caseDoc: CaseAtAnalysis;
   sampleCount: number;
   generatedAt: string;
 }
 
-function readString(doc: CaseListItem, key: string): string | undefined {
+function readString(doc: CaseAtAnalysis, key: string): string | undefined {
   const v = (doc as Record<string, unknown>)[key];
   return typeof v === "string" ? v : undefined;
 }
