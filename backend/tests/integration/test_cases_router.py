@@ -10,7 +10,10 @@ from fastapi.testclient import TestClient
 from mongomock.not_implemented import ignore_feature
 
 from app.routers import cases as cases_module
+from app.routers.analyses import router as analyses_router
 from app.routers.cases import router
+from tests.helpers import insert_case as seed_case
+from tests.helpers import insert_sample as seed_sample
 from tests.helpers import make_test_app
 
 # Mongomock has no real sessions/transactions; treat them as no-ops so the
@@ -48,12 +51,20 @@ def _patch_mongo_client():
 
 @pytest.fixture
 def app(fake_db, fake_blob):
-    return make_test_app(router, fake_db, fake_blob)
+    # Case endpoints span two routers since the split: identity and notes in
+    # `cases`, run-scoped resources (samples, krona, review, report) in
+    # `analyses`.
+    return make_test_app([router, analyses_router], fake_db, fake_blob)
 
 
 @pytest.fixture
 def client(app):
     return TestClient(app)
+
+
+# Thin wrappers over the shared seeders, keeping this file's call signatures.
+# A case is now two documents, and samples hang off the analysis rather than
+# the case, so seeding goes through tests.helpers.
 
 
 async def insert_case(
@@ -64,47 +75,30 @@ async def insert_case(
     analysis_type=None,
     subject_id=None,
 ):
-    doc = {
-        "case_id": case_id,
-        "order_date": order_date,
-        "ingested_at": datetime.now(timezone.utc),
-        "sample_ids": [],
-        "classifiers": [],
-        "has_krona": False,
-        "pipeline_info": None,
-        "sample_count": 0,
-        "control_count": 0,
-        "sample_names": [],
-        "notes": [],
-        "review": {
-            "reviewed": reviewed,
-            "reviewed_by": "alice" if reviewed else None,
-            "reviewed_at": None,
-            "notes": None,
-        },
-        "subject_id": subject_id,
-    }
-    if analysis_type is not None:
-        doc["analysis_type"] = analysis_type
-    result = await db["cases"].insert_one(doc)
-    return result.inserted_id
+    return await seed_case(
+        db,
+        case_id,
+        reviewed=reviewed,
+        order_date=order_date,
+        analysis_type=analysis_type,
+        subject_id=subject_id,
+    )
 
 
 async def insert_sample(db, case_id, sample_id="SRR001", sample_type="sample"):
-    result = await db["samples"].insert_one(
-        {
-            "case_id": case_id,
-            "sample_type": sample_type,
-            "material": "DNA",
-            "sample": {"sample_id": sample_id, "sample_source": "blood"},
-            "taxprofiler": {"fastp": None, "bowtie2": None, "classifiers": {}},
-            "profiles": [],
-            "has_krona": False,
-            "review": {"reviewed": False},
-            "ingested_at": datetime.now(timezone.utc),
-        }
+    analysis = await db["case_analysis"].find_one(
+        {"case_id": case_id, "is_latest": True}
     )
-    return result.inserted_id
+    return await seed_sample(
+        db,
+        analysis["_id"],
+        case_id,
+        sample_id,
+        sample_type=sample_type,
+        sample={"sample_id": sample_id, "sample_source": "blood"},
+        taxprofiler={"fastp": None, "bowtie2": None, "classifiers": {}},
+        has_krona=False,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -162,7 +156,7 @@ class TestListCases:
         resp = client.get("/api/v1/cases")
         items = resp.json()["items"]
         assert len(items) == 1
-        assert items[0]["case_id"] == "speedysnake"
+        assert items[0]["case"]["case_id"] == "speedysnake"
 
     async def test_search_filters_by_case_id(self, client, fake_db):
         await insert_case(fake_db, "speedy")
@@ -170,7 +164,7 @@ class TestListCases:
         resp = client.get("/api/v1/cases?search=speedy")
         items = resp.json()["items"]
         assert len(items) == 1
-        assert items[0]["case_id"] == "speedy"
+        assert items[0]["case"]["case_id"] == "speedy"
 
     async def test_pagination_total_correct(self, client, fake_db):
         for i in range(3):
@@ -189,7 +183,7 @@ class TestGetCase:
         await insert_case(fake_db, "mycase")
         resp = client.get("/api/v1/cases/mycase")
         assert resp.status_code == 200
-        assert resp.json()["case_id"] == "mycase"
+        assert resp.json()["case"]["case_id"] == "mycase"
 
     async def test_unknown_case_returns_404(self, client, fake_db):
         resp = client.get("/api/v1/cases/nonexistent")
@@ -385,7 +379,7 @@ class TestDeleteCase:
 class TestGetCaseKrona:
     async def test_serves_krona_html(self, client, fake_db, fake_blob):
         await insert_case(fake_db, "testcase")
-        await fake_blob.put("krona/testcase/kraken2.html", "<html>krona</html>")
+        await fake_blob.put("krona/testcase/v1/kraken2.html", "<html>krona</html>")
         resp = client.get("/api/v1/cases/testcase/krona?classifier=kraken2")
         assert resp.status_code == 200
         assert "<html>" in resp.text
@@ -401,7 +395,7 @@ class TestGetCaseKrona:
 
     async def test_default_classifier_is_kraken2(self, client, fake_db, fake_blob):
         await insert_case(fake_db, "testcase")
-        await fake_blob.put("krona/testcase/kraken2.html", "<html>krona</html>")
+        await fake_blob.put("krona/testcase/v1/kraken2.html", "<html>krona</html>")
         resp = client.get("/api/v1/cases/testcase/krona")
         assert resp.status_code == 200
 
@@ -422,9 +416,10 @@ class TestListSamplesExtended:
         assert resp.json()[0]["sample"]["sample_id"] == "SRR001"
 
     async def test_profiles_produce_top_taxa(self, client, fake_db):
-        await insert_case(fake_db, "testcase")
+        analysis_id = await insert_case(fake_db, "testcase")
         await fake_db["samples"].insert_one(
             {
+                "analysis_id": analysis_id,
                 "case_id": "testcase",
                 "sample_type": "sample",
                 "material": "DNA",
@@ -461,10 +456,11 @@ class TestListSamplesExtended:
         assert top[0]["name"] == "Staphylococcus"
 
     async def test_subject_id_serialised(self, client, fake_db):
-        await insert_case(fake_db, "testcase")
+        analysis_id = await insert_case(fake_db, "testcase")
         subject_oid = ObjectId()
         await fake_db["samples"].insert_one(
             {
+                "analysis_id": analysis_id,
                 "case_id": "testcase",
                 "subject_id": subject_oid,
                 "sample_type": "sample",
@@ -535,16 +531,10 @@ class TestDeleteNotePermissions:
 
 
 async def _insert_case_with_samples(db, case_id="testcase", sample_ids=("S1", "S2")):
-    await insert_case(db, case_id)
+    analysis_id = await insert_case(db, case_id)
     for sid in sample_ids:
-        await db["samples"].insert_one(
-            {
-                "case_id": case_id,
-                "sample_id": sid,
-                "sample_type": "sample",
-                "ingested_at": datetime.now(timezone.utc),
-            }
-        )
+        await seed_sample(db, analysis_id, case_id, sid)
+    return analysis_id
 
 
 class TestUpdateReport:
@@ -556,7 +546,7 @@ class TestUpdateReport:
         )
         assert resp.status_code == 200
         assert resp.json()["selections"] == {"S1": [11676, 562], "S2": [9606]}
-        doc = await fake_db["cases"].find_one({"case_id": "testcase"})
+        doc = await fake_db["case_analysis"].find_one({"case_id": "testcase"})
         assert doc["report_selections"] == {"S1": [11676, 562], "S2": [9606]}
 
     async def test_replaces_existing_selections(self, client, fake_db):
@@ -570,7 +560,7 @@ class TestUpdateReport:
             json={"selections": {"S2": [42]}},
         )
         assert resp.status_code == 200
-        doc = await fake_db["cases"].find_one({"case_id": "testcase"})
+        doc = await fake_db["case_analysis"].find_one({"case_id": "testcase"})
         assert doc["report_selections"] == {"S2": [42]}
 
     async def test_rejects_unknown_sample_id(self, client, fake_db):
@@ -590,7 +580,9 @@ class TestUpdateReport:
         assert resp.status_code == 404
 
     async def test_reader_forbidden(self, fake_db, fake_blob):
-        app = make_test_app(router, fake_db, fake_blob, role="reader")
+        app = make_test_app(
+            [router, analyses_router], fake_db, fake_blob, role="reader"
+        )
         reader_client = TestClient(app)
         await _insert_case_with_samples(fake_db, "testcase", ("S1",))
         resp = reader_client.patch(
