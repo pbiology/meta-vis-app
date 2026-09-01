@@ -9,10 +9,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.auth.utils import get_current_user
+from app.case_access import ANALYSIS_SUMMARY_PROJECTION, serialise_case
 from app.database import get_db
-from app.models.case import CaseResponse
+from app.models.case import CaseListItem
 from app.models.subject import Subject, SubjectListItem, SubjectsResponse
-from app.routers.cases import _serialise_case
 
 router = APIRouter(prefix="/subjects", tags=["subjects"])
 
@@ -30,29 +30,35 @@ def _try_parse_oid(value: str) -> ObjectId | None:
 async def _analysis_counts_by_subject(
     db: AsyncIOMotorDatabase, subject_oids: list[ObjectId]
 ) -> dict[ObjectId, dict[str, int]]:
-    """Count cases per subject, split by analysis_type.
+    """Count a subject's cases, split by the analysis_type of their latest run.
 
-    Returns ``{subject_oid: {analysis_type: count}}`` for the given subjects.
-    One case == one pipeline run / analysis. Done as a single ``$group`` over
-    ``cases`` (well supported by mongomock-motor) rather than a ``$lookup`` on
-    the subjects pipeline, keeping the data flow easy to follow.
+    Returns ``{subject_oid: {analysis_type: count}}``. ``analysis_type`` lives
+    on the analysis rather than the case — a re-sequencing can legitimately
+    switch platform or assay — so this walks cases to analyses in two steps
+    rather than one ``$group``. Counting only latest analyses keeps a
+    re-sequenced case counted once.
     """
     if not subject_oids:
         return {}
-    pipeline: list[dict] = [
-        {"$match": {"subject_id": {"$in": subject_oids}}},
-        {
-            "$group": {
-                "_id": {"subject_id": "$subject_id", "type": "$analysis_type"},
-                "count": {"$sum": 1},
-            }
-        },
-    ]
+
+    subject_by_case: dict[str, ObjectId] = {
+        doc["case_id"]: doc["subject_id"]
+        async for doc in db["cases"].find(
+            {"subject_id": {"$in": subject_oids}}, {"case_id": 1, "subject_id": 1}
+        )
+    }
+    if not subject_by_case:
+        return {}
+
     counts: dict[ObjectId, dict[str, int]] = {}
-    async for row in db["cases"].aggregate(pipeline):
-        subject_oid = row["_id"]["subject_id"]
-        analysis_type = row["_id"]["type"]
-        counts.setdefault(subject_oid, {})[analysis_type] = row["count"]
+    async for doc in db["case_analysis"].find(
+        {"case_id": {"$in": list(subject_by_case)}, "is_latest": True},
+        {"case_id": 1, "analysis_type": 1},
+    ):
+        subject_oid = subject_by_case[doc["case_id"]]
+        analysis_type = doc.get("analysis_type")
+        bucket = counts.setdefault(subject_oid, {})
+        bucket[analysis_type] = bucket.get(analysis_type, 0) + 1
     return counts
 
 
@@ -125,28 +131,51 @@ async def list_subject_cases(
     subject_id: str,
     db: Annotated[AsyncIOMotorDatabase, Depends(get_db)],
     _user: Annotated[dict, Depends(get_current_user)],
-) -> list[CaseResponse]:
+) -> list[CaseListItem]:
     oid = await _resolve_subject_oid(db, subject_id)
     if oid is None:
         raise HTTPException(status_code=404, detail=f"Subject '{subject_id}' not found")
 
-    # Same sort and per-row defaults as cases.list_cases so the rows render
-    # identically to the Cases list; _serialise_case/CaseResponse are reused to
-    # avoid duplicating the case serialisation contract.
-    docs = (
-        await db["cases"]
-        .find({"subject_id": oid})
+    # One row per clinical case, showing its latest analysis — the same shape
+    # the Cases list renders, so a re-sequenced case appears once here too.
+    # Sorting happens on the analyses because that is where the sort keys live.
+    cases_by_id = {
+        doc["case_id"]: doc async for doc in db["cases"].find({"subject_id": oid})
+    }
+    if not cases_by_id:
+        return []
+
+    latest_docs = (
+        await db["case_analysis"]
+        .find(
+            {"case_id": {"$in": list(cases_by_id)}, "is_latest": True},
+            ANALYSIS_SUMMARY_PROJECTION,
+        )
         .sort([("review.reviewed", 1), ("order_date", -1), ("ingested_at", -1)])
         .to_list(length=None)
     )
 
-    result = []
-    for doc in docs:
-        doc.setdefault("sample_count", 0)
-        doc.setdefault("control_count", 0)
-        doc.setdefault("sample_names", [])
-        result.append(CaseResponse.model_validate(_serialise_case(doc)))
-    return result
+    superseded_by_case: dict[str, list[dict]] = {}
+    async for doc in (
+        db["case_analysis"]
+        .find(
+            {"case_id": {"$in": list(cases_by_id)}, "is_latest": False},
+            ANALYSIS_SUMMARY_PROJECTION,
+        )
+        .sort("version", -1)
+    ):
+        superseded_by_case.setdefault(doc["case_id"], []).append(doc)
+
+    return [
+        CaseListItem.model_validate(
+            {
+                "case": serialise_case(cases_by_id[latest["case_id"]]),
+                "latest": latest,
+                "superseded_analyses": superseded_by_case.get(latest["case_id"], []),
+            }
+        )
+        for latest in latest_docs
+    ]
 
 
 @router.get("/{subject_id}", summary="Get a subject by id")
