@@ -168,46 +168,106 @@ class TestIngestAtomicity:
         )
 
         assert result["case_id"] == "atomic-case"
+        assert result["analysis_version"] == 1
         assert result["samples_ingested"] == 1
 
         case = await fake_db["cases"].find_one({"case_id": "atomic-case"})
         assert case is not None
-        assert len(case["sample_ids"]) == 1
-        assert case["sample_count"] == 1
+
+        analysis = await fake_db["case_analysis"].find_one({"case_id": "atomic-case"})
+        assert analysis is not None
+        assert analysis["version"] == 1
+        assert analysis["is_latest"] is True
+        assert analysis["sample_count"] == 1
 
         sample = await fake_db["samples"].find_one({"sample_id": "SRR001"})
         assert sample is not None
-        assert sample["_id"] == case["sample_ids"][0]
+        assert sample["analysis_id"] == analysis["_id"]
+        assert sample["is_latest_analysis"] is True
 
-    async def test_duplicate_case_id_rejected_without_writes(self, fake_db):
-        await fake_db["cases"].insert_one({"case_id": "atomic-case"})
+    async def test_reingest_appends_a_second_analysis(self, fake_db):
+        """Re-ingesting a case adds a run rather than being rejected."""
+        await orchestrator.ingest_taxprofiler_case(make_meta(), make_inputs(), fake_db)
+        result = await orchestrator.ingest_taxprofiler_case(
+            make_meta(), make_inputs(), fake_db
+        )
 
-        with pytest.raises(ValueError, match="already exists"):
-            await orchestrator.ingest_taxprofiler_case(
-                make_meta(), make_inputs(), fake_db
-            )
+        assert result["analysis_version"] == 2
 
-        assert await fake_db["samples"].count_documents({}) == 0
-        assert await fake_db["taxa"].count_documents({}) == 0
+        # One case, two analyses.
+        assert await fake_db["cases"].count_documents({}) == 1
+        versions = sorted(
+            [
+                doc["version"]
+                async for doc in fake_db["case_analysis"].find(
+                    {"case_id": "atomic-case"}
+                )
+            ]
+        )
+        assert versions == [1, 2]
 
-    async def test_case_doc_written_with_sample_ids_in_single_write(self, fake_db):
-        """case.sample_ids must be populated at insert time, not patched later."""
+    async def test_reingest_demotes_the_previous_analysis(self, fake_db):
+        """Exactly one analysis per case stays latest, samples included.
+
+        The partial unique index enforcing this is not honoured by
+        mongomock-motor, so assert the invariant directly.
+        """
+        await orchestrator.ingest_taxprofiler_case(make_meta(), make_inputs(), fake_db)
         await orchestrator.ingest_taxprofiler_case(make_meta(), make_inputs(), fake_db)
 
-        case = await fake_db["cases"].find_one({"case_id": "atomic-case"})
-        assert case["sample_ids"], "case.sample_ids must be populated at insert time"
-        assert case["sample_count"] == 1
-        assert case["sample_names"] == ["SRR001"]
+        latest = (
+            await fake_db["case_analysis"]
+            .find({"case_id": "atomic-case", "is_latest": True})
+            .to_list(None)
+        )
+        assert len(latest) == 1
+        assert latest[0]["version"] == 2
+
+        latest_samples = await fake_db["samples"].count_documents(
+            {"is_latest_analysis": True}
+        )
+        superseded_samples = await fake_db["samples"].count_documents(
+            {"is_latest_analysis": False}
+        )
+        assert (latest_samples, superseded_samples) == (1, 1)
+
+    async def test_analysis_carries_sample_metadata(self, fake_db):
+        """Counts and names live on the analysis, not the case document."""
+        await orchestrator.ingest_taxprofiler_case(make_meta(), make_inputs(), fake_db)
+
+        analysis = await fake_db["case_analysis"].find_one({"case_id": "atomic-case"})
+        assert analysis["sample_count"] == 1
+        assert analysis["sample_names"] == ["SRR001"]
+        assert "sample_ids" not in analysis
 
     async def test_blob_uploaded_only_after_db_commit(self, fake_db, fake_blob):
-        """Krona blob must be in the store and the case doc must reference it."""
+        """Krona blob is stored under the analysis version and referenced."""
         meta = make_meta(classifiers_with_krona=["kraken2"])
         inputs = make_inputs(krona_html={"kraken2": "<html>krona</html>"})
 
         await orchestrator.ingest_taxprofiler_case(meta, inputs, fake_db)
 
-        blob = await fake_blob.get("krona/atomic-case/kraken2.html")
+        blob = await fake_blob.get("krona/atomic-case/v1/kraken2.html")
         assert blob == "<html>krona</html>"
 
-        case = await fake_db["cases"].find_one({"case_id": "atomic-case"})
-        assert case["classifiers"][0]["krona_id"] == "kraken2"
+        analysis = await fake_db["case_analysis"].find_one({"case_id": "atomic-case"})
+        assert analysis["classifiers"][0]["krona_id"] == "kraken2"
+
+    async def test_reingest_namespaces_blobs_per_version(self, fake_db, fake_blob):
+        """A second run must not overwrite the first run's Krona report."""
+        meta = make_meta(classifiers_with_krona=["kraken2"])
+        await orchestrator.ingest_taxprofiler_case(
+            meta, make_inputs(krona_html={"kraken2": "<html>v1</html>"}), fake_db
+        )
+        await orchestrator.ingest_taxprofiler_case(
+            meta, make_inputs(krona_html={"kraken2": "<html>v2</html>"}), fake_db
+        )
+
+        assert (
+            await fake_blob.get("krona/atomic-case/v1/kraken2.html")
+            == "<html>v1</html>"
+        )
+        assert (
+            await fake_blob.get("krona/atomic-case/v2/kraken2.html")
+            == "<html>v2</html>"
+        )
