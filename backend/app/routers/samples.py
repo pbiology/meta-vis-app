@@ -33,6 +33,8 @@ def _oid(sample_id: str) -> ObjectId:
 
 def _serialise(doc: dict) -> dict:
     doc["_id"] = str(doc["_id"])
+    if doc.get("analysis_id") is not None:
+        doc["analysis_id"] = str(doc["analysis_id"])
     if "subject_id" in doc:
         doc["subject_id"] = str(doc["subject_id"])
     return doc
@@ -65,11 +67,12 @@ async def list_samples(
     if search.strip():
         query["sample_id"] = {"$regex": re.escape(search.strip()), "$options": "i"}
 
-    total = (
-        await db["samples"].estimated_document_count()
-        if not query
-        else await db["samples"].count_documents(query)
-    )
+    # Superseded analyses are excluded so a re-sequenced case does not show the
+    # same sample_id twice with no way to tell the rows apart. Older runs stay
+    # reachable through the case's analysis view.
+    query["is_latest_analysis"] = True
+
+    total = await db["samples"].count_documents(query)
     skip = (page - 1) * PAGE_SIZE
 
     pipeline: list[dict] = [
@@ -77,24 +80,25 @@ async def list_samples(
         {"$sort": {"order_date": -1, "ingested_at": -1}},
         {"$skip": skip},
         {"$limit": PAGE_SIZE},
-        # Fetch the parent case so we can return its live review status instead
-        # of the stale review field on the sample document (samples are never
-        # updated when a case is marked reviewed / unreviewed).
+        # Fetch the producing analysis so we can return its live review status
+        # instead of the stale review field on the sample document (samples are
+        # never updated when an analysis is marked reviewed / unreviewed).
         {
             "$lookup": {
-                "from": "cases",
-                "localField": "case_id",
-                "foreignField": "case_id",
-                "as": "_case",
+                "from": "case_analysis",
+                "localField": "analysis_id",
+                "foreignField": "_id",
+                "as": "_analysis",
             }
         },
-        {"$set": {"review": {"$first": "$_case.review"}}},
+        {"$set": {"review": {"$first": "$_analysis.review"}}},
         {
             "$project": {
                 "_id": 1,
                 "sample_id": 1,
                 "sample_type": 1,
                 "case_id": 1,
+                "analysis_id": 1,
                 "order_date": 1,
                 "ingested_at": 1,
                 "review": 1,
@@ -132,13 +136,15 @@ async def get_sample(
         resource_id=sample_id,
         outcome="success",
     )
-    # Metaval is a case-level analysis; surface whether it ran so the UI can
-    # tell "no metaval run" apart from "metaval run, no taxa found".
-    case = await db["cases"].find_one(
-        {"case_id": doc.get("case_id")},
+    # Metaval runs per analysis; surface whether it ran so the UI can tell
+    # "no metaval run" apart from "metaval run, no taxa found". Scoped to the
+    # analysis that produced this sample, not the case: a later re-sequencing
+    # may have run metaval when an earlier one did not.
+    analysis = await db["case_analysis"].find_one(
+        {"_id": doc.get("analysis_id")},
         {"metaval_pipeline_info": 1},
     )
-    doc["has_metaval"] = bool(case and case.get("metaval_pipeline_info"))
+    doc["has_metaval"] = bool(analysis and analysis.get("metaval_pipeline_info"))
     doc = _serialise(doc)
     return SampleResponse.model_validate(doc).model_dump(mode="json")
 
@@ -172,16 +178,18 @@ async def get_ntc_profiles(
 ):
     sample = await db["samples"].find_one(
         {"_id": _oid(sample_id)},
-        {"case_id": 1, "material": 1},
+        {"analysis_id": 1, "material": 1},
     )
     if not sample:
         raise HTTPException(status_code=404, detail=f"Sample '{sample_id}' not found")
 
+    # Scoped to the producing analysis rather than the case: the controls a
+    # sample is compared against must come from the same sequencing run.
     ntc_docs = (
         await db["samples"]
         .find(
             {
-                "case_id": sample["case_id"],
+                "analysis_id": sample["analysis_id"],
                 "sample_type": "negative_ctrl",
                 "material": sample["material"],
             },
@@ -229,7 +237,7 @@ async def get_krona(
 ):
     sample = await db["samples"].find_one(
         {"_id": _oid(sample_id)},
-        {"case_id": 1, "has_krona": 1, "sample_id": 1, "trana": 1},
+        {"case_id": 1, "analysis_id": 1, "has_krona": 1, "sample_id": 1, "trana": 1},
     )
     if not sample:
         raise HTTPException(status_code=404, detail=f"Sample '{sample_id}' not found")
@@ -238,13 +246,22 @@ async def get_krona(
             status_code=404, detail="No Krona file associated with this sample's case"
         )
 
+    # Blob keys are namespaced per analysis version, so the version has to come
+    # from the analysis that produced this sample.
+    analysis = await db["case_analysis"].find_one(
+        {"_id": sample.get("analysis_id")}, {"version": 1}
+    )
+    if not analysis:
+        raise HTTPException(status_code=404, detail="No analysis found for this sample")
+
     from app.database import get_blob_store
 
     is_trana = bool(sample.get("trana"))
+    prefix = f"krona/{sample['case_id']}/v{analysis['version']}"
     key = (
-        f"krona/{sample['case_id']}/{sample['sample_id']}.html"
+        f"{prefix}/{sample['sample_id']}.html"
         if is_trana
-        else f"krona/{sample['case_id']}/{classifier}.html"
+        else f"{prefix}/{classifier}.html"
     )
     html = await get_blob_store().get(key)
     if not html:
