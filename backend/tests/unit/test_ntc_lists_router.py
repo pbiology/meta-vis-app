@@ -3,6 +3,8 @@
 # Tests for the NTC ignorelist and known contaminants CRUD endpoints,
 # plus the contaminant-alerts endpoint.
 
+from datetime import date, timedelta
+
 import pytest
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
@@ -44,6 +46,30 @@ def make_app(fake_db, role: str = "admin"):
     return app
 
 
+# ---------------------------------------------------------------------------
+# Fixture dates
+#
+# The NTC endpoints filter on `order_date >= today - window_days` (default 90),
+# so fixtures pinned to absolute dates silently age out of the window: every
+# query then returns nothing and the assertions below start reading empty
+# lists. These offsets keep the same relative spacing as the original
+# 2026-04-01 / -02 / -03 / -10 fixtures, so the ordering assertions still hold,
+# while staying well inside the smallest window the tests exercise (30 days).
+# ---------------------------------------------------------------------------
+
+
+def _days_ago(n: int) -> str:
+    return (date.today() - timedelta(days=n)).isoformat()
+
+
+DAY_1 = _days_ago(20)
+DAY_2 = _days_ago(19)
+DAY_3 = _days_ago(18)
+DAY_10 = _days_ago(11)
+# Far enough back to fall outside any window the tests use.
+OUT_OF_WINDOW = _days_ago(400)
+
+
 def make_ntc_doc(
     sample_id: str,
     case_id: str,
@@ -54,6 +80,7 @@ def make_ntc_doc(
         "sample_id": sample_id,
         "case_id": case_id,
         "sample_type": "negative_ctrl",
+        "is_latest_analysis": True,
         "material": "DNA",
         "order_date": order_date,
         "profiles": [],
@@ -511,7 +538,7 @@ class TestContaminantAlerts:
             make_ntc_doc(
                 "NTC-1",
                 "case-1",
-                "2026-04-01",
+                DAY_1,
                 profile=[make_taxon(329, "Ralstonia pickettii", 10)],
             )
         )
@@ -540,7 +567,7 @@ class TestContaminantAlerts:
             make_ntc_doc(
                 "NTC-1",
                 "case-1",
-                "2026-04-01",
+                DAY_1,
                 profile=[make_taxon(329, "Ralstonia pickettii", 5)],
             )
         )
@@ -571,7 +598,7 @@ class TestContaminantAlerts:
             make_ntc_doc(
                 "NTC-1",
                 "case-1",
-                "2026-04-01",
+                DAY_1,
                 profile=[
                     make_taxon(329, "Taxon-A", 10),  # > 3 → detected
                     make_taxon(1743, "Taxon-B", 10),  # not > 20 → not detected
@@ -598,19 +625,19 @@ class TestContaminantAlerts:
                 make_ntc_doc(
                     "NTC-1",
                     "case-1",
-                    "2026-04-01",
+                    DAY_1,
                     profile=[make_taxon(329, "Ralstonia pickettii", 10)],
                 ),
                 make_ntc_doc(
                     "NTC-2",
                     "case-2",
-                    "2026-04-02",
+                    DAY_2,
                     profile=[make_taxon(329, "Ralstonia pickettii", 8)],
                 ),
                 make_ntc_doc(
                     "NTC-3",
                     "case-3",
-                    "2026-04-03",
+                    DAY_3,
                     profile=[make_taxon(329, "Ralstonia pickettii", 2)],
                 ),  # below threshold
             ]
@@ -635,8 +662,9 @@ class TestContaminantAlerts:
             "sample_id": "NTC-1",
             "case_id": "case-1",
             "sample_type": "negative_ctrl",
+            "is_latest_analysis": True,
             "material": "DNA",
-            "order_date": "2026-04-01",
+            "order_date": DAY_1,
             "profiles": [
                 {
                     "classifier": "centrifuge",
@@ -673,7 +701,7 @@ class TestContaminantAlerts:
                 make_ntc_doc(
                     "NTC-1",
                     "case-1",
-                    "2026-04-01",
+                    DAY_1,
                     profile=[
                         make_taxon(329, "Taxon-A", 10),
                         make_taxon(1743, "Taxon-B", 10),
@@ -682,13 +710,13 @@ class TestContaminantAlerts:
                 make_ntc_doc(
                     "NTC-2",
                     "case-2",
-                    "2026-04-02",
+                    DAY_2,
                     profile=[make_taxon(1743, "Taxon-B", 10)],
                 ),
                 make_ntc_doc(
                     "NTC-3",
                     "case-3",
-                    "2026-04-03",
+                    DAY_3,
                     profile=[make_taxon(1743, "Taxon-B", 10)],
                 ),
             ]
@@ -743,8 +771,8 @@ class TestIgnorelistExclusionInTrends:
         }
         await fake_db["samples"].insert_many(
             [
-                make_ntc_doc("NTC-1", "case-1", "2026-04-01", profile=[taxon]),
-                make_ntc_doc("NTC-2", "case-2", "2026-04-02", profile=[taxon]),
+                make_ntc_doc("NTC-1", "case-1", DAY_1, profile=[taxon]),
+                make_ntc_doc("NTC-2", "case-2", DAY_2, profile=[taxon]),
             ]
         )
         app = make_app(fake_db)
@@ -778,7 +806,7 @@ class TestIgnorelistExclusionInTrends:
             },
         ]
         await fake_db["samples"].insert_one(
-            make_ntc_doc("NTC-1", "case-1", "2026-04-01", profile=profile)
+            make_ntc_doc("NTC-1", "case-1", DAY_1, profile=profile)
         )
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
@@ -802,8 +830,8 @@ class TestIgnorelistExclusionInTrends:
         }
         await fake_db["samples"].insert_many(
             [
-                make_ntc_doc("NTC-1", "case-1", "2026-04-01", profile=[other]),
-                make_ntc_doc("NTC-2", "case-2", "2026-04-02", profile=[other]),
+                make_ntc_doc("NTC-1", "case-1", DAY_1, profile=[other]),
+                make_ntc_doc("NTC-2", "case-2", DAY_2, profile=[other]),
             ]
         )
         app = make_app(fake_db)
@@ -823,8 +851,8 @@ class TestIgnorelistExclusionInTrends:
         }
         await fake_db["samples"].insert_many(
             [
-                make_ntc_doc("NTC-1", "case-1", "2026-04-01", profile=[taxon]),
-                make_ntc_doc("NTC-2", "case-2", "2026-04-02", profile=[taxon]),
+                make_ntc_doc("NTC-1", "case-1", DAY_1, profile=[taxon]),
+                make_ntc_doc("NTC-2", "case-2", DAY_2, profile=[taxon]),
             ]
         )
         app = make_app(fake_db)
