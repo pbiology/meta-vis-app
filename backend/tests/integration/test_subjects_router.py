@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.routers.subjects import router
+from tests.helpers import insert_case as seed_case
 from tests.helpers import make_test_app
 
 
@@ -82,13 +83,10 @@ class TestListSubjects:
         await fake_db["subjects"].insert_one(
             {"_id": oid, "subject_id": "S-001", "sex": "F"}
         )
-        await fake_db["cases"].insert_many(
-            [
-                {"case_id": "C1", "subject_id": oid, "analysis_type": "shotgun"},
-                {"case_id": "C2", "subject_id": oid, "analysis_type": "shotgun"},
-                {"case_id": "C3", "subject_id": oid, "analysis_type": "amplicon"},
-            ]
-        )
+        # analysis_type lives on the analysis, so counts walk cases -> analyses.
+        await seed_case(fake_db, "C1", subject_id=oid, analysis_type="shotgun")
+        await seed_case(fake_db, "C2", subject_id=oid, analysis_type="shotgun")
+        await seed_case(fake_db, "C3", subject_id=oid, analysis_type="amplicon")
         resp = client.get("/api/v1/subjects")
         assert resp.status_code == 200
         items = resp.json()["items"]
@@ -135,36 +133,27 @@ class TestSubjectCases:
 
         oid = ObjectId()
         await fake_db["subjects"].insert_one({"_id": oid, "subject_id": "S-001"})
-        await fake_db["cases"].insert_many(
-            [
-                {
-                    "case_id": "C1",
-                    "subject_id": oid,
-                    "analysis_type": "shotgun",
-                    "sample_count": 3,
-                },
-                {"case_id": "C2", "subject_id": oid, "analysis_type": "amplicon"},
-            ]
+        await seed_case(
+            fake_db, "C1", subject_id=oid, analysis_type="shotgun", sample_count=3
         )
+        await seed_case(fake_db, "C2", subject_id=oid, analysis_type="amplicon")
         resp = client.get("/api/v1/subjects/S-001/cases")
         assert resp.status_code == 200
-        cases = resp.json()
-        assert {c["case_id"] for c in cases} == {"C1", "C2"}
-        c1 = next(c for c in cases if c["case_id"] == "C1")
-        assert c1["sample_count"] == 3
-        assert c1["subject_id"] == str(oid)
+        rows = resp.json()
+        assert {r["case"]["case_id"] for r in rows} == {"C1", "C2"}
+        c1 = next(r for r in rows if r["case"]["case_id"] == "C1")
+        assert c1["latest"]["sample_count"] == 3
+        assert c1["case"]["subject_id"] == str(oid)
 
     async def test_resolves_by_objectid(self, client, fake_db):
         from bson import ObjectId
 
         oid = ObjectId()
         await fake_db["subjects"].insert_one({"_id": oid, "subject_id": "S-002"})
-        await fake_db["cases"].insert_one(
-            {"case_id": "C1", "subject_id": oid, "analysis_type": "shotgun"}
-        )
+        await seed_case(fake_db, "C1", subject_id=oid, analysis_type="shotgun")
         resp = client.get(f"/api/v1/subjects/{oid}/cases")
         assert resp.status_code == 200
-        assert [c["case_id"] for c in resp.json()] == ["C1"]
+        assert [r["case"]["case_id"] for r in resp.json()] == ["C1"]
 
     async def test_subject_with_no_cases_returns_empty(self, client, fake_db):
         await fake_db["subjects"].insert_one({"subject_id": "S-003"})
