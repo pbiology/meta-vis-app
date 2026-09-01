@@ -23,8 +23,11 @@ import {
  * rather than serving another run's cached data. `null` means "latest" and is
  * a distinct key from an explicit version, which is fine: both resolve to the
  * same data and invalidation clears them together.
+ *
+ * Every run-scoped hook takes it as a *required* argument — see the note in
+ * api/cases.ts on why a default was the wrong call.
  */
-type Version = number | null;
+import type { Version } from "../../api/cases";
 
 export const caseKeys = {
   all: ["cases"] as const,
@@ -41,13 +44,13 @@ export const caseKeys = {
   // The literal "case" segment keeps a case named "list" or "stats" from
   // colliding with the collection-level keys above.
   case: (caseId: string) => ["cases", "case", caseId] as const,
-  detail: (caseId: string, version: Version = null) =>
+  detail: (caseId: string, version: Version) =>
     [...caseKeys.case(caseId), "detail", version] as const,
-  samples: (caseId: string, type: string | null, version: Version = null) =>
+  samples: (caseId: string, type: string | null, version: Version) =>
     [...caseKeys.case(caseId), "samples", type, version] as const,
-  krona: (caseId: string, classifier: string, version: Version = null) =>
+  krona: (caseId: string, classifier: string, version: Version) =>
     [...caseKeys.case(caseId), "krona", classifier, version] as const,
-  multiqc: (caseId: string, version: Version = null) =>
+  multiqc: (caseId: string, version: Version) =>
     [...caseKeys.case(caseId), "multiqc", version] as const,
 };
 
@@ -63,7 +66,7 @@ export function useCases(params: GetCasesParams = {}, opts: PollOptions = {}) {
   });
 }
 
-export function useCase(caseId: string, version: Version = null) {
+export function useCase(caseId: string, version: Version) {
   return useQuery({
     queryKey: caseKeys.detail(caseId, version),
     queryFn: () => getCase(caseId, version),
@@ -71,11 +74,7 @@ export function useCase(caseId: string, version: Version = null) {
   });
 }
 
-export function useCaseSamples(
-  caseId: string,
-  type: string | null = null,
-  version: Version = null
-) {
+export function useCaseSamples(caseId: string, type: string | null, version: Version) {
   return useQuery({
     queryKey: caseKeys.samples(caseId, type, version),
     queryFn: () => getCaseSamples(caseId, type, version),
@@ -101,7 +100,7 @@ export function usePathogenCases() {
 // Krona / MultiQC fetches return blob URLs; callers must revoke on unmount.
 // `gcTime: 0` makes the cache drop the URL the moment no observers remain, so
 // stale (revoked) blob URLs can't be re-served on a later mount.
-export function useCaseKronaUrl(caseId: string, classifier = "kraken2", version: Version = null) {
+export function useCaseKronaUrl(caseId: string, classifier: string, version: Version) {
   return useQuery({
     queryKey: caseKeys.krona(caseId, classifier, version),
     queryFn: () => getCaseKronaUrl(caseId, classifier, version),
@@ -110,7 +109,7 @@ export function useCaseKronaUrl(caseId: string, classifier = "kraken2", version:
   });
 }
 
-export function useCaseMultiQCUrl(caseId: string, version: Version = null) {
+export function useCaseMultiQCUrl(caseId: string, version: Version) {
   return useQuery({
     queryKey: caseKeys.multiqc(caseId, version),
     queryFn: () => getCaseMultiQCUrl(caseId, version),
@@ -146,7 +145,7 @@ export function useReviewCase() {
     }: {
       caseId: string;
       notes?: string | null;
-      version?: Version;
+      version: Version;
     }) => reviewCase(caseId, notes ?? null, version),
     onSuccess: () => qc.invalidateQueries({ queryKey: caseKeys.all }),
   });
@@ -155,7 +154,7 @@ export function useReviewCase() {
 export function useUnreviewCase() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ caseId, version }: { caseId: string; version?: Version }) =>
+    mutationFn: ({ caseId, version }: { caseId: string; version: Version }) =>
       unreviewCase(caseId, version),
     onSuccess: () => qc.invalidateQueries({ queryKey: caseKeys.all }),
   });
@@ -188,7 +187,7 @@ export function useUpdateCaseReport() {
     }: {
       caseId: string;
       selections: Record<string, number[]>;
-      version?: Version;
+      version: Version;
     }) => updateCaseReport(caseId, selections, version),
     onSuccess: (_data, { caseId }) => qc.invalidateQueries({ queryKey: caseKeys.case(caseId) }),
   });

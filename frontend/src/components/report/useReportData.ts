@@ -1,6 +1,7 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { getProfile } from "../../api/samples";
 import { getSubject, type Subject } from "../../api/subjects";
+import type { Version } from "../../api/cases";
 import { useCase, useCaseSamples } from "../../hooks/queries/useCases";
 import { usePathogens } from "../../hooks/queries/useAlerts";
 import { sampleKeys } from "../../hooks/queries/useSamples";
@@ -222,7 +223,7 @@ export function useReportData(
    * is viewing. Sample _ids are per-analysis, so the profile queries below
    * follow whichever samples this fetches.
    */
-  version: number | null = null
+  version: Version
 ): UseReportDataResult {
   const caseQ = useCase(caseId, version);
   const samplesQ = useCaseSamples(caseId, null, version);

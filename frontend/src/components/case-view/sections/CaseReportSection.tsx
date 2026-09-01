@@ -8,7 +8,7 @@ interface CaseReportSectionProps {
   caseId: string;
   samples: Sample[];
   /** Analysis being viewed; null means the case's latest. */
-  version?: number | null;
+  version: number | null;
   analyses?: AnalysisSummary[];
   canEdit?: boolean;
 }
@@ -16,7 +16,7 @@ interface CaseReportSectionProps {
 export default function CaseReportSection({
   caseId,
   samples,
-  version = null,
+  version,
   analyses = [],
   canEdit = false,
 }: Readonly<CaseReportSectionProps>) {

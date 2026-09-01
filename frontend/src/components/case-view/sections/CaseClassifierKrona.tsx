@@ -6,6 +6,8 @@ import type { Classifier } from "./CaseClassifiers";
 
 interface CaseClassifierKronaProps {
   caseId: string;
+  /** Analysis being viewed; null means the case's latest. */
+  version: number | null;
   classifiers: Classifier[];
   samples: Sample[];
   activeClassifier: Classifier;
@@ -18,6 +20,7 @@ interface CaseClassifierKronaProps {
 // inline; this is intentionally NOT a silent-failure path.
 export default function CaseClassifierKrona({
   caseId,
+  version,
   classifiers,
   samples,
   activeClassifier,
@@ -63,7 +66,8 @@ export default function CaseClassifierKrona({
         .filter((clf) => clf.krona_id)
         .map(async (clf) => {
           try {
-            const url = await getCaseKronaUrl(caseId, clf.name);
+            // Krona blobs are namespaced per analysis version.
+            const url = await getCaseKronaUrl(caseId, clf.name, version);
             return { name: clf.name, url, error: false };
           } catch {
             return { name: clf.name, url: null, error: true };
@@ -83,7 +87,7 @@ export default function CaseClassifierKrona({
     return () => {
       cancelled = true;
     };
-  }, [classifiers, samples, caseId, isTrana]);
+  }, [classifiers, samples, caseId, isTrana, version]);
 
   // Revoke blob URLs when the URL set changes or on unmount.
   useEffect(() => {

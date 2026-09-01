@@ -4,10 +4,14 @@ import { useCaseMultiQCUrl } from "../../../hooks/queries/useCases";
 interface CaseMultiQCProps {
   caseId: string;
   available: boolean;
+  /** Analysis being viewed; null means the case's latest. */
+  version: number | null;
 }
 
-export default function CaseMultiQC({ caseId, available }: Readonly<CaseMultiQCProps>) {
-  const { data: url, isLoading, isError } = useCaseMultiQCUrl(available ? caseId : "");
+export default function CaseMultiQC({ caseId, available, version }: Readonly<CaseMultiQCProps>) {
+  // Each analysis has its own MultiQC report, so this must follow the run on
+  // screen rather than defaulting to the latest.
+  const { data: url, isLoading, isError } = useCaseMultiQCUrl(available ? caseId : "", version);
   const [iframeHeight, setIframeHeight] = useState<number>(600);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 

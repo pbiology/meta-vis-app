@@ -269,10 +269,13 @@ export default function CaseView() {
                 samples={samples}
                 showKrona
                 onSelectSample={setActiveSampleId}
+                version={version}
               />
             </>
           )}
-          {section === "multiqc" && <CaseMultiQC caseId={caseId} available={hasMultiqc} />}
+          {section === "multiqc" && (
+            <CaseMultiQC caseId={caseId} available={hasMultiqc} version={version} />
+          )}
           {section === "report" && (
             <CaseReportSection
               caseId={caseId}

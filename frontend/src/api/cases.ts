@@ -10,11 +10,18 @@ export interface GetCasesParams {
   analysisType?: string | null;
 }
 
+/** Analysis to act on; `null` means the case's latest. */
+export type Version = number | null;
+
 /**
- * Base path for run-scoped resources. Omitting the version resolves to the
- * case's latest analysis, which is what every view wants by default.
+ * Base path for run-scoped resources.
+ *
+ * `version` is required on every run-scoped call rather than optional: a
+ * forgotten argument silently resolved to the latest analysis, which produced
+ * plausible-but-wrong data (reviews landing on the wrong run, reports showing
+ * another run's read counts). Passing `null` is now a deliberate "the latest".
  */
-function analysisPath(caseId: string, version?: number | null): string {
+function analysisPath(caseId: string, version: Version): string {
   return version == null ? `/cases/${caseId}` : `/cases/${caseId}/analyses/${version}`;
 }
 
@@ -35,15 +42,15 @@ export async function getCases({
   return res.data;
 }
 
-export async function getCase(caseId: string, version?: number | null): Promise<CaseDetail> {
+export async function getCase(caseId: string, version: Version): Promise<CaseDetail> {
   const res = await client.get<CaseDetail>(analysisPath(caseId, version));
   return res.data;
 }
 
 export async function getCaseSamples(
   caseId: string,
-  type: string | null = null,
-  version?: number | null
+  type: string | null,
+  version: Version
 ): Promise<Sample[]> {
   const params = type ? { type } : {};
   const res = await client.get<Sample[]>(`${analysisPath(caseId, version)}/samples`, {
@@ -54,22 +61,22 @@ export async function getCaseSamples(
 
 export async function reviewCase(
   caseId: string,
-  notes: string | null = null,
-  version?: number | null
+  notes: string | null,
+  version: Version
 ): Promise<unknown> {
   const res = await client.patch(`${analysisPath(caseId, version)}/review`, { notes });
   return res.data;
 }
 
-export async function unreviewCase(caseId: string, version?: number | null): Promise<unknown> {
+export async function unreviewCase(caseId: string, version: Version): Promise<unknown> {
   const res = await client.delete(`${analysisPath(caseId, version)}/review`);
   return res.data;
 }
 
 export async function getCaseKronaUrl(
   caseId: string,
-  classifier = "kraken2",
-  version?: number | null
+  classifier: string,
+  version: Version
 ): Promise<string> {
   const resp = await client.get<Blob>(`${analysisPath(caseId, version)}/krona`, {
     params: { classifier },
@@ -78,7 +85,7 @@ export async function getCaseKronaUrl(
   return URL.createObjectURL(resp.data);
 }
 
-export async function getCaseMultiQCUrl(caseId: string, version?: number | null): Promise<string> {
+export async function getCaseMultiQCUrl(caseId: string, version: Version): Promise<string> {
   const resp = await client.get<Blob>(`${analysisPath(caseId, version)}/multiqc`, {
     responseType: "blob",
   });
@@ -118,7 +125,7 @@ export interface UpdateCaseReportResponse {
 export async function updateCaseReport(
   caseId: string,
   selections: Record<string, number[]>,
-  version?: number | null
+  version: Version
 ): Promise<UpdateCaseReportResponse> {
   const res = await client.patch<UpdateCaseReportResponse>(
     `${analysisPath(caseId, version)}/report`,
