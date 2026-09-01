@@ -80,11 +80,11 @@ taxprofiler ingest
 
 **Optional**
 
-==========================  ===============================================================
-``--order-date YYYY-MM-DD`` Date samples were ordered (defaults to today)
-``--metaval-igv PATH``      Path to a metaval ``igv/`` output directory
-``--quiet``                 Suppress progress output
-==========================  ===============================================================
+===========================  =============================================
+``--order-date YYYY-MM-DD``  Date samples were ordered (defaults to today)
+``--metaval-igv PATH``       Path to a metaval ``igv/`` output directory
+``--quiet``                  Suppress progress output
+===========================  =============================================
 
 **Classifier spec** — one per tool::
 
@@ -123,21 +123,59 @@ trana ingest
 The ``--sample`` spec carries file paths inline. ``nanoplot_path=`` is
 optional; ``abundance_path=`` is required.
 
-Re-ingesting and bulk ingest
-----------------------------
+Re-sequencing a case
+--------------------
 
-``case_id`` is unique. To re-ingest, delete the existing case first
-(Admin panel or API), then run the command again — case deletion
-removes blobs from object storage as part of the cleanup.
+A case can be sequenced more than once. Running the CLI again with the
+same ``--case-id`` **adds a new analysis** to that case rather than
+failing — the earlier run keeps its data, its review record, and the
+reviewer who signed it off.
+
+Before uploading, the CLI states what the bundle will become::
+
+   Case 'CASE-2026-0142' exists — subject S123, 1 analysis(es),
+   latest v1 reviewed by anders.lind.
+   This bundle will be ingested as analysis v2.
+   Continue? [y/N]
+
+and, when the case is new::
+
+   Case 'CASE-2026-0142' does not exist.
+   This bundle will create a NEW case (analysis v1).
+
+That second message is the one to read carefully: it is where a mistyped
+``--case-id`` becomes visible, before minutes of upload are spent
+creating an unrelated case.
+
+Notes stay on the case and are visible from every analysis, so a
+re-sequencing never strands the clinical discussion on the older run. The
+new analysis starts unreviewed; the earlier one keeps its own review
+status.
+
+Bulk ingest
+-----------
 
 For bulk loads, wrap the CLI in a shell loop and re-use the same
-environment. The CLI exits non-zero on validation failure, so checking
+environment. Pass ``--yes`` to skip the confirmation — it is only
+prompted for on an interactive terminal, so scripted runs are unaffected
+either way. The CLI exits non-zero on validation failure, so checking
 ``$?`` after each call works for error handling.
+
+Deleting instead of re-sequencing
+---------------------------------
+
+Deleting is still available and still cascades: removing a case removes
+every analysis of it, its samples, metaval results, and its blobs from
+object storage. A single analysis can also be deleted on its own, in
+which case the newest surviving run becomes current. A case's only
+analysis cannot be deleted — delete the case instead.
 
 Common errors
 -------------
 
-- **"Case already exists"** — delete first, then re-ingest.
+- **"belongs to subject X, but this bundle is for subject Y"** — the
+  ``--case-id`` is already in use by a different patient. Almost always a
+  typo in the case id; use a different one rather than forcing it.
 - **"Column not found"** — ``column_<classifier>=`` does not match a
   column in the taxpasta TSV. Names are case-sensitive.
 - **"File not found"** — every path passed to the CLI must exist when
