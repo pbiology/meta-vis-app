@@ -100,6 +100,10 @@ export default function CaseList() {
   }
 
   const cases = data.items ?? [];
+  const deletePending = deleteMutation.isPending || deleteAnalysisMutation.isPending;
+  const deletingWholeCase = deleteTarget?.version == null;
+  let deleteButtonLabel = deletingWholeCase ? "Delete case" : "Delete analysis";
+  if (deletePending) deleteButtonLabel = "Deleting…";
   const multiRunCases = cases.filter((row) => row.superseded_analyses.length > 0);
   const allExpanded =
     multiRunCases.length > 0 && multiRunCases.every((row) => expanded.has(row.case.case_id));
@@ -325,10 +329,10 @@ export default function CaseList() {
         <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl border border-gray-100 shadow-lg p-6 w-80 flex flex-col gap-4">
             <p className="text-sm font-medium text-gray-900">
-              {deleteTarget.version == null ? "Delete case?" : "Delete analysis?"}
+              {deletingWholeCase ? "Delete case?" : "Delete analysis?"}
             </p>
             <p className="text-xs text-gray-500">
-              {deleteTarget.version == null ? (
+              {deletingWholeCase ? (
                 <>
                   This will permanently delete{" "}
                   <span className="font-mono font-medium">{deleteTarget.caseId}</span>, every
@@ -350,14 +354,10 @@ export default function CaseList() {
               </button>
               <button
                 onClick={handleDelete}
-                disabled={deleteMutation.isPending || deleteAnalysisMutation.isPending}
+                disabled={deletePending}
                 className="px-3 py-1.5 text-xs font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
               >
-                {deleteMutation.isPending || deleteAnalysisMutation.isPending
-                  ? "Deleting…"
-                  : deleteTarget.version == null
-                    ? "Delete case"
-                    : "Delete analysis"}
+                {deleteButtonLabel}
               </button>
             </div>
           </div>

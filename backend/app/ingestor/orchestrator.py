@@ -774,6 +774,31 @@ async def ingest_taxprofiler_case(
 # ---------------------------------------------------------------------------
 
 
+def _build_trana_qc(sample_input: Any, pipeline_info: Any) -> dict[str, Any]:
+    """Assemble one Trana sample's QC block.
+
+    Split out of the prepare loop so the NanoPlot presence checks don't nest
+    inside it — both stats files are optional and independently so.
+
+    `sample_input` and `pipeline_info` are the loader's per-sample input and
+    PipelineInfo models; typing them concretely here would mean importing the
+    loader's input types into the orchestrator for no gain.
+    """
+    return {
+        "nanoplot_unprocessed": (
+            sample_input.nanoplot_unprocessed.model_dump()
+            if sample_input.nanoplot_unprocessed
+            else None
+        ),
+        "nanoplot_processed": (
+            sample_input.nanoplot_processed.model_dump()
+            if sample_input.nanoplot_processed
+            else None
+        ),
+        "pipeline_info": pipeline_info.model_dump(),
+    }
+
+
 def _prepare_trana_ingest(
     meta: TranaIngestMeta, inputs: TranaIngestInputs, now: datetime, version: int
 ) -> _PreparedIngest:
@@ -825,19 +850,7 @@ def _prepare_trana_ingest(
         outbreak_taxa = _compute_outbreak_taxa(profiles)
         all_taxon_ids: list[int] = [e.taxon_id for e in taxon_entries]
 
-        trana_qc: dict[str, Any] = {
-            "nanoplot_unprocessed": (
-                sample_input.nanoplot_unprocessed.model_dump()
-                if sample_input.nanoplot_unprocessed
-                else None
-            ),
-            "nanoplot_processed": (
-                sample_input.nanoplot_processed.model_dump()
-                if sample_input.nanoplot_processed
-                else None
-            ),
-            "pipeline_info": pipeline_info.model_dump(),
-        }
+        trana_qc = _build_trana_qc(sample_input, pipeline_info)
 
         sample_docs.append(
             {

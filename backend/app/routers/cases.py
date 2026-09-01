@@ -31,6 +31,12 @@ router = APIRouter(prefix="/cases", tags=["cases"])
 
 PAGE_SIZE = 50
 
+# Field paths on the case_analysis document, named once so the stats queries
+# and the list filter cannot drift apart.
+REVIEWED = "review.reviewed"
+_LATEST: dict[str, Any] = {"is_latest": True}
+_UNREVIEWED: dict[str, Any] = {REVIEWED: {"$ne": True}}
+
 
 # ---------------------------------------------------------------------------
 # Fixed-path routes — must all appear before /{case_id} to avoid being
@@ -51,19 +57,16 @@ async def case_stats(
     ``total == pending + reviewed`` true. This affects the dashboard only: a
     superseded analysis still shows its own true status in the case list.
     """
-    latest: dict[str, Any] = {"is_latest": True}
     analyses = db["case_analysis"]
 
-    total = await analyses.count_documents(latest)
-    pending = await analyses.count_documents(
-        {**latest, "review.reviewed": {"$ne": True}}
-    )
-    reviewed = await analyses.count_documents({**latest, "review.reviewed": True})
+    total = await analyses.count_documents(_LATEST)
+    pending = await analyses.count_documents({**_LATEST, **_UNREVIEWED})
+    reviewed = await analyses.count_documents({**_LATEST, REVIEWED: True})
     pending_shotgun = await analyses.count_documents(
-        {**latest, "review.reviewed": {"$ne": True}, "analysis_type": "shotgun"}
+        {**_LATEST, **_UNREVIEWED, "analysis_type": "shotgun"}
     )
     pending_amplicon = await analyses.count_documents(
-        {**latest, "review.reviewed": {"$ne": True}, "analysis_type": "amplicon"}
+        {**_LATEST, **_UNREVIEWED, "analysis_type": "amplicon"}
     )
     return {
         "total": total,
@@ -121,14 +124,14 @@ async def list_cases(
     in-memory sort. Equality on the leading ``is_latest`` field followed by
     those keys is an index prefix, keeping the sort index-covered.
     """
-    query: dict[str, Any] = {"is_latest": True}
+    query: dict[str, Any] = dict(_LATEST)
     # case_id is denormalised onto the analysis, so search needs no join.
     if search.strip():
         query["case_id"] = {"$regex": re.escape(search.strip()), "$options": "i"}
     if reviewed == "pending":
-        query["review.reviewed"] = {"$ne": True}
+        query[REVIEWED] = {"$ne": True}
     elif reviewed == "reviewed":
-        query["review.reviewed"] = True
+        query[REVIEWED] = True
     if analysis_type in ("shotgun", "amplicon"):
         query["analysis_type"] = analysis_type
 

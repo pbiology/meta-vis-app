@@ -104,7 +104,7 @@ export type CaseAtAnalysis = Case & Partial<CaseAnalysis>;
 
 /** Flatten a detail response into the merged view model. */
 export function flattenCaseDetail(detail: CaseDetail): CaseAtAnalysis {
-  return { ...(detail.analysis ?? {}), ...detail.case };
+  return { ...detail.analysis, ...detail.case };
 }
 
 export interface CasesResponse {

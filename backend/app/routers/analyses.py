@@ -30,6 +30,12 @@ from app.taxonomy_utils import host_pct_for, non_host_total
 
 router = APIRouter(prefix="/cases", tags=["analyses"])
 
+# Blob-backed endpoints 404 both when the analysis does not exist and when the
+# report was never produced for it, so they share one response schema.
+_ANALYSIS_BLOB_RESPONSES: dict[int | str, dict[str, Any]] = {
+    404: {"description": "Case, analysis, or report not found"},
+}
+
 
 class ReviewPayload(BaseModel):
     notes: Optional[str] = None
@@ -140,8 +146,16 @@ async def list_samples_for_analysis(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/{case_id}/analyses/{version}/krona", summary="Serve Krona HTML")
-@router.get("/{case_id}/krona", summary="Serve Krona HTML for the latest analysis")
+@router.get(
+    "/{case_id}/analyses/{version}/krona",
+    summary="Serve Krona HTML",
+    responses=_ANALYSIS_BLOB_RESPONSES,
+)
+@router.get(
+    "/{case_id}/krona",
+    summary="Serve Krona HTML for the latest analysis",
+    responses=_ANALYSIS_BLOB_RESPONSES,
+)
 async def get_krona(
     case_id: str,
     version: Optional[int] = None,
@@ -162,8 +176,16 @@ async def get_krona(
     return HTMLResponse(content=html)
 
 
-@router.get("/{case_id}/analyses/{version}/multiqc", summary="Serve MultiQC HTML")
-@router.get("/{case_id}/multiqc", summary="Serve MultiQC HTML for the latest analysis")
+@router.get(
+    "/{case_id}/analyses/{version}/multiqc",
+    summary="Serve MultiQC HTML",
+    responses=_ANALYSIS_BLOB_RESPONSES,
+)
+@router.get(
+    "/{case_id}/multiqc",
+    summary="Serve MultiQC HTML for the latest analysis",
+    responses=_ANALYSIS_BLOB_RESPONSES,
+)
 async def get_multiqc(
     case_id: str,
     version: Optional[int] = None,

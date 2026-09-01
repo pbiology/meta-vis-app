@@ -1,5 +1,6 @@
 import Badge from "./Badge";
 import type { AnalysisSummary, Case } from "../api/types";
+import { analysisLabel, platformLabel } from "../lib/analysisLabels";
 
 export interface CaseSignalSets {
   outbreak: Set<string>;
@@ -58,11 +59,6 @@ function NtcIcon() {
       <circle cx="8" cy="10.5" r="0.75" fill="currentColor" />
     </svg>
   );
-}
-
-function titleCase(value?: string | null): string {
-  if (!value) return "—";
-  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 export default function CaseListRow({
@@ -166,14 +162,10 @@ export default function CaseListRow({
         {analysis.order_date ?? "—"}
       </td>
       <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-        {analysis.analysis_type === "shotgun"
-          ? "Shotgun"
-          : analysis.analysis_type === "amplicon"
-            ? "Amplicon"
-            : "—"}
+        {analysisLabel(analysis.analysis_type)}
       </td>
       <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-        {titleCase(analysis.sequencing_platform)}
+        {platformLabel(analysis.sequencing_platform)}
       </td>
       <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
         {sampleCount} sample{sampleCount !== 1 ? "s" : ""}

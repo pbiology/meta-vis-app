@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import { useSubject, useSubjectCases } from "../hooks/queries/useSubjects";
 import Badge from "../components/Badge";
+import { analysisLabel, platformLabel } from "../lib/analysisLabels";
 
 const SEX_LABELS: Record<string, string> = {
   F: "Female",
@@ -8,12 +9,6 @@ const SEX_LABELS: Record<string, string> = {
   X: "Other",
   unknown: "Unknown",
 };
-
-function analysisLabel(type: unknown): string {
-  if (type === "shotgun") return "Shotgun";
-  if (type === "amplicon") return "Amplicon";
-  return "—";
-}
 
 function sexLabel(isLoading: boolean, sex?: string): string {
   if (isLoading) return "…";
@@ -126,10 +121,7 @@ export default function SubjectDetail() {
                         {analysisLabel(a.analysis_type ?? undefined)}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                        {a.sequencing_platform
-                          ? a.sequencing_platform.charAt(0).toUpperCase() +
-                            a.sequencing_platform.slice(1)
-                          : "—"}
+                        {platformLabel(a.sequencing_platform)}
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
                         {a.sample_count ?? 0} sample{(a.sample_count ?? 0) === 1 ? "" : "s"}

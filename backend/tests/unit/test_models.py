@@ -60,12 +60,16 @@ class TestSampleResponse:
         SampleResponse.model_validate(minimal_sample_doc(future_field="value"))
 
     def test_invalid_sample_type_raises(self):
+        # Build the document outside the block so only the call under test can
+        # raise — a fixture error would otherwise be indistinguishable.
+        doc = minimal_sample_doc(sample_type="test")
         with pytest.raises(ValidationError):
-            SampleResponse.model_validate(minimal_sample_doc(sample_type="test"))
+            SampleResponse.model_validate(doc)
 
     def test_invalid_material_raises(self):
+        doc = minimal_sample_doc(material="protein")
         with pytest.raises(ValidationError):
-            SampleResponse.model_validate(minimal_sample_doc(material="protein"))
+            SampleResponse.model_validate(doc)
 
     def test_all_valid_sample_types_accepted(self):
         for t in ("sample", "positive_ctrl", "negative_ctrl"):

@@ -227,7 +227,12 @@ async def get_ntc_profiles(
 
 
 @router.get(
-    "/{sample_id}/krona", summary="Serve Krona HTML for the case this sample belongs to"
+    "/{sample_id}/krona",
+    summary="Serve Krona HTML for the analysis this sample belongs to",
+    responses={
+        404: {"description": "Sample, its analysis, or the Krona file not found"},
+        422: {"description": "Malformed sample_id"},
+    },
 )
 async def get_krona(
     sample_id: str,
