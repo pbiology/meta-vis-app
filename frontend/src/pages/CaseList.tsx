@@ -1,20 +1,35 @@
-import { useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useCases, useCaseStats, useDeleteCase, usePathogenCases } from "../hooks/queries/useCases";
+import {
+  useCases,
+  useCaseStats,
+  useDeleteCase,
+  useDeleteCaseAnalysis,
+  usePathogenCases,
+} from "../hooks/queries/useCases";
 import { useOutbreaks } from "../hooks/queries/useAlerts";
 import { useNtcContaminantCaseIds } from "../hooks/queries/useNtc";
 import type { ReviewedFilter } from "../api/cases";
-import Badge from "../components/Badge";
+import CaseListRow from "../components/CaseListRow";
 import { useAuth } from "../context/AuthContext";
 import { singleAnalysisFilter } from "../lib/analysisPreference";
 
 const POLL_MS = 30_000;
 
+/** What a pending delete refers to: a whole case, or one superseded analysis. */
+interface DeleteTarget {
+  caseId: string;
+  version?: number;
+}
+
 export default function CaseList() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  // Which case families are expanded to show their superseded analyses.
+  // Purely local: the rows are already in the list response.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const { role, preferences, preferencesLoaded } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const filter = searchParams.get("filter") ?? "all";
@@ -36,6 +51,7 @@ export default function CaseList() {
   const pathogenCasesQ = usePathogenCases();
   const ntcCaseIdsQ = useNtcContaminantCaseIds();
   const deleteMutation = useDeleteCase();
+  const deleteAnalysisMutation = useDeleteCaseAnalysis();
 
   const data = casesQ.data ?? { items: [], total: 0, pages: 1, ticket_links_enabled: false };
   const stats = statsQ.data ?? { total: 0, pending: 0, reviewed: 0 };
@@ -44,9 +60,14 @@ export default function CaseList() {
   const showAmplicon = visibleAnalysisTypes.includes("amplicon");
   const pendingShotgun = (stats.pending_shotgun as number | undefined) ?? 0;
   const pendingAmplicon = (stats.pending_amplicon as number | undefined) ?? 0;
-  const outbreakCaseIds = new Set(outbreaksQ.data?.outbreaks.flatMap((o) => o.case_ids) ?? []);
-  const pathogenCaseIds = new Set(pathogenCasesQ.data?.case_ids ?? []);
-  const ntcContaminantCaseIds = new Set(ntcCaseIdsQ.data?.case_ids ?? []);
+  const signals = useMemo(
+    () => ({
+      outbreak: new Set(outbreaksQ.data?.outbreaks.flatMap((o) => o.case_ids) ?? []),
+      pathogen: new Set(pathogenCasesQ.data?.case_ids ?? []),
+      ntc: new Set(ntcCaseIdsQ.data?.case_ids ?? []),
+    }),
+    [outbreaksQ.data, pathogenCasesQ.data, ntcCaseIdsQ.data]
+  );
 
   function handleSearch(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -54,17 +75,34 @@ export default function CaseList() {
     setSearch(searchInput);
   }
 
+  function toggleExpanded(caseId: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(caseId)) next.delete(caseId);
+      else next.add(caseId);
+      return next;
+    });
+  }
+
   async function handleDelete() {
     if (!deleteTarget) return;
+    const { caseId, version } = deleteTarget;
     try {
-      await deleteMutation.mutateAsync(deleteTarget);
+      if (version == null) {
+        await deleteMutation.mutateAsync(caseId);
+      } else {
+        await deleteAnalysisMutation.mutateAsync({ caseId, version });
+      }
       setDeleteTarget(null);
     } catch {
-      alert("Failed to delete case.");
+      alert(version == null ? "Failed to delete case." : "Failed to delete analysis.");
     }
   }
 
   const cases = data.items ?? [];
+  const multiRunCases = cases.filter((row) => row.superseded_analyses.length > 0);
+  const allExpanded =
+    multiRunCases.length > 0 && multiRunCases.every((row) => expanded.has(row.case.case_id));
   const ticketLinksEnabled = data.ticket_links_enabled ?? false;
   const isLoading = casesQ.isLoading;
   const isError = casesQ.isError;
@@ -135,6 +173,20 @@ export default function CaseList() {
             ))}
           </div>
         )}
+        {multiRunCases.length > 0 && (
+          <div className="flex items-center border-l border-gray-200 pl-3">
+            <button
+              onClick={() =>
+                setExpanded(
+                  allExpanded ? new Set() : new Set(multiRunCases.map((r) => r.case.case_id))
+                )
+              }
+              className="text-xs font-medium px-2.5 py-1.5 rounded-md text-gray-600 hover:bg-gray-100 transition-colors"
+            >
+              {allExpanded ? "Collapse all" : "Expand all"}
+            </button>
+          </div>
+        )}
         <div className="ml-auto pl-3 border-l border-gray-200 flex items-center gap-4">
           <span className="text-xs text-gray-400">
             <span className="text-amber-500 font-medium">{String(stats.pending ?? 0)}</span> pending
@@ -198,139 +250,40 @@ export default function CaseList() {
               </tr>
             </thead>
             <tbody>
-              {cases.map((c) => (
-                <tr
-                  key={c.case_id}
-                  onClick={() =>
-                    window.open(`/cases/${c.case_id}`, "_blank", "noopener,noreferrer")
-                  }
-                  className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
-                >
-                  <td className="px-4 py-3 font-mono text-xs text-gray-700">
-                    <div className="flex items-center gap-1.5">
-                      {c.case_id}
-                      {outbreakCaseIds.has(c.case_id) && (
-                        <svg
-                          className="w-3 h-3 text-amber-500 flex-shrink-0"
-                          viewBox="0 0 16 16"
-                          fill="none"
-                        >
-                          <path
-                            d="M8 2L14 13H2L8 2z"
-                            stroke="currentColor"
-                            strokeWidth="1.3"
-                            strokeLinejoin="round"
-                          />
-                          <path
-                            d="M8 6v3M8 11v.5"
-                            stroke="currentColor"
-                            strokeWidth="1.3"
-                            strokeLinecap="round"
-                          />
-                        </svg>
-                      )}
-                      {pathogenCaseIds.has(c.case_id) && (
-                        <svg
-                          className="w-3 h-3 text-red-500 flex-shrink-0"
-                          viewBox="0 0 16 16"
-                          fill="none"
-                        >
-                          <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.3" />
-                          <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.3" />
-                          <path
-                            d="M8 2.5v1.5M8 12v1.5M2.5 8h1.5M12 8h1.5"
-                            stroke="currentColor"
-                            strokeWidth="1.3"
-                            strokeLinecap="round"
-                          />
-                        </svg>
-                      )}
-                      {ntcContaminantCaseIds.has(c.case_id) && (
-                        <svg
-                          className="w-3 h-3 text-orange-500 flex-shrink-0"
-                          viewBox="0 0 16 16"
-                          fill="none"
-                        >
-                          <path
-                            d="M8 3a3 3 0 0 1 3 3v1.5h.5a1 1 0 0 1 1 1V13a1 1 0 0 1-1 1H4.5a1 1 0 0 1-1-1V8.5a1 1 0 0 1 1-1H5V6a3 3 0 0 1 3-3z"
-                            stroke="currentColor"
-                            strokeWidth="1.3"
-                            strokeLinejoin="round"
-                          />
-                          <circle cx="8" cy="10.5" r="0.75" fill="currentColor" />
-                        </svg>
-                      )}
-                    </div>
-                  </td>
-                  {ticketLinksEnabled && (
-                    <td
-                      className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      {c.ticket_url ? (
-                        <a
-                          href={c.ticket_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800 hover:underline"
-                        >
-                          {c.ticket_id}
-                        </a>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  )}
-                  <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                    {c.order_date ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                    {c.analysis_type === "shotgun"
-                      ? "Shotgun"
-                      : c.analysis_type === "amplicon"
-                        ? "Amplicon"
-                        : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                    {c.sequencing_platform
-                      ? c.sequencing_platform.charAt(0).toUpperCase() +
-                        c.sequencing_platform.slice(1)
-                      : "—"}
-                  </td>
-                  <td
-                    className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap"
-                    title={(c.sample_names ?? []).join(", ") || undefined}
-                  >
-                    {c.sample_count ?? 0} sample{(c.sample_count ?? 0) !== 1 ? "s" : ""}
-                    {(c.control_count ?? 0) > 0 && (
-                      <span className="text-gray-300 ml-1">+{c.control_count} ctrl</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-400">
-                    {(c.notes?.length ?? 0) > 0 ? (
-                      <span className="text-amber-600 font-medium">{c.notes?.length}</span>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge type={c.review?.reviewed ? "reviewed" : "pending"} />
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-400">
-                    {c.review?.reviewed_by ?? "—"}
-                  </td>
-                  {role === "admin" && (
-                    <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => setDeleteTarget(c.case_id)}
-                        className="text-xs text-gray-300 hover:text-red-500 transition-colors"
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              ))}
+              {cases.map((row) => {
+                const caseId = row.case.case_id;
+                const runCount = row.superseded_analyses.length + 1;
+                const isExpanded = expanded.has(caseId);
+                return (
+                  <Fragment key={caseId}>
+                    <CaseListRow
+                      caseData={row.case}
+                      analysis={row.latest}
+                      runCount={runCount}
+                      expanded={isExpanded}
+                      onToggle={() => toggleExpanded(caseId)}
+                      signals={signals}
+                      ticketLinksEnabled={ticketLinksEnabled}
+                      showDelete={role === "admin"}
+                      onDelete={() => setDeleteTarget({ caseId })}
+                    />
+                    {isExpanded &&
+                      row.superseded_analyses.map((a) => (
+                        <CaseListRow
+                          key={`${caseId}-v${a.version}`}
+                          caseData={row.case}
+                          analysis={a}
+                          runCount={runCount}
+                          superseded
+                          signals={signals}
+                          ticketLinksEnabled={ticketLinksEnabled}
+                          showDelete={role === "admin"}
+                          onDelete={() => setDeleteTarget({ caseId, version: a.version })}
+                        />
+                      ))}
+                  </Fragment>
+                );
+              })}
               {cases.length === 0 && (
                 <tr>
                   <td
@@ -371,11 +324,25 @@ export default function CaseList() {
       {deleteTarget && (
         <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl border border-gray-100 shadow-lg p-6 w-80 flex flex-col gap-4">
-            <p className="text-sm font-medium text-gray-900">Delete case?</p>
+            <p className="text-sm font-medium text-gray-900">
+              {deleteTarget.version == null ? "Delete case?" : "Delete analysis?"}
+            </p>
             <p className="text-xs text-gray-500">
-              This will permanently delete{" "}
-              <span className="font-mono font-medium">{deleteTarget}</span> and all associated
-              samples, Krona files, and metaval results. This cannot be undone.
+              {deleteTarget.version == null ? (
+                <>
+                  This will permanently delete{" "}
+                  <span className="font-mono font-medium">{deleteTarget.caseId}</span>, every
+                  analysis of it, and all associated samples, Krona files, and metaval results. This
+                  cannot be undone.
+                </>
+              ) : (
+                <>
+                  This will permanently delete analysis{" "}
+                  <span className="font-mono font-medium">v{deleteTarget.version}</span> of{" "}
+                  <span className="font-mono font-medium">{deleteTarget.caseId}</span> and its
+                  samples. The case and its other analyses are kept. This cannot be undone.
+                </>
+              )}
             </p>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setDeleteTarget(null)} className="btn-secondary">
@@ -383,10 +350,14 @@ export default function CaseList() {
               </button>
               <button
                 onClick={handleDelete}
-                disabled={deleteMutation.isPending}
+                disabled={deleteMutation.isPending || deleteAnalysisMutation.isPending}
                 className="px-3 py-1.5 text-xs font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
               >
-                {deleteMutation.isPending ? "Deleting…" : "Delete case"}
+                {deleteMutation.isPending || deleteAnalysisMutation.isPending
+                  ? "Deleting…"
+                  : deleteTarget.version == null
+                    ? "Delete case"
+                    : "Delete analysis"}
               </button>
             </div>
           </div>
