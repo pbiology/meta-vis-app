@@ -31,16 +31,24 @@ export const caseKeys = {
   list: (params: GetCasesParams) => ["cases", "list", params] as const,
   stats: () => ["cases", "stats"] as const,
   pathogenCases: () => ["cases", "pathogenCases"] as const,
+
+  // Every per-case query hangs off `case(caseId)`, so invalidating that prefix
+  // reaches all of them whatever version they carry. React Query matches keys
+  // by prefix, so the caseId has to sit at the same position in each — when
+  // `detail` had its own shape, invalidating a case silently missed it and
+  // notes only appeared after a manual refresh.
+  //
+  // The literal "case" segment keeps a case named "list" or "stats" from
+  // colliding with the collection-level keys above.
+  case: (caseId: string) => ["cases", "case", caseId] as const,
   detail: (caseId: string, version: Version = null) =>
-    ["cases", "detail", caseId, version] as const,
+    [...caseKeys.case(caseId), "detail", version] as const,
   samples: (caseId: string, type: string | null, version: Version = null) =>
-    ["cases", caseId, "samples", type, version] as const,
+    [...caseKeys.case(caseId), "samples", type, version] as const,
   krona: (caseId: string, classifier: string, version: Version = null) =>
-    ["cases", caseId, "krona", classifier, version] as const,
+    [...caseKeys.case(caseId), "krona", classifier, version] as const,
   multiqc: (caseId: string, version: Version = null) =>
-    ["cases", caseId, "multiqc", version] as const,
-  // Invalidate every query for a case regardless of version.
-  case: (caseId: string) => ["cases", caseId] as const,
+    [...caseKeys.case(caseId), "multiqc", version] as const,
 };
 
 interface PollOptions {

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { http, HttpResponse } from "msw";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../test/utils";
 import { server } from "../test/server";
@@ -87,6 +87,47 @@ describe("CaseView review targeting", () => {
 
     await waitFor(() => expect(reviewedPath).not.toBeNull());
     expect(reviewedPath).toBe("/api/v1/cases/CASE-1/review");
+  });
+
+  it("shows a new comment without a page refresh", async () => {
+    const notes: Array<Record<string, unknown>> = [];
+    server.use(
+      // Detail re-reads the note thread, so a correct invalidation shows the
+      // new comment; a missed one leaves the list stale until a reload.
+      http.get(`${API}/cases/:caseId/analyses/:version`, ({ params }) =>
+        HttpResponse.json({
+          case: { case_id: params.caseId, notes: [...notes] },
+          analysis: { ...V1, review: { reviewed: false } },
+          analyses: [V2, V1],
+        })
+      ),
+      http.post(`${API}/cases/:caseId/notes`, async ({ request }) => {
+        const body = (await request.json()) as { text: string };
+        const note = {
+          id: `n${notes.length + 1}`,
+          text: body.text,
+          author: "tester",
+          created_at: new Date().toISOString(),
+        };
+        notes.push(note);
+        return HttpResponse.json(note);
+      })
+    );
+
+    renderWithProviders(<CaseView />, {
+      route: "/case/CASE-1/analyses/1",
+      routePath: "/case/:caseId/analyses/:version",
+    });
+
+    // "Comments" appears both in the case sidebar and as a jump link on the
+    // overview; scope to the sidebar so the query is unambiguous.
+    const sidebar = await screen.findByRole("complementary");
+    await userEvent.click(within(sidebar).getByRole("button", { name: /comments/i }));
+    const box = await screen.findByRole("textbox");
+    await userEvent.type(box, "contamination or real?");
+    await userEvent.click(screen.getByRole("button", { name: /add comment/i }));
+
+    expect(await screen.findByText("contamination or real?")).toBeInTheDocument();
   });
 
   it("marks the current run '(latest)' in the tab title, even with one analysis", async () => {
