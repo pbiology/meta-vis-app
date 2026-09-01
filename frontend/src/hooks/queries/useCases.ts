@@ -16,6 +16,7 @@ import {
   unreviewCase,
   updateCaseReport,
   type GetCasesParams,
+  type Version,
 } from "../../api/cases";
 
 /**
@@ -27,7 +28,6 @@ import {
  * Every run-scoped hook takes it as a *required* argument — see the note in
  * api/cases.ts on why a default was the wrong call.
  */
-import type { Version } from "../../api/cases";
 
 export const caseKeys = {
   all: ["cases"] as const,
