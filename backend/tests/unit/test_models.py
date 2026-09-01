@@ -4,6 +4,7 @@ import pytest
 from datetime import datetime, timezone
 from pydantic import ValidationError
 
+from app.models.analysis import CaseAnalysisResponse
 from app.models.case import CaseResponse
 from app.models.common import ReviewStatus
 from app.models.pipeline import PipelineConfiguration
@@ -28,6 +29,16 @@ def minimal_sample_doc(**overrides) -> dict:
 def minimal_case_doc(**overrides) -> dict:
     doc = {
         "case_id": "speedysnake",
+    }
+    doc.update(overrides)
+    return doc
+
+
+def minimal_analysis_doc(**overrides) -> dict:
+    doc = {
+        "case_id": "speedysnake",
+        "version": 1,
+        "is_latest": True,
         "ingested_at": datetime.now(timezone.utc),
     }
     doc.update(overrides)
@@ -124,21 +135,9 @@ class TestCaseResponse:
 
     def test_defaults_applied(self):
         result = CaseResponse.model_validate(minimal_case_doc())
-        assert result.has_krona is False
-        assert result.classifiers == []
         assert result.notes == []
-        assert result.review.reviewed is False
-
-    def test_classifiers_validated(self):
-        doc = minimal_case_doc(
-            classifiers=[{"name": "kraken2", "db": "k2_pluspf", "krona_id": "abc"}]
-        )
-        result = CaseResponse.model_validate(doc)
-        assert result.classifiers[0].name == "kraken2"
-
-    def test_classifier_missing_krona_id_defaults_none(self):
-        doc = minimal_case_doc(classifiers=[{"name": "kraken2", "db": "k2_pluspf"}])
-        assert CaseResponse.model_validate(doc).classifiers[0].krona_id is None
+        assert result.subject_id is None
+        assert result.ticket_id is None
 
     def test_notes_validated(self):
         doc = minimal_case_doc(
@@ -154,8 +153,47 @@ class TestCaseResponse:
         result = CaseResponse.model_validate(doc)
         assert result.notes[0].author == "admin"
 
+    def test_model_dump_json_mode(self):
+        dump = CaseResponse.model_validate(minimal_case_doc()).model_dump(mode="json")
+        assert dump["case_id"] == "speedysnake"
+
+
+class TestCaseAnalysisResponse:
+    """Everything a pipeline run produces moved here off the case document."""
+
+    def test_minimal_valid_document(self):
+        result = CaseAnalysisResponse.model_validate(minimal_analysis_doc())
+        assert result.case_id == "speedysnake"
+        assert result.version == 1
+
+    def test_defaults_applied(self):
+        result = CaseAnalysisResponse.model_validate(minimal_analysis_doc())
+        assert result.has_krona is False
+        assert result.classifiers == []
+        assert result.review.reviewed is False
+        assert result.report_selections == {}
+
+    def test_counts_are_declared_not_extras(self):
+        # These used to ride along on CaseResponse as undeclared extras and so
+        # bypassed validation entirely.
+        doc = minimal_analysis_doc(sample_count=3, control_count=1)
+        result = CaseAnalysisResponse.model_validate(doc)
+        assert result.sample_count == 3
+        assert result.control_count == 1
+
+    def test_classifiers_validated(self):
+        doc = minimal_analysis_doc(
+            classifiers=[{"name": "kraken2", "db": "k2_pluspf", "krona_id": "abc"}]
+        )
+        result = CaseAnalysisResponse.model_validate(doc)
+        assert result.classifiers[0].name == "kraken2"
+
+    def test_classifier_missing_krona_id_defaults_none(self):
+        doc = minimal_analysis_doc(classifiers=[{"name": "kraken2", "db": "k2_pluspf"}])
+        assert CaseAnalysisResponse.model_validate(doc).classifiers[0].krona_id is None
+
     def test_pipeline_info_nested_config_validates(self):
-        doc = minimal_case_doc(
+        doc = minimal_analysis_doc(
             pipeline_info={
                 "software_used": {},
                 "pipeline_configuration": {
@@ -165,17 +203,15 @@ class TestCaseResponse:
                 },
             }
         )
-        cfg = CaseResponse.model_validate(doc).pipeline_info.pipeline_configuration
+        cfg = CaseAnalysisResponse.model_validate(
+            doc
+        ).pipeline_info.pipeline_configuration
         assert cfg.pipeline_name == "nf-core/taxprofiler"
         assert cfg.nextflow == "23.10.1"
 
     def test_review_status_validated(self):
-        doc = minimal_case_doc(review={"reviewed": True, "reviewed_by": "alice"})
-        assert CaseResponse.model_validate(doc).review.reviewed_by == "alice"
-
-    def test_model_dump_json_mode(self):
-        dump = CaseResponse.model_validate(minimal_case_doc()).model_dump(mode="json")
-        assert dump["case_id"] == "speedysnake"
+        doc = minimal_analysis_doc(review={"reviewed": True, "reviewed_by": "alice"})
+        assert CaseAnalysisResponse.model_validate(doc).review.reviewed_by == "alice"
 
 
 class TestClassifierQcStats:
