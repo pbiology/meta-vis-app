@@ -256,17 +256,21 @@ async def _compute_outbreaks_for_config(
     )
     ignored_ids = {doc["taxon_id"] for doc in ignored_docs}
 
-    # Only fetch cases within 2× the window.
+    # Only fetch analyses within 2× the window.
     # Stream the cursor instead of materializing the full list so that
-    # large windows don't load every case doc into memory at once.
+    # large windows don't load every document into memory at once.
+    #
+    # Driven from case_analysis rather than cases: order_date, analysis_type
+    # and is_latest all live there. Restricting to latest analyses means a
+    # superseded run's taxa cannot contribute to an outbreak signal.
     cutoff = (date.today() - timedelta(days=window_days * 2)).isoformat()
-    case_query: dict = {"order_date": {"$gte": cutoff}}
+    case_query: dict = {"is_latest": True, "order_date": {"$gte": cutoff}}
     if analysis_types:
         case_query["analysis_type"] = {"$in": analysis_types}
 
     case_map: dict = {}
     case_id_strs: list[str] = []
-    async for c in db["cases"].find(
+    async for c in db["case_analysis"].find(
         case_query, {"_id": 1, "case_id": 1, "order_date": 1}
     ):
         case_map[c["case_id"]] = c
@@ -281,8 +285,10 @@ async def _compute_outbreaks_for_config(
 
     # Fast aggregation on pre-computed outbreak_taxa
     pipeline: list[dict] = [
-        # Only samples from windowed cases
-        {"$match": {"case_id": {"$in": case_id_strs}}},
+        # Only samples from the latest analyses of windowed cases. The
+        # $addToSet on case_id below then counts distinct *clinical cases*:
+        # a case sequenced twice contributes one entry, not two.
+        {"$match": {"case_id": {"$in": case_id_strs}, "is_latest_analysis": True}},
         # Unwind the small outbreak_taxa array
         {"$unwind": "$outbreak_taxa"},
         # Filter to this config's superkingdom and criteria
