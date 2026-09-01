@@ -11,7 +11,9 @@ import {
 import { useOutbreaks, usePathogens } from "../hooks/queries/useAlerts";
 import { useNtcContaminantCaseIds } from "../hooks/queries/useNtc";
 import type { Case, CaseNote } from "../api/types";
+import { flattenCaseDetail } from "../api/types";
 import { useAuth } from "../context/AuthContext";
+import { useParams } from "react-router-dom";
 import { useRequiredParam } from "../utils/routeParams";
 import CaseTopBar from "../components/case-view/CaseTopBar";
 import CaseSidebar, { type CaseSection } from "../components/case-view/CaseSidebar";
@@ -28,10 +30,13 @@ import { useReportBuilder } from "../context/ReportBuilderContext";
 
 export default function CaseView() {
   const caseId = useRequiredParam("caseId");
+  // /cases/:caseId/analyses/:version addresses one run; bare route = latest.
+  const { version: versionParam } = useParams();
+  const version = versionParam ? Number(versionParam) : null;
   const { role, user } = useAuth();
 
-  const caseQ = useCase(caseId);
-  const samplesQ = useCaseSamples(caseId);
+  const caseQ = useCase(caseId, version);
+  const samplesQ = useCaseSamples(caseId, null, version);
   const pathogensQ = usePathogens();
   const outbreaksQ = useOutbreaks(14);
   const ntcCaseIdsQ = useNtcContaminantCaseIds();
@@ -77,13 +82,30 @@ export default function CaseView() {
     setActiveSampleId(null);
   }
 
+  // The page shows a case *at* one analysis, so identity and run fields are
+  // merged into a single object for the presentational components.
+  const merged = caseData ? flattenCaseDetail(caseData) : null;
+  const analyses = caseData?.analyses ?? [];
+  const currentAnalysis = caseData?.analysis ?? null;
+  const isSuperseded = currentAnalysis ? !currentAnalysis.is_latest : false;
+  const review = currentAnalysis?.review as
+    | { reviewed?: boolean; reviewed_by?: string }
+    | undefined;
+  const reviewed = review?.reviewed ?? false;
+  const notes = (merged?.notes as CaseNote[] | undefined) ?? [];
+  const classifiers = (currentAnalysis?.classifiers as Classifier[] | undefined) ?? [];
+  const ticketId = merged?.ticket_id as string | undefined;
+  const ticketUrl = merged?.ticket_url as string | undefined;
+  const hasMultiqc = (currentAnalysis?.has_multiqc as boolean | undefined) ?? false;
+
   // Seed selections from the persisted server-side draft when the case loads.
   // Marking the snapshot as "already saved" prevents the post-hydration effect
   // from echoing it back to the server.
   useEffect(() => {
     if (!caseData) return;
     const persisted =
-      (caseData as { report_selections?: Record<string, number[]> }).report_selections ?? {};
+      (currentAnalysis as { report_selections?: Record<string, number[]> } | null)
+        ?.report_selections ?? {};
     hydrate(persisted);
     const seed = Object.fromEntries(Object.entries(persisted).filter(([, ids]) => ids.length > 0));
     lastSavedRef.current = JSON.stringify(seed);
@@ -99,7 +121,7 @@ export default function CaseView() {
     const handle = setTimeout(() => {
       const payload = JSON.parse(caseSelectionsSnapshot) as Record<string, number[]>;
       updateReportMutation.mutate(
-        { caseId, selections: payload },
+        { caseId, selections: payload, version },
         {
           onSuccess: () => {
             lastSavedRef.current = caseSelectionsSnapshot;
@@ -111,7 +133,7 @@ export default function CaseView() {
       );
     }, 500);
     return () => clearTimeout(handle);
-  }, [caseId, caseSelectionsSnapshot, canEditReport, updateReportMutation]);
+  }, [caseId, version, caseSelectionsSnapshot, canEditReport, updateReportMutation]);
 
   // Derived signal pills (pathogen / outbreak / ntc) computed from the
   // cross-cutting endpoints + the case's own samples.
@@ -142,7 +164,7 @@ export default function CaseView() {
   async function handleUnreview() {
     setUnreviewConfirm(false);
     try {
-      await unreviewMutation.mutateAsync(caseId);
+      await unreviewMutation.mutateAsync({ caseId, version });
     } catch {
       alert("Failed to remove review.");
     }
@@ -156,14 +178,6 @@ export default function CaseView() {
     await deleteNoteMutation.mutateAsync({ caseId, noteId });
   }
 
-  const review = caseData?.review as { reviewed?: boolean; reviewed_by?: string } | undefined;
-  const reviewed = review?.reviewed ?? false;
-  const notes = (caseData?.notes as CaseNote[] | undefined) ?? [];
-  const classifiers = (caseData?.classifiers as Classifier[] | undefined) ?? [];
-  const ticketId = caseData?.ticket_id as string | undefined;
-  const ticketUrl = caseData?.ticket_url as string | undefined;
-  const hasMultiqc = (caseData?.has_multiqc as boolean | undefined) ?? false;
-
   const isLoading = caseQ.isLoading || samplesQ.isLoading;
   const isError = caseQ.isError || samplesQ.isError;
 
@@ -173,7 +187,7 @@ export default function CaseView() {
         Loading…
       </div>
     );
-  if (isError || !caseData)
+  if (isError || !caseData || !merged)
     return (
       <div className="flex items-center justify-center h-screen text-sm text-red-500">
         Failed to load case.
@@ -197,6 +211,9 @@ export default function CaseView() {
         canReview={role !== "reader"}
         reportCount={reportCount}
         onOpenReport={() => handleSectionChange("report")}
+        analyses={analyses}
+        currentVersion={currentAnalysis?.version ?? null}
+        isSuperseded={isSuperseded}
       />
       <div className="flex-1 flex min-h-0">
         <CaseSidebar
@@ -211,7 +228,7 @@ export default function CaseView() {
         <main className="flex-1 overflow-y-auto px-8 py-6 min-w-0">
           {section === "overview" && (
             <CaseOverview
-              caseData={caseData as Case}
+              caseData={merged as Case}
               samples={samples}
               notes={notes}
               signals={signals}
@@ -247,7 +264,15 @@ export default function CaseView() {
             </>
           )}
           {section === "multiqc" && <CaseMultiQC caseId={caseId} available={hasMultiqc} />}
-          {section === "report" && <CaseReportSection caseId={caseId} samples={samples} />}
+          {section === "report" && (
+            <CaseReportSection
+              caseId={caseId}
+              samples={samples}
+              version={version}
+              analyses={analyses}
+              canEdit={canEditReport}
+            />
+          )}
           {section === "comments" && (
             <CaseComments
               notes={notes}
@@ -257,7 +282,7 @@ export default function CaseView() {
               onDelete={handleDeleteNote}
             />
           )}
-          {section === "provenance" && <CaseProvenance caseData={caseData as Case} />}
+          {section === "provenance" && <CaseProvenance caseData={merged as Case} />}
         </main>
       </div>
 
