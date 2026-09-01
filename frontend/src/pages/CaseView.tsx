@@ -73,10 +73,6 @@ export default function CaseView() {
   const lastSavedRef = useRef<string | null>(null);
   const canEditReport = role !== "reader";
 
-  useEffect(() => {
-    document.title = `${caseId} — meta-vis`;
-  }, [caseId]);
-
   function handleSectionChange(s: CaseSection) {
     setSection(s);
     setActiveSampleId(null);
@@ -97,6 +93,17 @@ export default function CaseView() {
   const ticketId = merged?.ticket_id as string | undefined;
   const ticketUrl = merged?.ticket_url as string | undefined;
   const hasMultiqc = (currentAnalysis?.has_multiqc as boolean | undefined) ?? false;
+
+  // The tab title names the run being viewed, so several tabs of the same case
+  // opened side by side stay tellable apart. Every case gets the marker, not
+  // just re-sequenced ones — "(latest)" is meaningful on its own.
+  useEffect(() => {
+    let run = "";
+    if (currentAnalysis) {
+      run = currentAnalysis.is_latest ? " (latest)" : ` (v${currentAnalysis.version})`;
+    }
+    document.title = `${caseId}${run} — meta-vis`;
+  }, [caseId, currentAnalysis]);
 
   // Seed selections from the persisted server-side draft when the case loads.
   // Marking the snapshot as "already saved" prevents the post-hydration effect

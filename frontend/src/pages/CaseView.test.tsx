@@ -56,6 +56,15 @@ describe("CaseView review targeting", () => {
     expect(reviewedPath).toBe("/api/v1/cases/CASE-1/analyses/1/review");
   });
 
+  it("names the superseded run in the tab title", async () => {
+    renderWithProviders(<CaseView />, {
+      route: "/case/CASE-1/analyses/1",
+      routePath: "/case/:caseId/analyses/:version",
+    });
+
+    await waitFor(() => expect(document.title).toBe("CASE-1 (v1) — meta-vis"));
+  });
+
   it("targets the latest analysis on the unversioned route", async () => {
     server.use(
       http.get(`${API}/cases/:caseId`, ({ params }) =>
@@ -78,5 +87,26 @@ describe("CaseView review targeting", () => {
 
     await waitFor(() => expect(reviewedPath).not.toBeNull());
     expect(reviewedPath).toBe("/api/v1/cases/CASE-1/review");
+  });
+
+  it("marks the current run '(latest)' in the tab title, even with one analysis", async () => {
+    server.use(
+      http.get(`${API}/cases/:caseId`, ({ params }) =>
+        HttpResponse.json({
+          case: { case_id: params.caseId, notes: [] },
+          // A case that has never been re-sequenced still gets the marker.
+          analysis: { ...V2, version: 1, review: { reviewed: false } },
+          analyses: [{ ...V2, version: 1 }],
+        })
+      ),
+      http.get(`${API}/cases/:caseId/samples`, () => HttpResponse.json([]))
+    );
+
+    renderWithProviders(<CaseView />, {
+      route: "/case/CASE-1",
+      routePath: "/case/:caseId",
+    });
+
+    await waitFor(() => expect(document.title).toBe("CASE-1 (latest) — meta-vis"));
   });
 });
