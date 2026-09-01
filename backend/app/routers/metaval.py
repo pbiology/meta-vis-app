@@ -26,9 +26,14 @@ def _oid(id_str: str) -> ObjectId:
 
 
 def _serialise(doc: dict) -> dict:
+    # Every ObjectId has to be stringified: one left raw fails JSON encoding
+    # for the whole response, which the UI surfaces as "metaval results may be
+    # missing" rather than as the serialisation error it is.
     doc["_id"] = str(doc["_id"])
     if doc.get("sample_id"):
         doc["sample_id"] = str(doc["sample_id"])
+    if doc.get("analysis_id"):
+        doc["analysis_id"] = str(doc["analysis_id"])
     # Strip internal storage fields from organism list
     for org in doc.get("organisms", []):
         org.pop("igv_html", None)
