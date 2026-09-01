@@ -95,44 +95,57 @@ export default function SubjectDetail() {
                 </tr>
               </thead>
               <tbody>
-                {cases.map((c) => (
-                  <tr
-                    key={c.case_id}
-                    onClick={() =>
-                      window.open(`/cases/${c.case_id}`, "_blank", "noopener,noreferrer")
-                    }
-                    className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
-                  >
-                    <td className="px-4 py-3 font-mono text-xs text-gray-700">{c.case_id}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                      {c.order_date ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                      {analysisLabel(c.analysis_type)}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
-                      {c.sequencing_platform
-                        ? c.sequencing_platform.charAt(0).toUpperCase() +
-                          c.sequencing_platform.slice(1)
-                        : "—"}
-                    </td>
-                    <td
-                      className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap"
-                      title={(c.sample_names ?? []).join(", ") || undefined}
+                {cases.map((row) => {
+                  // One row per clinical case, showing its latest analysis;
+                  // a re-sequenced case appears once, as in the Cases list.
+                  const caseId = row.case.case_id;
+                  const a = row.latest;
+                  const runCount = row.superseded_analyses.length + 1;
+                  return (
+                    <tr
+                      key={caseId}
+                      onClick={() =>
+                        window.open(`/cases/${caseId}`, "_blank", "noopener,noreferrer")
+                      }
+                      className="cursor-pointer border-b border-gray-50 hover:bg-gray-50 transition-colors"
                     >
-                      {c.sample_count ?? 0} sample{(c.sample_count ?? 0) === 1 ? "" : "s"}
-                      {(c.control_count ?? 0) > 0 && (
-                        <span className="text-gray-300 ml-1">+{c.control_count} ctrl</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge type={c.review?.reviewed ? "reviewed" : "pending"} />
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-400">
-                      {c.review?.reviewed_by ?? "—"}
-                    </td>
-                  </tr>
-                ))}
+                      <td className="px-4 py-3 font-mono text-xs text-gray-700">
+                        <span className="flex items-center gap-1.5">
+                          {caseId}
+                          {runCount > 1 && (
+                            <span className="px-1 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">
+                              v{a.version} of {runCount}
+                            </span>
+                          )}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
+                        {a.order_date ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
+                        {analysisLabel(a.analysis_type ?? undefined)}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
+                        {a.sequencing_platform
+                          ? a.sequencing_platform.charAt(0).toUpperCase() +
+                            a.sequencing_platform.slice(1)
+                          : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
+                        {a.sample_count ?? 0} sample{(a.sample_count ?? 0) === 1 ? "" : "s"}
+                        {(a.control_count ?? 0) > 0 && (
+                          <span className="text-gray-300 ml-1">+{a.control_count} ctrl</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge type={a.review?.reviewed ? "reviewed" : "pending"} />
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-400">
+                        {a.review?.reviewed_by ?? "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
                 {cases.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-400">
