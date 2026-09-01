@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 
 from app.routers.samples import router
+from tests.helpers import insert_case as seed_case
 from tests.helpers import make_test_app
 
 
@@ -34,21 +35,24 @@ async def insert_sample(
     case_reviewed=False,
     metaval_pipeline_info=None,
 ):
-    case_doc = {
-        "_id": ObjectId(),
-        "case_id": "testcase",
-        "review": {
-            "reviewed": case_reviewed,
-            "reviewed_by": None,
-            "reviewed_at": None,
-            "notes": None,
-        },
-    }
-    if metaval_pipeline_info is not None:
-        case_doc["metaval_pipeline_info"] = metaval_pipeline_info
-    await db["cases"].insert_one(case_doc)
+    # Review and metaval-pipeline-info live on the analysis now, so the sample's
+    # live review status comes from the run that produced it.
+    extra = (
+        {"metaval_pipeline_info": metaval_pipeline_info}
+        if metaval_pipeline_info is not None
+        else {}
+    )
+    analysis_id = await seed_case(
+        db,
+        "testcase",
+        reviewed=case_reviewed,
+        reviewed_by=None,
+        **extra,
+    )
     result = await db["samples"].insert_one(
         {
+            "analysis_id": analysis_id,
+            "is_latest_analysis": True,
             "case_id": "testcase",
             "sample_id": sample_id,
             "sample_source": "blood",
@@ -110,22 +114,13 @@ class TestListSamples:
         assert "page" in data
         assert "pages" in data
 
-    async def test_review_status_reflects_case_not_sample(self, client, fake_db):
-        """review.reviewed in the list must come from the parent case, not the stale sample field."""
-        await fake_db["cases"].insert_one(
-            {
-                "_id": ObjectId(),
-                "case_id": "reviewed-case",
-                "review": {
-                    "reviewed": True,
-                    "reviewed_by": "alice",
-                    "reviewed_at": None,
-                    "notes": None,
-                },
-            }
-        )
+    async def test_review_status_reflects_analysis_not_sample(self, client, fake_db):
+        """review.reviewed in the list comes from the producing analysis, not the stale sample field."""
+        analysis_id = await seed_case(fake_db, "reviewed-case", reviewed=True)
         await fake_db["samples"].insert_one(
             {
+                "analysis_id": analysis_id,
+                "is_latest_analysis": True,
                 "case_id": "reviewed-case",
                 "sample_id": "SRR999",
                 "sample_type": "sample",
@@ -220,10 +215,12 @@ class TestGetNtcProfiles:
         assert body["contaminant_config"]["threshold"] == 5
         assert "species" in body["contaminant_config"]["eligible_ranks"]
 
-    async def test_returns_ntc_in_same_case(self, client, fake_db):
-        # Insert a sample and an NTC in the same case
+    async def test_returns_ntc_in_same_analysis(self, client, fake_db):
+        # Insert a sample and an NTC produced by the same analysis
+        analysis_id = await seed_case(fake_db, "testcase")
         sample_result = await fake_db["samples"].insert_one(
             {
+                "analysis_id": analysis_id,
                 "case_id": "testcase",
                 "sample_id": "SRR001",
                 "sample_type": "sample",
@@ -236,6 +233,7 @@ class TestGetNtcProfiles:
         )
         await fake_db["samples"].insert_one(
             {
+                "analysis_id": analysis_id,
                 "case_id": "testcase",
                 "sample_id": "CTRL01",
                 "sample_type": "negative_ctrl",
@@ -256,8 +254,10 @@ class TestGetNtcProfiles:
         # A DNA sample must never receive RNA NTCs in its contaminant baseline —
         # the two are technically incomparable. Invariant guards the
         # contaminant-pill logic downstream.
+        analysis_id = await seed_case(fake_db, "testcase")
         sample_result = await fake_db["samples"].insert_one(
             {
+                "analysis_id": analysis_id,
                 "case_id": "testcase",
                 "sample_id": "SRR001",
                 "sample_type": "sample",
@@ -271,6 +271,7 @@ class TestGetNtcProfiles:
         # RNA NTC — must be filtered out
         await fake_db["samples"].insert_one(
             {
+                "analysis_id": analysis_id,
                 "case_id": "testcase",
                 "sample_id": "CTRL_RNA",
                 "sample_type": "negative_ctrl",
@@ -284,6 +285,7 @@ class TestGetNtcProfiles:
         # DNA NTC — must be included
         await fake_db["samples"].insert_one(
             {
+                "analysis_id": analysis_id,
                 "case_id": "testcase",
                 "sample_id": "CTRL_DNA",
                 "sample_type": "negative_ctrl",
@@ -312,7 +314,8 @@ class TestGetNtcProfiles:
 class TestGetKrona:
     async def test_returns_krona_html(self, client, fake_db, fake_blob):
         oid, case_id = await insert_sample(fake_db, "SRR001", has_krona=True)
-        key = f"krona/{case_id}/kraken2.html"
+        # Blob keys are namespaced by the producing analysis version.
+        key = f"krona/{case_id}/v1/kraken2.html"
         await fake_blob.put(key, "<html>krona</html>")
         resp = client.get(f"/api/v1/samples/{oid}/krona?classifier=kraken2")
         assert resp.status_code == 200
