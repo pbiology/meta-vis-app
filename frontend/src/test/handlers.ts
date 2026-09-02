@@ -133,8 +133,16 @@ export const defaultHandlers = [
 
   // metaval
   http.get(`${API}/metaval/sample/:sampleId`, () => HttpResponse.json([])),
+  // taxon_name / sample_name / classifier are always present on a real result
+  // and are what the detail page puts in its header.
   http.get(`${API}/metaval/:metavalId`, ({ params }) =>
-    HttpResponse.json({ _id: params.metavalId, sample_id: "s1" })
+    HttpResponse.json({
+      _id: params.metavalId,
+      sample_id: "s1",
+      sample_name: "S1",
+      classifier: "kraken2",
+      taxon_name: "Test taxon",
+    })
   ),
 
   // taxa
@@ -146,7 +154,19 @@ export const defaultHandlers = [
   http.get(`${API}/taxa/:taxonId/external_links`, () => HttpResponse.json({})),
   http.get(`${API}/taxa/:taxonId/literature`, () => HttpResponse.json({})),
   http.get(`${API}/taxa/:taxonId/bvbrc/genomes`, () => HttpResponse.json({})),
-  http.get(`${API}/taxa/:taxonId/bvbrc/specialty_genes`, () => HttpResponse.json({})),
+  // The backend guarantees these three arrays on every response, including the
+  // viral short-circuit and the network-failure path, so the empty result is a
+  // populated shape rather than {}. Consumers read them without guarding.
+  http.get(`${API}/taxa/:taxonId/bvbrc/specialty_genes`, ({ params }) =>
+    HttpResponse.json({
+      taxon_id: Number(params.taxonId),
+      is_viral: false,
+      amr_genes: [],
+      virulence_factors: [],
+      amr_phenotypes: [],
+      bvbrc_url: "https://www.bv-brc.org/",
+    })
+  ),
 
   // alerts
   http.get(`${API}/alerts/outbreaks`, () => HttpResponse.json({ window_days: 14, outbreaks: [] })),
