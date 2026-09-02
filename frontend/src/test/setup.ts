@@ -66,7 +66,7 @@ vi.mock("../oidc", () => ({
 // when `--localstorage-file` is detected; it surfaces as `setItem is not a
 // function`. Force a deterministic in-memory Storage on both globals.
 class MemStorage implements Storage {
-  private map = new Map<string, string>();
+  private readonly map = new Map<string, string>();
   get length() {
     return this.map.size;
   }
