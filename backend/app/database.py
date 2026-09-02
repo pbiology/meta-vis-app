@@ -112,35 +112,60 @@ async def _ensure_indexes():
     await db["users"].delete_many({"sub": {"$exists": False}})
     await db["users"].create_index("sub", unique=True)
 
-    # cases — fast lookup by case_id and filtering by order_date
+    # cases — clinical identity only. `ingested_at`, `review.reviewed` and the
+    # list-sort compound index moved to case_analysis along with the fields
+    # they indexed.
     await db["cases"].create_index("case_id", unique=True)
-    await db["cases"].create_index("ingested_at")
     await db["cases"].create_index("order_date")
-    await db["cases"].create_index("review.reviewed")
     # Sparse: control-only cases have subject_id=None and shouldn't take up
     # index slots. Powers "cases for subject X" lookups and the orphan-cleanup
     # check in delete_case.
     await db["cases"].create_index("subject_id", sparse=True)
-    await db["cases"].create_index(
+
+    # case_analysis — one document per pipeline run of a case.
+    await db["case_analysis"].create_index(
+        [("case_id", 1), ("version", -1)], unique=True
+    )
+    # At most one latest analysis per case, enforced by the database rather
+    # than by application discipline. Ingest must therefore demote the previous
+    # analysis *before* inserting the new one — unique violations are detected
+    # at write time, not deferred to commit.
+    await db["case_analysis"].create_index(
+        "case_id",
+        unique=True,
+        partialFilterExpression={"is_latest": True},
+        name="one_latest_per_case",
+    )
+    # Drives the case list: equality on is_latest followed by the sort keys,
+    # so the sort stays index-covered instead of falling back to an in-memory
+    # sort. The sibling fetch reuses the (case_id, version) index above.
+    await db["case_analysis"].create_index(
         [
+            ("is_latest", 1),
             ("review.reviewed", 1),
             ("order_date", -1),
             ("ingested_at", -1),
         ]
     )
+    # Windowed case selection in the outbreak aggregation.
+    await db["case_analysis"].create_index([("is_latest", 1), ("order_date", -1)])
 
-    # samples — fast lookup by case, by case+type+material (NTC profiles),
-    # and by viral taxa fields used in the outbreak aggregation pipeline
-    await db["samples"].create_index([("case_id", 1), ("sample_id", 1)])
+    # samples — fast lookup by the analysis that produced them, by case across
+    # analyses, and by the viral taxa fields used in the outbreak pipeline
+    await db["samples"].create_index([("analysis_id", 1), ("sample_id", 1)])
     await db["samples"].create_index(
-        [("case_id", 1), ("sample_type", 1), ("material", 1)]
+        [("analysis_id", 1), ("sample_type", 1), ("material", 1)]
     )
+    await db["samples"].create_index([("case_id", 1), ("sample_id", 1)])
     await db["samples"].create_index("profiles.profile.superkingdom")
     await db["samples"].create_index("profiles.profile.taxon_id")
     await db["samples"].create_index([("order_date", -1), ("ingested_at", -1)])
+    # Analytics only ever scan the latest analysis of each case, so
+    # is_latest_analysis leads the indexes those queries use.
     await db["samples"].create_index(
-        [("sample_type", 1), ("order_date", -1), ("ingested_at", -1)]
+        [("is_latest_analysis", 1), ("sample_type", 1), ("order_date", -1)]
     )
+    await db["samples"].create_index([("is_latest_analysis", 1), ("order_date", -1)])
     await db["samples"].create_index(
         [("sample_id", 1), ("order_date", -1), ("ingested_at", -1)]
     )
@@ -148,8 +173,10 @@ async def _ensure_indexes():
     # blobs — used by MongoBlobStore when object storage is not configured
     await db["blobs"].create_index("key", unique=True)
 
-    # metaval_results — fast lookup by sample and case
-    await db["metaval_results"].create_index([("case_id", 1), ("sample_id", 1)])
+    # metaval_results — fast lookup by the analysis that produced them; case_id
+    # stays indexed on its own for the cascade in delete_case.
+    await db["metaval_results"].create_index([("analysis_id", 1), ("sample_id", 1)])
+    await db["metaval_results"].create_index("case_id")
 
     # outbreak_ignorelist — fast lookup by taxon_id and filtering by superkingdom
     await db["outbreak_ignorelist"].create_index("taxon_id", unique=True)
@@ -168,10 +195,18 @@ async def _ensure_indexes():
     # ntc_ignorelist — fast lookup by taxon_id
     await db["ntc_ignorelist"].create_index("taxon_id", unique=True)
 
-    # samples — compound index for NTC trends query (sample_type + material + order_date)
+    # samples — NTC trends query, restricted to the latest analyses.
+    # Deliberately left auto-named: the legacy `ntc_trends_lookup` index has a
+    # different key pattern, and reusing that name would raise
+    # IndexOptionsConflict on a database that still carries it. The legacy index
+    # is redundant once this one exists and can be dropped by hand.
     await db["samples"].create_index(
-        [("sample_type", 1), ("material", 1), ("order_date", -1)],
-        name="ntc_trends_lookup",
+        [
+            ("is_latest_analysis", 1),
+            ("sample_type", 1),
+            ("material", 1),
+            ("order_date", -1),
+        ]
     )
 
     # ntc_known_contaminants — fast lookup by taxon_id

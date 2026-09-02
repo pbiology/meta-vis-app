@@ -9,12 +9,21 @@ Core concepts
 =============
 
 **Case**
-   One pipeline run. Holds the run's QC, the list of samples, the order
-   date, review state, and reviewer notes.
+   One clinical case — a patient, an order, a ticket. Holds the order
+   date, the subject, and the notes. A case can be sequenced more than
+   once, so it may have several analyses.
+
+**Analysis**
+   One pipeline run of a case. Holds that run's QC, samples, classifiers,
+   report draft and review state. When a case is re-sequenced the new
+   analysis becomes the current one and the earlier run is marked
+   *superseded* — it is kept, not replaced.
 
 **Sample**
-   One sequencing sample inside a case. Has its own metadata (type,
+   One sequencing sample inside an analysis. Has its own metadata (type,
    material, subject id) and the per-classifier taxonomic profile.
+   Re-sequencing produces a fresh set of samples belonging to the new
+   analysis.
 
 **Subject**
    A patient/research subject. One subject can span many cases; each
@@ -30,14 +39,29 @@ Core concepts
 Case list
 =========
 
-Sidebar → **Cases**. One row per case, with the case id, order date,
-sample count, review status, last-updated time, and any per-case warning
-pills (outbreak detection or known-contaminant hits — see
-:doc:`monitoring`).
+Sidebar → **Cases**. One row per clinical case, showing its **current
+analysis**: case id, order date, sample count, review status,
+last-updated time, and any per-case warning pills (outbreak detection or
+known-contaminant hits — see :doc:`monitoring`).
 
-- Click a row to open the case.
-- The review checkbox is editable inline by writers and admins.
-- Delete is admin-only.
+A case that has been sequenced more than once shows a version badge
+(``v2``) and a ``latest`` marker, with an arrow to the left of the case
+id:
+
+- Click the arrow to reveal the earlier analyses, indented and greyed
+  beneath the current one. **Expand all** / **Collapse all** in the
+  toolbar does the same for every multi-run case on the page.
+- Each row keeps its own review status. An earlier analysis that was
+  reviewed still reads *Reviewed* — the record of who signed it off is
+  not rewritten by a later run.
+- Click any row to open that analysis. Rows open in a new tab, which is
+  the intended way to compare two runs: put them side by side.
+- Delete is admin-only. On the current row it deletes the whole case; on
+  a superseded row it deletes just that analysis.
+
+Counts in the toolbar (pending / reviewed / total) count current analyses
+only, so a re-sequenced case is counted once and an unreviewed run that
+has since been superseded does not sit in the pending queue forever.
 
 Case detail
 ===========
@@ -45,6 +69,26 @@ Case detail
 Top of the page: case id, order date, sample summary, review status
 toggle, notes. Notes are editable by writers and admins; multiple notes
 are supported and timestamped per author.
+
+Notes belong to the **case**, not to a single run, so they are visible and
+writable from every analysis of that case and survive re-sequencing.
+Marking reviewed applies to the **analysis** you are looking at.
+
+If the case has more than one analysis, a ``v2 of 3`` pill next to the
+case id lists them all, each with its date and review status. Selecting
+one opens it in a new tab — there is no side-by-side diff view, so
+comparison is done by arranging two tabs on screen.
+
+Opening an earlier analysis shows a banner saying it has been superseded,
+with a link to the current one. The page is otherwise fully usable: the
+older run's QC, taxonomy and Krona plots are all still there.
+
+When a case is re-sequenced, the new analysis starts with an empty report
+draft. If the earlier run had one, the **Report** tab offers to copy its
+selections across. This is never automatic — a taxon picked against one
+run's data should not silently enter another run's report — and anything
+that no longer applies (a sample or taxon absent from the new run) is
+dropped and listed.
 
 Below, a tabbed view:
 

@@ -130,6 +130,16 @@ def _add_auth_args(parser: argparse.ArgumentParser) -> None:
     """Attach the auth + server-URL flags shared by every ingest subcommand."""
     parser.add_argument("--url", default="http://localhost:8000")
     parser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help=(
+            "Skip the preflight confirmation. The preflight states whether the "
+            "bundle joins an existing case as a new analysis or creates a new "
+            "case; it is only prompted for on a TTY."
+        ),
+    )
+    parser.add_argument(
         "--username",
         default=os.environ.get("KEYCLOAK_USERNAME", "dev-admin"),
         help="Keycloak username. Overrides KEYCLOAK_USERNAME env var.",
@@ -282,9 +292,9 @@ def get_session(
     # where the reader/writer/admin roles live), falling back to realm roles
     # for compatibility with older local-dev KC setups.
     role_client = os.environ.get("KEYCLOAK_ROLE_CLIENT", "meta-vis-frontend")
-    client_roles = (
-        (claims.get("resource_access") or {}).get(role_client, {}).get("roles") or []
-    )
+    client_roles = (claims.get("resource_access") or {}).get(role_client, {}).get(
+        "roles"
+    ) or []
     realm_roles = (claims.get("realm_access") or {}).get("roles") or []
     role = _highest_role(client_roles or realm_roles)
 
@@ -304,26 +314,69 @@ def get_session(
     return session, login_ms
 
 
+def _describe_existing_case(payload: dict) -> str:
+    """One-line summary of the case family a bundle is about to join."""
+    case = payload.get("case") or {}
+    analyses = payload.get("analyses") or []
+    latest = next(
+        (a for a in analyses if a.get("is_latest")), analyses[0] if analyses else {}
+    )
+    review = latest.get("review") or {}
+    reviewed = (
+        f"reviewed by {review.get('reviewed_by')}"
+        if review.get("reviewed")
+        else "not reviewed"
+    )
+    subject = case.get("subject_id") or "no subject"
+    return (
+        f"subject {subject}, {len(analyses)} analysis(es), "
+        f"latest v{latest.get('version', '?')} {reviewed}"
+    )
+
+
 def check_case_available(
-    session: requests.Session, base_url: str, case_id: str
+    session: requests.Session, base_url: str, case_id: str, assume_yes: bool = False
 ) -> None:
-    """Fail fast if `case_id` is already taken. The server rejects duplicates,
-    but it does so only after the bundle is uploaded and extracted — wasting
-    minutes of wall time for a result that's knowable in one round-trip."""
+    """Report what this bundle will become, and confirm before uploading.
+
+    Re-ingesting an existing case now appends an analysis instead of being
+    rejected, so this is no longer a gate — but it is the only place a mistyped
+    ``--case-id`` becomes visible. It therefore states both outcomes explicitly:
+    joining an existing case, or creating a new one. The prompt is skipped when
+    stdin is not a TTY (CI) or ``--yes`` is passed.
+    """
     resp = session.get(f"{base_url}/api/v1/cases/{case_id}")
+
     if resp.status_code == 200:
-        print(
-            f"Case '{case_id}' already exists on the server. "
-            "Choose a different --case-id or delete the existing case first."
+        try:
+            summary = _describe_existing_case(resp.json())
+        except ValueError:
+            summary = "existing case"
+        next_version = len((resp.json().get("analyses") or [])) + 1
+        message = (
+            f"Case '{case_id}' exists — {summary}.\n"
+            f"This bundle will be ingested as analysis v{next_version}."
         )
-        sys.exit(1)
-    # 404 is the happy path (case is free). Any other status: warn and continue
-    # — the real ingest will surface the underlying error.
-    if resp.status_code not in (200, 404):
+    elif resp.status_code == 404:
+        message = (
+            f"Case '{case_id}' does not exist. "
+            f"This bundle will create a NEW case (analysis v1)."
+        )
+    else:
+        # Any other status: warn and continue — the real ingest will surface
+        # the underlying error.
         print(
             f"Warning: preflight case check returned {resp.status_code}: "
             f"{resp.text[:200]}. Continuing anyway."
         )
+        return
+
+    print(message)
+    if assume_yes or not sys.stdin.isatty():
+        return
+    if input("Continue? [y/N] ").strip().lower() not in ("y", "yes"):
+        print("Aborted.")
+        sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
@@ -644,9 +697,7 @@ def parse_sample(raw: str, classifier_names: list) -> dict:
 
     sample_id = parts["sample_id"]
     if parts["type"] == "sample" and not parts.get("subject_id"):
-        print(
-            f"Sample '{sample_id}' has type=sample and must provide subject_id."
-        )
+        print(f"Sample '{sample_id}' has type=sample and must provide subject_id.")
         sys.exit(1)
     classifier_set = set(classifier_names)
     columns = {}
@@ -697,7 +748,7 @@ def ingest_taxprofiler(args):
         client_id=args.client_id,
         client_secret=args.client_secret,
     )
-    check_case_available(session, args.url, args.case_id)
+    check_case_available(session, args.url, args.case_id, assume_yes=args.yes)
 
     classifiers = [parse_classifier(c) for c in args.classifier]
     classifier_names = [c["name"] for c in classifiers]
@@ -843,7 +894,7 @@ def ingest_trana(args):
         client_id=args.client_id,
         client_secret=args.client_secret,
     )
-    check_case_available(session, args.url, args.case_id)
+    check_case_available(session, args.url, args.case_id, assume_yes=args.yes)
 
     samples = [parse_trana_sample(s) for s in args.sample]
     _check_unique_sample_ids(samples)
@@ -959,6 +1010,7 @@ def _print_result(
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def main():
     parser = argparse.ArgumentParser(

@@ -129,7 +129,12 @@ What is audited
 
 **Case access and review**
    ``view_case``, ``review_case``, ``unreview_case``, ``add_note``,
-   ``delete_note``, ``delete_case``.
+   ``delete_note``, ``delete_case``, ``delete_case_analysis``,
+   ``update_case_report``, ``carry_forward_case_report``.
+
+   Events are recorded against the case (``resource_type: "case"``,
+   ``resource_id: <case_id>``) even when they apply to one analysis of it;
+   the analysis version appears in the event ``detail``.
 
 **Sample access**
    ``view_sample``.

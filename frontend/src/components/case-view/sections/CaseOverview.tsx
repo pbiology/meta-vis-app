@@ -50,6 +50,9 @@ export default function CaseOverview({
 }: Readonly<CaseOverviewProps>) {
   const reviewed = (caseData.review as { reviewed?: boolean } | undefined)?.reviewed ?? false;
   const orderDate = caseData.order_date as string | undefined;
+  // The run's own date, shown alongside the order date when a re-sequencing
+  // moved it — otherwise the page would disagree with the case list.
+  const runDate = caseData.analysis_order_date as string | undefined;
   const sampleCount =
     (caseData.sample_count as number | undefined) ??
     samples.filter((s) => s.sample_type === "sample").length;
@@ -68,6 +71,9 @@ export default function CaseOverview({
 
   const meta: Array<[string, string]> = [
     ["Order date", relDay(orderDate)],
+    ...(runDate && runDate !== orderDate
+      ? ([["This run", relDay(runDate)]] as Array<[string, string]>)
+      : []),
     [
       "Reviewer",
       reviewed

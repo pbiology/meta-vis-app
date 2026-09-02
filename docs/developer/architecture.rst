@@ -91,13 +91,19 @@ Layout::
    ├── constants.py
    ├── auth/
    │   └── utils.py        Keycloak token validation, role extraction
+   ├── case_access.py      Shared case / analysis lookups used by routers
    ├── ingestor/           See "Ingest" below
-   ├── models/             Pydantic models — case, sample, qc, taxonomy, …
+   ├── models/             Pydantic models — case, analysis, sample, qc, taxonomy, …
    └── routers/            Resource-shaped API endpoints
 
-Routers, one file per resource: ``auth``, ``cases``, ``samples``,
-``subjects``, ``ingest``, ``metaval``, ``alerts``, ``taxa``, ``ntc``,
-``users``, ``config``, ``health``.
+Routers, one file per resource: ``auth``, ``cases``, ``analyses``,
+``samples``, ``subjects``, ``ingest``, ``metaval``, ``alerts``, ``taxa``,
+``ntc``, ``users``, ``config``, ``health``.
+
+``cases`` and ``analyses`` share the ``/cases`` prefix and split by
+lifetime rather than by URL: ``cases`` owns clinical identity, the case
+list and the note thread, while ``analyses`` owns everything scoped to a
+single pipeline run. See "Cases and analyses" below.
 
 Everything is async — Motor for the database, httpx for outbound HTTP, and
 asyncio-aware blob uploads. The event loop is never blocked by I/O.
@@ -155,7 +161,8 @@ taxonomic profile is embedded directly in the sample document.
 ==========================  ========================================================
 Collection                  Purpose
 ==========================  ========================================================
-``cases``                   One doc per pipeline run (unique index on ``case_id``)
+``cases``                   One doc per clinical case (unique index on ``case_id``)
+``case_analysis``           One doc per pipeline run of a case
 ``samples``                 One doc per sample, with the full taxonomic profile
 ``subjects``                Patient/subject metadata shared across cases
 ``blobs``                   Krona HTML / IGV reports — fallback when S3 is unset
@@ -168,6 +175,43 @@ Collection                  Purpose
 ``ntc_known_contaminants``  Known contaminants tracked in NTC QC
 ``audit_log``               Append-only event log (see :doc:`../user-guide/administration`)
 ==========================  ========================================================
+
+Cases and analyses
+------------------
+
+A clinical case can be sequenced more than once. The two concepts are
+separate documents:
+
+- ``cases`` holds **clinical identity** — ``case_id``, ticket, order date,
+  subject, and the note thread. One document, however many times the case
+  is sequenced.
+- ``case_analysis`` holds **one pipeline run** — classifiers, QC,
+  pipeline-info, review state and the report draft, keyed by
+  ``(case_id, version)``.
+
+Notes live on the case rather than the analysis, so re-sequencing never
+strands the clinical discussion on a superseded run. Review lives on the
+analysis, because you review results: v1 reviewed and v2 pending is a
+meaningful and honest state.
+
+The case carries **no back-reference** to its analyses — no array, no
+"latest" pointer. The link is ``case_analysis.case_id``, and the invariant
+that at most one analysis per case is current is enforced by the database:
+
+.. code-block:: javascript
+
+   db.case_analysis.createIndex(
+     { case_id: 1 },
+     { unique: true, partialFilterExpression: { is_latest: true } }
+   )
+
+Samples carry ``analysis_id`` (the foreign key) plus a denormalised
+``case_id`` and ``is_latest_analysis``. The denormalisation is deliberate:
+it lets cross-case aggregations group by clinical case without a join —
+which is what makes the outbreak detector's distinct-case count correct —
+and lets analytics restrict themselves to current results with an indexed
+equality rather than an exclusion list that would grow with every
+re-sequencing.
 
 Indexes are created in ``database.py::_ensure_indexes()`` and run at every
 startup — the function is idempotent, so it's safe to point the backend at
@@ -188,8 +232,13 @@ abstracts over two backends:
 - **MongoDB** (default if ``OBJECT_STORAGE_ENDPOINT`` is unset) — blobs go
   into the ``blobs`` collection. Zero setup; bloats the working set.
 - **S3-compatible** (MinIO, AWS S3, …) — preferred for production. Keys are
-  hierarchical: ``meta-vis/krona/{case_oid}/{classifier}.html``,
-  ``meta-vis/igv/{case_oid}/{sample}/{classifier}/{organism}.html``.
+  hierarchical and namespaced by case **and analysis version**:
+  ``meta-vis/krona/{case_id}/v{version}/{classifier}.html``,
+  ``meta-vis/igv/{case_id}/v{version}/{sample}/{classifier}/{organism}.html``.
+
+  The version segment is what stops a re-sequencing from overwriting the
+  previous run's reports. Because the case id comes first, deleting a case
+  still clears every analysis with a single prefix delete.
 
 The backend chooses based on environment alone; no code change is required
 to switch. Blobs ingested under one backend are not visible to the other —
@@ -228,9 +277,31 @@ Wire flow:
    case is either fully ingested or not at all.
 5. On success the outbreak-alert cache is invalidated.
 
+Re-ingesting an existing case
+-----------------------------
+
+Ingesting a ``case_id`` that already exists **appends a new analysis**
+rather than failing. Two things happen before the prepare phase, in
+``app/ingestor/case_versioning.py``:
+
+- The incoming subject is compared against the case's. A mismatch is a hard
+  error — re-using a case id for a different patient is the one way this
+  model could silently merge unrelated clinical data.
+- The next version number is resolved. This has to happen up front because
+  blob keys are namespaced by version.
+
+Inside the transaction, the previous analysis is demoted **before** the new
+one is inserted. This ordering is required, not stylistic: the partial
+unique index permits a single current analysis per case, and MongoDB
+detects unique violations at write time rather than deferring them to
+commit. Insert-then-demote would succeed on a case's first ingest and fail
+on every re-sequencing.
+
 Sample-name normalisation is the known fragile spot — taxprofiler appends
 classifier/db suffixes to sample names, so the CLI requires explicit
-``column_*=`` mappings per sample. See ``TECHNICAL_DEBT.md``.
+``column_*=`` mappings per sample. The MultiQC keys are derived by
+splitting on ``.`` and ``_k2``, which is why the mapping cannot be
+inferred.
 
 Outbreak detection
 ==================
@@ -241,9 +312,13 @@ Python pass:
 1. Pull configurable time window (7 / 14 / 30 days) and per-taxon thresholds
    from ``settings.outbreak_configs`` (loaded once from
    ``outbreak_configs.json``).
-2. Aggregation pipeline: match cases in window → unwind sample profiles →
-   filter to qualifying viral taxa → group by taxon → keep taxa in ≥ 2
-   cases.
+2. Aggregation pipeline: match the **current analyses** of cases in window →
+   unwind sample profiles → filter to qualifying viral taxa → group by
+   taxon → keep taxa in ≥ 2 cases.
+
+   Superseded runs are excluded, and the grouping counts distinct
+   ``case_id`` — the clinical case. A patient sequenced twice therefore
+   contributes one case to the threshold, not two.
 3. Python: cluster the matching cases by ``order_date`` (sliding window) to
    produce the alerts list.
 4. Result is cached in-memory for one hour. Cache is invalidated on any

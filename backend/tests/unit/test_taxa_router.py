@@ -301,7 +301,9 @@ class TestGetTaxonLiterature:
         db["taxa"].find_one = AsyncMock(return_value={"name": "Dengue virus"})
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=httpx.ConnectError("connection refused"))
+        mock_client.get = AsyncMock(
+            side_effect=httpx.ConnectError("connection refused")
+        )
 
         with patch("app.routers.taxa.httpx.AsyncClient") as mock_client_cls:
             mock_client_cls.return_value.__aenter__ = AsyncMock(
@@ -764,7 +766,9 @@ class TestGetBvbrcSpecialtyGenes:
         )
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=httpx.ConnectError("connection refused"))
+        mock_client.get = AsyncMock(
+            side_effect=httpx.ConnectError("connection refused")
+        )
 
         with patch("app.routers.taxa.httpx.AsyncClient") as mock_cls:
             mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)

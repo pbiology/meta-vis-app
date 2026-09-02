@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from app.auth.utils import get_current_user
 from app.database import get_db
 from app.routers.samples import router as samples_router
+from tests.helpers import insert_case as seed_case
 
 
 def _make_app(fake_db):
@@ -23,10 +24,15 @@ def _make_app(fake_db):
 
 
 async def _seed_samples(db):
+    # The samples aggregation $lookups the producing analysis for live review
+    # status, and the list shows latest analyses only.
+    analysis_id = await seed_case(db, "CASE-1")
     await db["samples"].insert_many(
         [
             {
                 "_id": ObjectId(),
+                "analysis_id": analysis_id,
+                "is_latest_analysis": True,
                 "sample_id": "S-shotgun-1",
                 "sample_type": "sample",
                 "case_id": "CASE-1",
@@ -35,6 +41,8 @@ async def _seed_samples(db):
             },
             {
                 "_id": ObjectId(),
+                "analysis_id": analysis_id,
+                "is_latest_analysis": True,
                 "sample_id": "S-trana-1",
                 "sample_type": "sample",
                 "case_id": "CASE-1",
@@ -42,10 +50,6 @@ async def _seed_samples(db):
                 "trana": {"nanoplot_processed": {"number_of_reads": 123}},
             },
         ]
-    )
-    # The samples aggregation $lookups the parent case; seed minimally so $set works.
-    await db["cases"].insert_one(
-        {"_id": ObjectId(), "case_id": "CASE-1", "review": {"reviewed": False}}
     )
 
 

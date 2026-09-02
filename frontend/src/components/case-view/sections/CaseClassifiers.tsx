@@ -16,6 +16,8 @@ interface CaseClassifiersProps {
   samples: Sample[];
   showKrona: boolean;
   onSelectSample: (sampleId: string) => void;
+  /** Analysis being viewed; null means the case's latest. */
+  version: number | null;
 }
 
 // Renders the classifier results table and (optionally) the Krona iframe for the
@@ -27,6 +29,7 @@ export default function CaseClassifiers({
   samples,
   showKrona,
   onSelectSample,
+  version,
 }: Readonly<CaseClassifiersProps>) {
   const [searchParams, setSearchParams] = useSearchParams();
   const isTrana = samples.some((s) => s.trana);
@@ -98,6 +101,7 @@ export default function CaseClassifiers({
             samples={samples}
             activeClassifier={activeClassifier}
             isTrana={isTrana}
+            version={version}
           />
         </div>
       )}

@@ -13,6 +13,7 @@ setup_logging(settings.log_level)
 from app.database import connect_db, close_db  # noqa: E402
 from app.middleware import RequestLoggingMiddleware  # noqa: E402
 from app.routers import (  # noqa: E402
+    analyses,
     auth,
     ingest,
     cases,
@@ -55,6 +56,10 @@ app.add_middleware(RequestLoggingMiddleware)
 # API routers
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(cases.router, prefix="/api/v1")
+# Shares the /cases prefix: run-scoped sub-resources of a case. Registered
+# after cases so the fixed /cases/stats and /cases/pathogen_cases paths are
+# matched before any parameterised route.
+app.include_router(analyses.router, prefix="/api/v1")
 app.include_router(samples.router, prefix="/api/v1")
 app.include_router(subjects.router, prefix="/api/v1")
 app.include_router(ingest.router, prefix="/api/v1")

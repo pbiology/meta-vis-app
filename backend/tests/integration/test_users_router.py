@@ -33,10 +33,13 @@ async def _insert_prefs(db, sub: str, username: str, prefs: dict | None = None):
 
 
 async def _seed_reviews(db, username: str, count: int):
+    # Reviews are recorded per analysis, not per case.
     for i in range(count):
-        await db["cases"].insert_one(
+        await db["case_analysis"].insert_one(
             {
                 "case_id": f"case_{username}_{i}",
+                "version": 1,
+                "is_latest": True,
                 "review": {"reviewed": True, "reviewed_by": username},
             }
         )

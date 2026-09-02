@@ -373,7 +373,13 @@ async def get_contaminant_alerts(
         ntc_cursor = (
             db["samples"]
             .find(
-                {"sample_type": "negative_ctrl", "order_date": {"$gte": cutoff}},
+                {
+                    "sample_type": "negative_ctrl",
+                    "order_date": {"$gte": cutoff},
+                    # Superseded analyses must not contribute: their NTCs would
+                    # double-count a re-sequenced case's contaminants.
+                    "is_latest_analysis": True,
+                },
                 {
                     "sample_id": 1,
                     "case_id": 1,
@@ -457,6 +463,9 @@ async def _compute_ntc_trends(
         "sample_type": "negative_ctrl",
         "material": material,
         "order_date": {"$gte": cutoff},
+        # Latest analyses only, so a re-sequenced case is counted once in the
+        # distinct-case tallies below.
+        "is_latest_analysis": True,
     }
 
     total_ntcs: int = await db["samples"].count_documents(base_query)

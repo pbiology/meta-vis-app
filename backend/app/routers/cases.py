@@ -1,86 +1,41 @@
 # app/routers/cases.py
+"""Case identity, the case list, and the per-case note thread.
+
+Everything scoped to a single pipeline run — samples, Krona, MultiQC, review
+and the report draft — lives in ``app.routers.analyses`` instead.
+"""
 
 import re
 import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import HTMLResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
-from typing import Annotated, Optional
-from app.models.case import CaseResponse
+from typing import Annotated, Any, Optional
 
 from app.audit import log_audit_event
+from app.case_access import (
+    ANALYSIS_SUMMARY_PROJECTION,
+    get_analysis_or_404,
+    get_case_or_404,
+    list_analysis_summaries,
+    serialise_analysis,
+    serialise_case,
+)
+from app.config import settings
 from app.database import get_client, get_db, maybe_transaction
 from app.auth.utils import get_current_user, require_role
-from app.config import settings
-from app.constants import HOST_TAXON_IDS
-from app.taxonomy_utils import non_host_total, host_pct_for
-
+from app.models.case import CaseDetail, CaseListItem
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 
+PAGE_SIZE = 50
 
-class ReviewPayload(BaseModel):
-    notes: Optional[str] = None
-
-
-def _serialise_case(doc: dict) -> dict:
-    doc.pop("_id", None)
-    if "sample_ids" in doc:
-        doc["sample_ids"] = [str(sid) for sid in doc["sample_ids"]]
-    if doc.get("subject_id") is not None:
-        doc["subject_id"] = str(doc["subject_id"])
-    ticket_id = doc.get("ticket_id")
-    if ticket_id and settings.freshdesk_base_url:
-        doc["ticket_url"] = settings.freshdesk_base_url.format(ticket_id=ticket_id)
-    return doc
-
-
-def _serialise_sample(doc: dict) -> dict:
-    doc["_id"] = str(doc["_id"])
-    if doc.get("subject_id"):
-        doc["subject_id"] = str(doc["subject_id"])
-    return doc
-
-
-def _top_taxa_for(entries: list, clf_qc: Optional[dict] = None, n: int = 3) -> list:
-    total = non_host_total(entries, clf_qc)
-    non_host_entries = [
-        e
-        for e in entries
-        if e.get("taxon_id") not in HOST_TAXON_IDS
-        and e.get("name") != "unclassified"
-        and not (e.get("name") or "").startswith("unclassified ")
-    ]
-    non_host_entries.sort(key=lambda e: e.get("abundance", 0), reverse=True)
-    return [
-        {
-            "name": e["name"],
-            "superkingdom": e.get("superkingdom"),
-            "abundance": e["abundance"],
-            "pct": round(e["abundance"] / total * 100, 3) if total else None,
-        }
-        for e in non_host_entries[:n]
-    ]
-
-
-def _spike_in_for(
-    entries: list, spike_in_ids: set, clf_qc: Optional[dict] = None
-) -> list:
-    if not spike_in_ids:
-        return []
-    total = non_host_total(entries, clf_qc)
-    return [
-        {
-            "name": e["name"],
-            "taxon_id": e["taxon_id"],
-            "abundance": e["abundance"],
-            "pct": round(e["abundance"] / total * 100, 3) if total else None,
-        }
-        for e in entries
-        if e.get("taxon_id") in spike_in_ids
-    ]
+# Field paths on the case_analysis document, named once so the stats queries
+# and the list filter cannot drift apart.
+REVIEWED = "review.reviewed"
+_LATEST: dict[str, Any] = {"is_latest": True}
+_UNREVIEWED: dict[str, Any] = {REVIEWED: {"$ne": True}}
 
 
 # ---------------------------------------------------------------------------
@@ -94,14 +49,24 @@ async def case_stats(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    total = await db["cases"].estimated_document_count()
-    pending = await db["cases"].count_documents({"review.reviewed": {"$ne": True}})
-    reviewed = await db["cases"].count_documents({"review.reviewed": True})
-    pending_shotgun = await db["cases"].count_documents(
-        {"review.reviewed": {"$ne": True}, "analysis_type": "shotgun"}
+    """Counts over latest analyses only.
+
+    An analysis that was superseded before anyone reviewed it is work nobody
+    will ever do, so counting it would inflate the pending queue permanently.
+    Restricting every counter the same way also keeps
+    ``total == pending + reviewed`` true. This affects the dashboard only: a
+    superseded analysis still shows its own true status in the case list.
+    """
+    analyses = db["case_analysis"]
+
+    total = await analyses.count_documents(_LATEST)
+    pending = await analyses.count_documents({**_LATEST, **_UNREVIEWED})
+    reviewed = await analyses.count_documents({**_LATEST, REVIEWED: True})
+    pending_shotgun = await analyses.count_documents(
+        {**_LATEST, **_UNREVIEWED, "analysis_type": "shotgun"}
     )
-    pending_amplicon = await db["cases"].count_documents(
-        {"review.reviewed": {"$ne": True}, "analysis_type": "amplicon"}
+    pending_amplicon = await analyses.count_documents(
+        {**_LATEST, **_UNREVIEWED, "analysis_type": "amplicon"}
     )
     return {
         "total": total,
@@ -126,20 +91,23 @@ async def pathogen_cases(
         return {"case_ids": []}
 
     # all_taxon_ids is a pre-computed flat array of taxon IDs stored on each
-    # sample at ingest time, avoiding expensive $unwind on nested profile arrays.
+    # sample at ingest time, avoiding expensive $unwind on nested profile
+    # arrays. Restricting to latest analyses keeps a superseded run from
+    # flagging a case whose current results no longer show the pathogen.
     pipeline: list[dict] = [
-        {"$match": {"all_taxon_ids": {"$in": pathogen_ids}}},
+        {
+            "$match": {
+                "all_taxon_ids": {"$in": pathogen_ids},
+                "is_latest_analysis": True,
+            }
+        },
         {"$group": {"_id": "$case_id"}},
     ]
     results = await db["samples"].aggregate(pipeline).to_list(None)
-    case_ids = [r["_id"] for r in results]
-    return {"case_ids": case_ids}
+    return {"case_ids": [r["_id"] for r in results]}
 
 
-PAGE_SIZE = 50
-
-
-@router.get("", summary="List all cases")
+@router.get("", summary="List cases, one row per case")
 async def list_cases(
     page: int = 1,
     search: Annotated[str, Query(max_length=128)] = "",
@@ -148,39 +116,75 @@ async def list_cases(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    query: dict[str, object] = {}
+    """One row per clinical case, showing its latest analysis.
+
+    Driven from ``case_analysis`` rather than ``cases``: the sort keys live on
+    the analysis (``review.reviewed``, ``order_date``, ``ingested_at``), so
+    sorting from the case side would straddle two collections and force an
+    in-memory sort. Equality on the leading ``is_latest`` field followed by
+    those keys is an index prefix, keeping the sort index-covered.
+    """
+    query: dict[str, Any] = dict(_LATEST)
+    # case_id is denormalised onto the analysis, so search needs no join.
     if search.strip():
         query["case_id"] = {"$regex": re.escape(search.strip()), "$options": "i"}
     if reviewed == "pending":
-        query["review.reviewed"] = {"$ne": True}
+        query[REVIEWED] = {"$ne": True}
     elif reviewed == "reviewed":
-        query["review.reviewed"] = True
+        query[REVIEWED] = True
     if analysis_type in ("shotgun", "amplicon"):
         query["analysis_type"] = analysis_type
 
+    # With no user filter the number of latest analyses is exactly the number
+    # of cases, so the O(1) metadata count still applies.
+    user_filtered = len(query) > 1
     total = (
-        await db["cases"].estimated_document_count()
-        if not query
-        else await db["cases"].count_documents(query)
+        await db["case_analysis"].count_documents(query)
+        if user_filtered
+        else await db["cases"].estimated_document_count()
     )
-    skip = (page - 1) * PAGE_SIZE
 
-    docs = (
-        await db["cases"]
-        .find(query)
+    latest_docs = (
+        await db["case_analysis"]
+        .find(query, ANALYSIS_SUMMARY_PROJECTION)
         .sort([("review.reviewed", 1), ("order_date", -1), ("ingested_at", -1)])
-        .skip(skip)
+        .skip((page - 1) * PAGE_SIZE)
         .limit(PAGE_SIZE)
         .to_list(length=PAGE_SIZE)
     )
 
-    result = []
-    for doc in docs:
-        doc.setdefault("sample_count", 0)
-        doc.setdefault("control_count", 0)
-        doc.setdefault("sample_names", [])
-        result.append(
-            CaseResponse.model_validate(_serialise_case(doc)).model_dump(mode="json")
+    case_ids = [d["case_id"] for d in latest_docs]
+    cases_by_id = {
+        c["case_id"]: c async for c in db["cases"].find({"case_id": {"$in": case_ids}})
+    }
+    superseded_by_case: dict[str, list[dict]] = {}
+    async for doc in (
+        db["case_analysis"]
+        .find(
+            {"case_id": {"$in": case_ids}, "is_latest": False},
+            ANALYSIS_SUMMARY_PROJECTION,
+        )
+        .sort("version", -1)
+    ):
+        superseded_by_case.setdefault(doc["case_id"], []).append(doc)
+
+    items = []
+    for latest in latest_docs:
+        case_doc = cases_by_id.get(latest["case_id"])
+        if case_doc is None:
+            # An analysis whose case was removed: skip rather than surface a
+            # half-populated row into a clinical list.
+            continue
+        items.append(
+            CaseListItem.model_validate(
+                {
+                    "case": serialise_case(case_doc),
+                    "latest": latest,
+                    "superseded_analyses": superseded_by_case.get(
+                        latest["case_id"], []
+                    ),
+                }
+            ).model_dump(mode="json")
         )
 
     return {
@@ -188,7 +192,7 @@ async def list_cases(
         "page": page,
         "pages": max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE),
         "ticket_links_enabled": bool(settings.freshdesk_base_url),
-        "items": result,
+        "items": items,
     }
 
 
@@ -197,15 +201,21 @@ async def list_cases(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/{case_id}", summary="Get a single case")
+# Two paths, one handler: the bare form resolves to the latest analysis, the
+# versioned form addresses a specific one. `version` is a path parameter on the
+# second route and an unused query parameter on the first.
+@router.get("/{case_id}/analyses/{version}", summary="Get a case at one analysis")
+@router.get("/{case_id}", summary="Get a case with its latest analysis")
 async def get_case(
     case_id: str,
+    version: Optional[int] = None,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    doc = await db["cases"].find_one({"case_id": case_id})
-    if not doc:
-        raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
+    case_doc = await get_case_or_404(db, case_id)
+    analysis = await get_analysis_or_404(db, case_id, version)
+    summaries = await list_analysis_summaries(db, case_id)
+
     await log_audit_event(
         db,
         action="view_case",
@@ -213,52 +223,15 @@ async def get_case(
         resource_type="case",
         resource_id=case_id,
         outcome="success",
+        detail={"analysis_version": analysis["version"]},
     )
-    doc = _serialise_case(doc)
-    return CaseResponse.model_validate(doc).model_dump(mode="json")
-
-
-@router.get("/{case_id}/samples", summary="List samples for a case")
-async def list_samples_for_case(
-    case_id: str,
-    type: Optional[str] = None,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(get_current_user),
-):
-    case = await db["cases"].find_one({"case_id": case_id}, {"_id": 1})
-    if not case:
-        raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
-
-    query: dict = {"case_id": case_id}
-    if type == "controls":
-        query["sample_type"] = {"$in": ["positive_ctrl", "negative_ctrl"]}
-    elif type == "sample":
-        query["sample_type"] = "sample"
-
-    docs = await db["samples"].find(query).to_list(length=200)
-
-    controls_taxa = settings.controls_taxa
-    spike_in_ids = set(controls_taxa.get("spike_in", []))
-
-    result = []
-    for doc in docs:
-        profiles = doc.get("profiles", [])
-        top_taxa_by_clf = {}
-        spike_in_by_clf = {}
-        host_pct_by_clf = {}
-        for p in profiles:
-            clf = p.get("classifier", "unknown")
-            entries = p.get("profile", [])
-            clf_qc = doc.get("taxprofiler", {}).get("classifiers", {}).get(clf)
-            top_taxa_by_clf[clf] = _top_taxa_for(entries, clf_qc)
-            spike_in_by_clf[clf] = _spike_in_for(entries, spike_in_ids, clf_qc)
-            host_pct_by_clf[clf] = host_pct_for(entries, clf_qc)
-        doc["top_taxa"] = top_taxa_by_clf
-        doc["spike_in_taxa"] = spike_in_by_clf
-        doc["host_pct"] = host_pct_by_clf
-        doc.pop("profiles", None)
-        result.append(_serialise_sample(doc))
-    return result
+    return CaseDetail.model_validate(
+        {
+            "case": serialise_case(case_doc),
+            "analysis": serialise_analysis(analysis),
+            "analyses": summaries,
+        }
+    ).model_dump(mode="json")
 
 
 @router.delete("/{case_id}", summary="Delete a case and all associated data")
@@ -281,6 +254,7 @@ async def delete_case(
     async with maybe_transaction(client) as session:
         await db["samples"].delete_many({"case_id": case_id}, session=session)
         await db["metaval_results"].delete_many({"case_id": case_id}, session=session)
+        await db["case_analysis"].delete_many({"case_id": case_id}, session=session)
         await db["cases"].delete_one({"_id": case["_id"]}, session=session)
         if subject_oid is not None:
             still_referenced = await db["cases"].find_one(
@@ -291,10 +265,11 @@ async def delete_case(
 
     from app.database import get_blob_store
 
+    # Every blob key is namespaced by case then analysis version
+    # (`krona/{case_id}/v2/...`), so a per-case prefix still removes them all.
     store = get_blob_store()
-    await store.delete_prefix(f"krona/{case_id}/")
-    await store.delete_prefix(f"igv/{case_id}/")
-    await store.delete_prefix(f"multiqc/{case_id}/")
+    for prefix in ("krona", "igv", "multiqc", "verification_data"):
+        await store.delete_prefix(f"{prefix}/{case_id}/")
 
     await log_audit_event(
         db,
@@ -307,168 +282,10 @@ async def delete_case(
     return {"deleted": True, "case_id": case_id}
 
 
-@router.get("/{case_id}/krona", summary="Serve Krona HTML for a case")
-async def get_krona(
-    case_id: str,
-    classifier: str = "kraken2",
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(get_current_user),
-):
-    case = await db["cases"].find_one({"case_id": case_id}, {"_id": 1})
-    if not case:
-        raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
-
-    from app.database import get_blob_store
-
-    key = f"krona/{case_id}/{classifier}.html"
-    html = await get_blob_store().get(key)
-    if not html:
-        raise HTTPException(
-            status_code=404, detail=f"No Krona file for classifier '{classifier}'"
-        )
-
-    return HTMLResponse(content=html)
-
-
-@router.get("/{case_id}/multiqc", summary="Serve MultiQC HTML report for a case")
-async def get_multiqc(
-    case_id: str,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(get_current_user),
-):
-    case = await db["cases"].find_one({"case_id": case_id}, {"_id": 1})
-    if not case:
-        raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
-
-    from app.database import get_blob_store
-
-    key = f"multiqc/{case_id}/report.html"
-    html = await get_blob_store().get(key)
-    if not html:
-        raise HTTPException(status_code=404, detail="No MultiQC report for this case")
-
-    return HTMLResponse(content=html)
-
-
-@router.patch(
-    "/{case_id}/review", summary="Mark a case as reviewed by the current user"
-)
-async def review_case(
-    case_id: str,
-    payload: ReviewPayload,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(require_role("writer", "admin")),
-):
-    result = await db["cases"].update_one(
-        {"case_id": case_id},
-        {
-            "$set": {
-                "review.reviewed": True,
-                "review.reviewed_by": current_user["username"],
-                "review.reviewed_at": datetime.now(timezone.utc),
-                "review.notes": payload.notes,
-            }
-        },
-    )
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
-    await log_audit_event(
-        db,
-        action="review_case",
-        actor=current_user["username"],
-        resource_type="case",
-        resource_id=case_id,
-        outcome="success",
-        detail={"notes": payload.notes is not None},
-    )
-    return {
-        "case_id": case_id,
-        "reviewed": True,
-        "reviewed_by": current_user["username"],
-    }
-
-
-@router.delete("/{case_id}/review", summary="Remove review from a case")
-async def unreview_case(
-    case_id: str,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(require_role("writer", "admin")),
-):
-    result = await db["cases"].update_one(
-        {"case_id": case_id},
-        {
-            "$set": {
-                "review.reviewed": False,
-                "review.reviewed_by": None,
-                "review.reviewed_at": None,
-                "review.notes": None,
-            }
-        },
-    )
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
-    await log_audit_event(
-        db,
-        action="unreview_case",
-        actor=current_user["username"],
-        resource_type="case",
-        resource_id=case_id,
-        outcome="success",
-    )
-    return {"case_id": case_id, "reviewed": False}
-
-
-class ReportSelectionsPayload(BaseModel):
-    selections: dict[str, list[int]]
-
-
-@router.patch(
-    "/{case_id}/report",
-    summary="Replace the case's per-sample report taxon selections",
-    responses={
-        404: {"description": "Case not found"},
-        422: {"description": "Payload references sample_ids not in this case"},
-    },
-)
-async def update_case_report(
-    case_id: str,
-    payload: ReportSelectionsPayload,
-    db: Annotated[AsyncIOMotorDatabase, Depends(get_db)],
-    current_user: Annotated[dict, Depends(require_role("writer", "admin"))],
-):
-    case = await db["cases"].find_one({"case_id": case_id}, {"_id": 1})
-    if case is None:
-        raise HTTPException(status_code=404, detail=f"Case '{case_id}' not found")
-
-    # case.sample_ids stores Mongo _ids; the persistence key is the canonical
-    # human-readable sample_id, so query the samples collection for the
-    # authoritative set.
-    valid_cursor = db["samples"].find({"case_id": case_id}, {"sample_id": 1})
-    valid = {doc["sample_id"] async for doc in valid_cursor if "sample_id" in doc}
-    unknown = sorted(k for k in payload.selections if k not in valid)
-    if unknown:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Unknown sample_id(s) for this case: {unknown}",
-        )
-
-    await db["cases"].update_one(
-        {"case_id": case_id},
-        {"$set": {"report_selections": payload.selections}},
-    )
-    await log_audit_event(
-        db,
-        action="update_case_report",
-        actor=current_user["username"],
-        resource_type="case",
-        resource_id=case_id,
-        outcome="success",
-        detail={
-            "samples": len(payload.selections),
-            "taxa": sum(len(v) for v in payload.selections.values()),
-        },
-    )
-    return {"case_id": case_id, "selections": payload.selections}
+# ---------------------------------------------------------------------------
+# Notes — attached to the case, not to an analysis, so a re-sequencing never
+# strands the discussion on a superseded run.
+# ---------------------------------------------------------------------------
 
 
 class NotePayload(BaseModel):

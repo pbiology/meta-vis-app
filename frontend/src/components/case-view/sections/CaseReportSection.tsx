@@ -1,14 +1,25 @@
-import type { Sample } from "../../../api/types";
+import type { AnalysisSummary, Sample } from "../../../api/types";
 import { useReportBuilder } from "../../../context/ReportBuilderContext";
 import Report from "../../report/Report";
 import { useReportData } from "../../report/useReportData";
+import ReportCarryForwardPrompt from "./ReportCarryForwardPrompt";
 
 interface CaseReportSectionProps {
   caseId: string;
   samples: Sample[];
+  /** Analysis being viewed; null means the case's latest. */
+  version: number | null;
+  analyses?: AnalysisSummary[];
+  canEdit?: boolean;
 }
 
-export default function CaseReportSection({ caseId, samples }: Readonly<CaseReportSectionProps>) {
+export default function CaseReportSection({
+  caseId,
+  samples,
+  version,
+  analyses = [],
+  canEdit = false,
+}: Readonly<CaseReportSectionProps>) {
   const { selectedFor } = useReportBuilder();
 
   const samplesWithSelections = samples.filter((s) => selectedFor(s.sample_id).length > 0);
@@ -19,17 +30,25 @@ export default function CaseReportSection({ caseId, samples }: Readonly<CaseRepo
     selectionsBySampleId[s.sample_id] = selectedFor(s.sample_id);
   }
 
-  const { data, isLoading, isError } = useReportData(caseId, selectionsBySampleId);
+  const { data, isLoading, isError } = useReportData(caseId, selectionsBySampleId, version);
 
   if (samplesWithSelections.length === 0) {
     return (
-      <section className="bg-white border border-gray-100 rounded-lg p-10 text-center">
-        <div className="text-sm font-semibold text-gray-700 mb-1">Report builder</div>
-        <div className="text-xs text-gray-400">
-          No taxa selected. Open a sample and tick taxa in the taxonomy table — or use “Add to
-          report” on a taxon detail page — to add them here.
-        </div>
-      </section>
+      <div className="flex flex-col gap-4">
+        <ReportCarryForwardPrompt
+          caseId={caseId}
+          version={version}
+          analyses={analyses}
+          canEdit={canEdit}
+        />
+        <section className="bg-white border border-gray-100 rounded-lg p-10 text-center">
+          <div className="text-sm font-semibold text-gray-700 mb-1">Report builder</div>
+          <div className="text-xs text-gray-400">
+            No taxa selected. Open a sample and tick taxa in the taxonomy table — or use “Add to
+            report” on a taxon detail page — to add them here.
+          </div>
+        </section>
+      </div>
     );
   }
 

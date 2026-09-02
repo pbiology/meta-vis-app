@@ -1,11 +1,13 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { getProfile } from "../../api/samples";
 import { getSubject, type Subject } from "../../api/subjects";
+import type { Version } from "../../api/cases";
 import { useCase, useCaseSamples } from "../../hooks/queries/useCases";
 import { usePathogens } from "../../hooks/queries/useAlerts";
 import { sampleKeys } from "../../hooks/queries/useSamples";
 import { subjectKeys } from "../../hooks/queries/useSubjects";
-import type { CaseListItem, CaseNote, Sample, SampleProfile } from "../../api/types";
+import type { CaseAtAnalysis, CaseNote, Sample, SampleProfile } from "../../api/types";
+import { flattenCaseDetail } from "../../api/types";
 import { compareBySampleType } from "../../utils/sampleOrdering";
 
 // Shapes consumed by the report renderer. Cells carry reads and pct together
@@ -60,7 +62,7 @@ interface PipelineInfoShape {
 
 export interface ReportData {
   generatedAt: string;
-  caseDoc: CaseListItem;
+  caseDoc: CaseAtAnalysis;
   samples: ReportSampleRow[];
   classifiers: string[];
   // A case belongs to at most one subject (enforced at ingest). null for
@@ -212,10 +214,19 @@ function formatReportDate(d: Date): string {
 
 export function useReportData(
   caseId: string,
-  selectionsBySampleId: Record<string, number[]>
+  selectionsBySampleId: Record<string, number[]>,
+  /**
+   * Analysis to report on; null means the case's latest.
+   *
+   * Load-bearing: without it the report renders the latest run's samples,
+   * read counts and pipeline provenance while claiming to be the run the user
+   * is viewing. Sample _ids are per-analysis, so the profile queries below
+   * follow whichever samples this fetches.
+   */
+  version: Version
 ): UseReportDataResult {
-  const caseQ = useCase(caseId);
-  const samplesQ = useCaseSamples(caseId);
+  const caseQ = useCase(caseId, version);
+  const samplesQ = useCaseSamples(caseId, null, version);
   const pathogensQ = usePathogens();
 
   const samples = samplesQ.data ?? [];
@@ -232,7 +243,7 @@ export function useReportData(
   });
 
   const caseSubjectId =
-    typeof caseQ.data?.subject_id === "string" ? caseQ.data.subject_id : undefined;
+    typeof caseQ.data?.case?.subject_id === "string" ? caseQ.data.case.subject_id : undefined;
   const subjectQ = useQuery({
     queryKey: caseSubjectId ? subjectKeys.detail(caseSubjectId) : ["subject", "none"],
     queryFn: () => getSubject(caseSubjectId as string),
@@ -288,7 +299,8 @@ export function useReportData(
     totals
   );
 
-  const caseDoc = caseQ.data as CaseListItem;
+  // The report presents a case at one analysis; flatten so sections read one object.
+  const caseDoc = flattenCaseDetail(caseQ.data);
   const asPipelineConfig = (raw: unknown): PipelineConfig | undefined => {
     const info = raw as PipelineInfoShape | undefined;
     return info?.pipeline_configuration;

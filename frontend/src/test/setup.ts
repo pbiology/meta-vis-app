@@ -2,6 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import { afterAll, afterEach, beforeAll, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
 import { server } from "./server";
+import { takeRenderError } from "./renderErrors";
 
 // Stub react-oidc-context so components that read auth state get a
 // deterministic, authenticated user without spinning up a real OIDC provider.
@@ -65,7 +66,7 @@ vi.mock("../oidc", () => ({
 // when `--localstorage-file` is detected; it surfaces as `setItem is not a
 // function`. Force a deterministic in-memory Storage on both globals.
 class MemStorage implements Storage {
-  private map = new Map<string, string>();
+  private readonly map = new Map<string, string>();
   get length() {
     return this.map.size;
   }
@@ -121,5 +122,15 @@ afterEach(() => {
   server.resetHandlers();
   sessionStorage.clear();
   localStorage.clear();
+
+  // Fail the test that caused a render error rather than letting it surface as
+  // a file-level unhandled error. Taken (and cleared) after the resets above so
+  // the next test starts from a clean slate either way.
+  const renderError = takeRenderError();
+  if (renderError) {
+    throw new Error(
+      `A component threw while rendering: ${renderError.message}\n\n${renderError.stack ?? ""}`
+    );
+  }
 });
 afterAll(() => server.close());

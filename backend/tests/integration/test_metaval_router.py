@@ -59,6 +59,11 @@ async def insert_metaval(
 
     result = await db["metaval_results"].insert_one(
         {
+            # Ingest stamps the producing analysis on every metaval document.
+            # Keeping it here means the serialiser is exercised against the
+            # real shape — a raw ObjectId left in the response fails JSON
+            # encoding for the whole endpoint.
+            "analysis_id": ObjectId(),
             "case_id": case_id,
             "sample_id": sample_oid,
             "sample_name": "SRR001",

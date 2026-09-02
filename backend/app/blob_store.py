@@ -4,8 +4,18 @@
 # Two backends: MongoDB (default) and S3-compatible object storage (MinIO / AWS S3).
 # Config decides which backend is used at startup via make_blob_store().
 #
-# Key conventions:
-#   krona/{case_object_id}/{classifier}.html
+# Key conventions — every key is namespaced by case *and analysis version*,
+# because a case can be sequenced more than once and each run has its own
+# reports. Without the version segment a re-sequencing would overwrite the
+# previous run's files:
+#   krona/{case_id}/v{version}/{classifier}.html          (taxprofiler)
+#   krona/{case_id}/v{version}/{sample_id}.html           (trana, per sample)
+#   multiqc/{case_id}/v{version}/report.html
+#   igv/{case_id}/v{version}/{sample}/{classifier}/{organism}.html
+#   verification_data/{case_id}/v{version}/{sample}/{classifier}/{taxon}_*.fa
+#
+# The case id comes first so deleting a case still clears every analysis with
+# a single delete_prefix("<kind>/{case_id}/").
 #
 # Both backends expose the same interface:
 #   put(key, content)        — store content at key

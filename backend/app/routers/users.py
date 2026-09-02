@@ -67,7 +67,13 @@ class UserPreferences(BaseModel):
 
 
 async def _count_reviews(db: AsyncIOMotorDatabase, username: str) -> int:
-    return await db["cases"].count_documents(
+    """Reviews this user has completed, across every analysis.
+
+    Deliberately not restricted to latest analyses: reviewing a run that was
+    later superseded was still work done, and this is a personal tally rather
+    than a measure of outstanding work.
+    """
+    return await db["case_analysis"].count_documents(
         {"review.reviewed_by": username, "review.reviewed": True}
     )
 

@@ -16,8 +16,18 @@ export interface MyStats {
   [key: string]: unknown;
 }
 
+/**
+ * Clinical identity of a case. Everything a pipeline run produces lives on
+ * CaseAnalysis instead — a case may have been sequenced several times.
+ */
 export interface Case {
   case_id: string;
+  ticket_id?: string | null;
+  ticket_url?: string | null;
+  order_date?: string | null;
+  created_at?: string | null;
+  subject_id?: string | null;
+  notes?: CaseNote[];
   [key: string]: unknown;
 }
 
@@ -36,19 +46,82 @@ export interface CaseReview {
   [key: string]: unknown;
 }
 
-export interface CaseListItem extends Case {
-  analysis_type?: string;
+export interface CaseClassifier {
+  name: string;
+  db: string;
+  krona_id?: string | null;
+}
+
+/** Slim per-run summary — backs the version switcher and the collapsed rows. */
+export interface AnalysisSummary {
+  case_id: string;
+  version: number;
+  is_latest: boolean;
+  order_date?: string | null;
+  ingested_at?: string | null;
+  analysis_type?: string | null;
+  sequencing_platform?: string | null;
+  review?: CaseReview;
   sample_count?: number;
   control_count?: number;
-  sample_names?: string[];
-  order_date?: string | null;
-  sequencing_platform?: string;
-  ticket_id?: string | null;
-  ticket_url?: string | null;
-  review?: CaseReview;
-  notes?: CaseNote[];
+}
+
+/** One pipeline run of a case. */
+export interface CaseAnalysis extends AnalysisSummary {
+  classifiers?: CaseClassifier[];
+  has_krona?: boolean;
+  has_multiqc?: boolean;
+  pipeline_info?: unknown;
+  metaval_pipeline_info?: unknown;
   report_selections?: Record<string, number[]>;
-  subject_id?: string | null;
+  sample_names?: string[];
+  [key: string]: unknown;
+}
+
+/** One row of the case list: a case plus its latest run, older runs nested. */
+export interface CaseListItem {
+  case: Case;
+  latest: AnalysisSummary;
+  superseded_analyses: AnalysisSummary[];
+}
+
+/** GET /cases/{case_id} — identity, the run being viewed, and every run. */
+export interface CaseDetail {
+  case: Case;
+  analysis: CaseAnalysis | null;
+  analyses: AnalysisSummary[];
+}
+
+/**
+ * A case flattened together with one of its analyses.
+ *
+ * The report and the case view present a case *at* a particular run, reading
+ * identity fields (case_id, ticket, subject) and run fields (classifiers,
+ * pipeline info, review) side by side. Merging them once here keeps those
+ * consumers from having to know which document each field came from.
+ */
+export type CaseAtAnalysis = Case &
+  Partial<CaseAnalysis> & {
+    /**
+     * The viewed run's own order date, kept separate from the case's.
+     *
+     * `order_date` exists on both documents and means different things: the
+     * case's is when the order was placed, the analysis's is the date supplied
+     * with that run. A plain spread silently picked one, so the case list (run
+     * date) and the case page (case date) disagreed for re-sequenced cases.
+     */
+    analysis_order_date?: string | null;
+  };
+
+/** Flatten a detail response into the merged view model. */
+export function flattenCaseDetail(detail: CaseDetail): CaseAtAnalysis {
+  return {
+    ...detail.analysis,
+    ...detail.case,
+    // Resolve the collision explicitly rather than by spread order.
+    order_date: detail.case.order_date ?? detail.analysis?.order_date ?? null,
+    analysis_order_date: detail.analysis?.order_date ?? null,
+  };
 }
 
 export interface CasesResponse {

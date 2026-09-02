@@ -10,7 +10,9 @@ function makeSample(id: string): Sample {
 
 describe("CaseReportSection", () => {
   it("shows empty state when nothing is selected", () => {
-    renderWithProviders(<CaseReportSection caseId="case-1" samples={[makeSample("sample-1")]} />);
+    renderWithProviders(
+      <CaseReportSection caseId="case-1" samples={[makeSample("sample-1")]} version={null} />
+    );
     expect(screen.getByText(/Report builder/i)).toBeInTheDocument();
     expect(screen.getByText(/No taxa selected/i)).toBeInTheDocument();
   });
@@ -19,6 +21,7 @@ describe("CaseReportSection", () => {
     renderWithProviders(
       <CaseReportSection
         caseId="case-1"
+        version={null}
         samples={[makeSample("sample-1"), makeSample("sample-2")]}
       />,
       {

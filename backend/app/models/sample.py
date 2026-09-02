@@ -38,7 +38,15 @@ class SequencingMetadata(_Base):
 class SampleResponse(_Base):
     """Validated response model for sample documents read from MongoDB."""
 
+    # ObjectId of the case_analysis that produced this sample, serialised as
+    # str. This is the foreign key; `case_id` is denormalised alongside it so
+    # cross-case aggregations can group by clinical case without a join.
+    analysis_id: Optional[str] = None
     case_id: str
+    # True when this sample belongs to its case's latest analysis. Denormalised
+    # so analytics filter on an indexed equality rather than excluding the
+    # superseded analyses by id.
+    is_latest_analysis: bool = True
     sample_id: str
     sample_source: Optional[str] = None
     sample_type: Literal["sample", "positive_ctrl", "negative_ctrl"]

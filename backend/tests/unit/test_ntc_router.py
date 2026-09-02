@@ -8,6 +8,8 @@
 # asyncio_mode = "auto" is set in pyproject.toml, so all async test methods
 # are picked up automatically by pytest-asyncio without any extra decoration.
 
+from datetime import date, timedelta
+
 import pytest
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
@@ -45,6 +47,30 @@ def make_app(fake_db):
     return app
 
 
+# ---------------------------------------------------------------------------
+# Fixture dates
+#
+# The NTC endpoints filter on `order_date >= today - window_days` (default 90),
+# so fixtures pinned to absolute dates silently age out of the window: every
+# query then returns nothing and the assertions below start reading empty
+# lists. These offsets keep the same relative spacing as the original
+# 2026-04-01 / -02 / -03 / -10 fixtures, so the ordering assertions still hold,
+# while staying well inside the smallest window the tests exercise (30 days).
+# ---------------------------------------------------------------------------
+
+
+def _days_ago(n: int) -> str:
+    return (date.today() - timedelta(days=n)).isoformat()
+
+
+DAY_1 = _days_ago(20)
+DAY_2 = _days_ago(19)
+DAY_3 = _days_ago(18)
+DAY_10 = _days_ago(11)
+# Far enough back to fall outside any window the tests use.
+OUT_OF_WINDOW = _days_ago(400)
+
+
 def make_ntc_doc(
     sample_id: str,
     case_id: str,
@@ -58,6 +84,7 @@ def make_ntc_doc(
         "sample_id": sample_id,
         "case_id": case_id,
         "sample_type": "negative_ctrl",
+        "is_latest_analysis": True,
         "material": material,
         "order_date": order_date,
         "profiles": [],
@@ -112,14 +139,14 @@ class TestNtcTrendsEmpty:
 
     async def test_dna_ntcs_not_returned_for_rna_query(self, fake_db):
         await fake_db["samples"].insert_one(
-            make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01")
+            make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1)
         )
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/trends?material=RNA")
         assert resp.json()["total_ntcs"] == 0
 
     async def test_non_ntc_samples_excluded(self, fake_db):
-        doc = make_ntc_doc("S-1", "case-1", "DNA", "2026-04-01")
+        doc = make_ntc_doc("S-1", "case-1", "DNA", DAY_1)
         doc["sample_type"] = "sample"
         await fake_db["samples"].insert_one(doc)
         app = make_app(fake_db)
@@ -172,7 +199,7 @@ class TestNtcTrendsValidation:
 class TestNtcReadCounts:
     async def test_classified_reads_from_multiqc_qc_field(self, fake_db):
         await fake_db["samples"].insert_one(
-            make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01", classified_reads=500)
+            make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, classified_reads=500)
         )
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
@@ -188,7 +215,7 @@ class TestNtcReadCounts:
             make_taxon(1743, "Cutibacterium acnes", 25),
         ]
         await fake_db["samples"].insert_one(
-            make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01", profile=profile)
+            make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=profile)
         )
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
@@ -197,7 +224,7 @@ class TestNtcReadCounts:
 
     async def test_classified_reads_null_when_no_qc_and_no_profile(self, fake_db):
         await fake_db["samples"].insert_one(
-            make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01")
+            make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1)
         )
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
@@ -206,10 +233,10 @@ class TestNtcReadCounts:
 
     async def test_read_counts_sorted_by_order_date(self, fake_db):
         await fake_db["samples"].insert_one(
-            make_ntc_doc("NTC-B", "case-B", "DNA", "2026-04-10", classified_reads=200)
+            make_ntc_doc("NTC-B", "case-B", "DNA", DAY_10, classified_reads=200)
         )
         await fake_db["samples"].insert_one(
-            make_ntc_doc("NTC-A", "case-A", "DNA", "2026-04-01", classified_reads=100)
+            make_ntc_doc("NTC-A", "case-A", "DNA", DAY_1, classified_reads=100)
         )
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
@@ -220,7 +247,7 @@ class TestNtcReadCounts:
     async def test_ntc_outside_window_excluded_from_read_counts(self, fake_db):
         await fake_db["samples"].insert_one(
             make_ntc_doc(
-                "NTC-OLD", "case-old", "DNA", "2020-01-01", classified_reads=999
+                "NTC-OLD", "case-old", "DNA", OUT_OF_WINDOW, classified_reads=999
             )
         )
         app = make_app(fake_db)
@@ -238,12 +265,8 @@ class TestRecurringTaxa:
         contaminant = make_taxon(1743, "Cutibacterium acnes", 10)
         await fake_db["samples"].insert_many(
             [
-                make_ntc_doc(
-                    "NTC-1", "case-1", "DNA", "2026-04-01", profile=[contaminant]
-                ),
-                make_ntc_doc(
-                    "NTC-2", "case-2", "DNA", "2026-04-02", profile=[contaminant]
-                ),
+                make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=[contaminant]),
+                make_ntc_doc("NTC-2", "case-2", "DNA", DAY_2, profile=[contaminant]),
             ]
         )
         app = make_app(fake_db)
@@ -261,8 +284,8 @@ class TestRecurringTaxa:
         low = make_taxon(1743, "Cutibacterium acnes", 3)
         await fake_db["samples"].insert_many(
             [
-                make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01", profile=[low]),
-                make_ntc_doc("NTC-2", "case-2", "DNA", "2026-04-02", profile=[low]),
+                make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=[low]),
+                make_ntc_doc("NTC-2", "case-2", "DNA", DAY_2, profile=[low]),
             ]
         )
         app = make_app(fake_db)
@@ -275,8 +298,8 @@ class TestRecurringTaxa:
         taxon = make_taxon(1743, "Cutibacterium acnes", 4)
         await fake_db["samples"].insert_many(
             [
-                make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01", profile=[taxon]),
-                make_ntc_doc("NTC-2", "case-2", "DNA", "2026-04-02", profile=[taxon]),
+                make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=[taxon]),
+                make_ntc_doc("NTC-2", "case-2", "DNA", DAY_2, profile=[taxon]),
             ]
         )
         app = make_app(fake_db)
@@ -289,8 +312,8 @@ class TestRecurringTaxa:
         host = make_taxon(9606, "Homo sapiens", 100, superkingdom="Eukaryota")
         await fake_db["samples"].insert_many(
             [
-                make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01", profile=[host]),
-                make_ntc_doc("NTC-2", "case-2", "DNA", "2026-04-02", profile=[host]),
+                make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=[host]),
+                make_ntc_doc("NTC-2", "case-2", "DNA", DAY_2, profile=[host]),
             ]
         )
         app = make_app(fake_db)
@@ -306,12 +329,8 @@ class TestRecurringTaxa:
         host_entries = [make_taxon(tid, f"host-{tid}", 100) for tid in HOST_TAXON_IDS]
         await fake_db["samples"].insert_many(
             [
-                make_ntc_doc(
-                    "NTC-1", "case-1", "DNA", "2026-04-01", profile=host_entries
-                ),
-                make_ntc_doc(
-                    "NTC-2", "case-2", "DNA", "2026-04-02", profile=host_entries
-                ),
+                make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=host_entries),
+                make_ntc_doc("NTC-2", "case-2", "DNA", DAY_2, profile=host_entries),
             ]
         )
         app = make_app(fake_db)
@@ -326,8 +345,8 @@ class TestRecurringTaxa:
         taxon = make_taxon(1743, "Cutibacterium acnes", 10)
         # 10 NTCs, taxon in only 1 case; min_case_count = max(1, round(10*0.5)) = 5
         docs = [
-            make_ntc_doc(f"NTC-{i}", f"case-{i}", "DNA", "2026-04-01") for i in range(9)
-        ] + [make_ntc_doc("NTC-9", "case-9", "DNA", "2026-04-01", profile=[taxon])]
+            make_ntc_doc(f"NTC-{i}", f"case-{i}", "DNA", DAY_1) for i in range(9)
+        ] + [make_ntc_doc("NTC-9", "case-9", "DNA", DAY_1, profile=[taxon])]
         await fake_db["samples"].insert_many(docs)
         app = make_app(fake_db)
         resp = TestClient(app).get(
@@ -346,10 +365,10 @@ class TestRecurringTaxa:
                     "NTC-1",
                     "case-1",
                     "DNA",
-                    "2026-04-01",
+                    DAY_1,
                     profile=profile_with_duplicate,
                 ),
-                make_ntc_doc("NTC-2", "case-2", "DNA", "2026-04-02", profile=[taxon]),
+                make_ntc_doc("NTC-2", "case-2", "DNA", DAY_2, profile=[taxon]),
             ]
         )
         app = make_app(fake_db)
@@ -366,12 +385,12 @@ class TestRecurringTaxa:
         await fake_db["samples"].insert_many(
             [
                 make_ntc_doc(
-                    "NTC-1", "case-1", "DNA", "2026-04-01", profile=[taxon_a, taxon_b]
+                    "NTC-1", "case-1", "DNA", DAY_1, profile=[taxon_a, taxon_b]
                 ),
                 make_ntc_doc(
-                    "NTC-2", "case-2", "DNA", "2026-04-02", profile=[taxon_a, taxon_b]
+                    "NTC-2", "case-2", "DNA", DAY_2, profile=[taxon_a, taxon_b]
                 ),
-                make_ntc_doc("NTC-3", "case-3", "DNA", "2026-04-03", profile=[taxon_b]),
+                make_ntc_doc("NTC-3", "case-3", "DNA", DAY_3, profile=[taxon_b]),
             ]
         )
         app = make_app(fake_db)
@@ -386,8 +405,8 @@ class TestRecurringTaxa:
         taxon = make_taxon(1743, "Cutibacterium acnes", 10)
         await fake_db["samples"].insert_many(
             [
-                make_ntc_doc("NTC-B", "case-B", "DNA", "2026-04-10", profile=[taxon]),
-                make_ntc_doc("NTC-A", "case-A", "DNA", "2026-04-01", profile=[taxon]),
+                make_ntc_doc("NTC-B", "case-B", "DNA", DAY_10, profile=[taxon]),
+                make_ntc_doc("NTC-A", "case-A", "DNA", DAY_1, profile=[taxon]),
             ]
         )
         app = make_app(fake_db)
@@ -395,8 +414,8 @@ class TestRecurringTaxa:
             "/api/v1/ntc/trends?material=DNA&min_reads=3&min_case_pct=0.1"
         )
         occ = resp.json()["recurring_taxa"][0]["occurrences"]
-        assert occ[0]["order_date"] == "2026-04-01"
-        assert occ[1]["order_date"] == "2026-04-10"
+        assert occ[0]["order_date"] == DAY_1
+        assert occ[1]["order_date"] == DAY_10
 
     async def test_non_kraken2_profiles_ignored(self, fake_db):
         taxon = make_taxon(1743, "Cutibacterium acnes", 10)
@@ -405,8 +424,9 @@ class TestRecurringTaxa:
                 "sample_id": "NTC-1",
                 "case_id": "case-1",
                 "sample_type": "negative_ctrl",
+                "is_latest_analysis": True,
                 "material": "DNA",
-                "order_date": "2026-04-01",
+                "order_date": DAY_1,
                 "profiles": [{"classifier": "centrifuge", "profile": [taxon]}],
                 "taxprofiler": {},
             },
@@ -414,8 +434,9 @@ class TestRecurringTaxa:
                 "sample_id": "NTC-2",
                 "case_id": "case-2",
                 "sample_type": "negative_ctrl",
+                "is_latest_analysis": True,
                 "material": "DNA",
-                "order_date": "2026-04-02",
+                "order_date": DAY_2,
                 "profiles": [{"classifier": "centrifuge", "profile": [taxon]}],
                 "taxprofiler": {},
             },
@@ -436,7 +457,7 @@ class TestRecurringTaxa:
 class TestKingdomBreakdown:
     async def test_kingdom_breakdown_present_in_response(self, fake_db):
         await fake_db["samples"].insert_one(
-            make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01")
+            make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1)
         )
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
@@ -454,7 +475,7 @@ class TestKingdomBreakdown:
             make_taxon(329, "Ralstonia pickettii", 15, superkingdom="Bacteria"),
         ]
         await fake_db["samples"].insert_one(
-            make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01", profile=profile)
+            make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=profile)
         )
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
@@ -468,7 +489,7 @@ class TestKingdomBreakdown:
             make_taxon(129951, "Human mastadenovirus C", 12, superkingdom="Viruses"),
         ]
         await fake_db["samples"].insert_one(
-            make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01", profile=profile)
+            make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=profile)
         )
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
@@ -484,7 +505,7 @@ class TestKingdomBreakdown:
             make_taxon(2188, "Methanobrevibacter smithii", 2, superkingdom="Archaea"),
         ]
         await fake_db["samples"].insert_one(
-            make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01", profile=profile)
+            make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=profile)
         )
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
@@ -500,7 +521,7 @@ class TestKingdomBreakdown:
             make_taxon(999999, "Unknown thing", 7, superkingdom="UnknownKingdom"),
         ]
         await fake_db["samples"].insert_one(
-            make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01", profile=profile)
+            make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=profile)
         )
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
@@ -517,7 +538,7 @@ class TestKingdomBreakdown:
             "rank": "species",
         }
         await fake_db["samples"].insert_one(
-            make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01", profile=[taxon])
+            make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=[taxon])
         )
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
@@ -530,7 +551,7 @@ class TestKingdomBreakdown:
             make_taxon(1743, "Cutibacterium acnes", 10, superkingdom="Bacteria"),
         ]
         await fake_db["samples"].insert_one(
-            make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01", profile=profile)
+            make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=profile)
         )
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
@@ -547,7 +568,7 @@ class TestKingdomBreakdown:
             for tid in HOST_TAXON_IDS
         ]
         await fake_db["samples"].insert_one(
-            make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01", profile=profile)
+            make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=profile)
         )
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
@@ -560,8 +581,9 @@ class TestKingdomBreakdown:
             "sample_id": "NTC-1",
             "case_id": "case-1",
             "sample_type": "negative_ctrl",
+            "is_latest_analysis": True,
             "material": "DNA",
-            "order_date": "2026-04-01",
+            "order_date": DAY_1,
             "profiles": [
                 {
                     "classifier": "centrifuge",
@@ -582,7 +604,7 @@ class TestKingdomBreakdown:
 
     async def test_breakdown_entry_contains_required_keys(self, fake_db):
         await fake_db["samples"].insert_one(
-            make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01")
+            make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1)
         )
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
@@ -601,9 +623,9 @@ class TestKingdomBreakdown:
     async def test_breakdown_one_entry_per_ntc(self, fake_db):
         await fake_db["samples"].insert_many(
             [
-                make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01"),
-                make_ntc_doc("NTC-2", "case-2", "DNA", "2026-04-02"),
-                make_ntc_doc("NTC-3", "case-3", "DNA", "2026-04-03"),
+                make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1),
+                make_ntc_doc("NTC-2", "case-2", "DNA", DAY_2),
+                make_ntc_doc("NTC-3", "case-3", "DNA", DAY_3),
             ]
         )
         app = make_app(fake_db)
@@ -613,8 +635,8 @@ class TestKingdomBreakdown:
     async def test_breakdown_sorted_by_order_date(self, fake_db):
         await fake_db["samples"].insert_many(
             [
-                make_ntc_doc("NTC-B", "case-B", "DNA", "2026-04-10"),
-                make_ntc_doc("NTC-A", "case-A", "DNA", "2026-04-01"),
+                make_ntc_doc("NTC-B", "case-B", "DNA", DAY_10),
+                make_ntc_doc("NTC-A", "case-A", "DNA", DAY_1),
             ]
         )
         app = make_app(fake_db)
@@ -625,7 +647,7 @@ class TestKingdomBreakdown:
 
     async def test_breakdown_empty_profile_yields_all_zeros(self, fake_db):
         await fake_db["samples"].insert_one(
-            make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01", profile=[])
+            make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=[])
         )
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
@@ -657,7 +679,7 @@ class TestNtcTrendsResponseShape:
 
     async def test_min_case_count_present_when_ntcs_exist(self, fake_db):
         await fake_db["samples"].insert_one(
-            make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01", classified_reads=100)
+            make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, classified_reads=100)
         )
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA&min_case_pct=0.1")
@@ -665,7 +687,7 @@ class TestNtcTrendsResponseShape:
 
     async def test_min_case_count_is_at_least_one(self, fake_db):
         await fake_db["samples"].insert_one(
-            make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01", classified_reads=100)
+            make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, classified_reads=100)
         )
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA&min_case_pct=0.0")
@@ -673,7 +695,7 @@ class TestNtcTrendsResponseShape:
 
     async def test_read_count_entry_shape(self, fake_db):
         await fake_db["samples"].insert_one(
-            make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01", classified_reads=100)
+            make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, classified_reads=100)
         )
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
@@ -689,8 +711,8 @@ class TestNtcTrendsResponseShape:
         taxon = make_taxon(1743, "Cutibacterium acnes", 10)
         await fake_db["samples"].insert_many(
             [
-                make_ntc_doc("NTC-1", "case-1", "DNA", "2026-04-01", profile=[taxon]),
-                make_ntc_doc("NTC-2", "case-2", "DNA", "2026-04-02", profile=[taxon]),
+                make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=[taxon]),
+                make_ntc_doc("NTC-2", "case-2", "DNA", DAY_2, profile=[taxon]),
             ]
         )
         app = make_app(fake_db)

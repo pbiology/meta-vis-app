@@ -22,11 +22,17 @@ function makeWrapper() {
 // is only in the DNA sample's kraken2 profile.
 function seedTwoSampleCase() {
   server.use(
+    // GET /cases/{id} returns identity, the analysis being viewed, and every
+    // analysis of the case; the report flattens the first two.
     http.get(`${API}/cases/case-1`, () =>
       HttpResponse.json({
-        case_id: "case-1",
-        subject_id: "subj-1",
-        notes: [{ id: "n1", text: "A note", author: "a", created_at: "2026-04-29" }],
+        case: {
+          case_id: "case-1",
+          subject_id: "subj-1",
+          notes: [{ id: "n1", text: "A note", author: "a", created_at: "2026-04-29" }],
+        },
+        analysis: { case_id: "case-1", version: 1, is_latest: true },
+        analyses: [{ case_id: "case-1", version: 1, is_latest: true }],
       })
     ),
     http.get(`${API}/cases/case-1/samples`, () =>
@@ -116,7 +122,7 @@ describe("useReportData (case-scoped)", () => {
   it("orders samples DNA-before-RNA regardless of API order", async () => {
     seedTwoSampleCase();
     const { result } = renderHook(
-      () => useReportData("case-1", { "S001-DNA": [11676], "S001-RNA": [11676] }),
+      () => useReportData("case-1", { "S001-DNA": [11676], "S001-RNA": [11676] }, null),
       { wrapper: makeWrapper() }
     );
     await waitFor(() => expect(result.current.data).toBeDefined());
@@ -125,7 +131,7 @@ describe("useReportData (case-scoped)", () => {
 
   it("collects classifiers from all samples, alphabetically", async () => {
     seedTwoSampleCase();
-    const { result } = renderHook(() => useReportData("case-1", { "S001-DNA": [11676] }), {
+    const { result } = renderHook(() => useReportData("case-1", { "S001-DNA": [11676] }, null), {
       wrapper: makeWrapper(),
     });
     await waitFor(() => expect(result.current.data).toBeDefined());
@@ -135,7 +141,7 @@ describe("useReportData (case-scoped)", () => {
   it("builds per-(sample, classifier) cells with reads + pct, omitting missing detections", async () => {
     seedTwoSampleCase();
     const { result } = renderHook(
-      () => useReportData("case-1", { "S001-DNA": [11676, 562], "S001-RNA": [11676] }),
+      () => useReportData("case-1", { "S001-DNA": [11676, 562], "S001-RNA": [11676] }, null),
       { wrapper: makeWrapper() }
     );
     await waitFor(() => expect(result.current.data).toBeDefined());
@@ -156,7 +162,7 @@ describe("useReportData (case-scoped)", () => {
 
   it("flags pathogens and resolves the case subject", async () => {
     seedTwoSampleCase();
-    const { result } = renderHook(() => useReportData("case-1", { "S001-DNA": [11676] }), {
+    const { result } = renderHook(() => useReportData("case-1", { "S001-DNA": [11676] }, null), {
       wrapper: makeWrapper(),
     });
     await waitFor(() => expect(result.current.data).toBeDefined());
@@ -167,7 +173,7 @@ describe("useReportData (case-scoped)", () => {
 
   it("returns no taxa when selections are empty", async () => {
     seedTwoSampleCase();
-    const { result } = renderHook(() => useReportData("case-1", {}), {
+    const { result } = renderHook(() => useReportData("case-1", {}, null), {
       wrapper: makeWrapper(),
     });
     await waitFor(() => expect(result.current.data).toBeDefined());
