@@ -45,12 +45,24 @@ describe("page smoke tests", () => {
     await settled();
   });
 
+  // These two assert on the rendered heading rather than calling settled():
+  // a page that throws during render still satisfies settled(), so the stale
+  // case fixture that crashed CaseView passed this suite and failed the run
+  // only as a Vitest-level unhandled error. The heading is the top bar's <h1>.
   it("CaseView renders for a case id", async () => {
     renderWithProviders(<CaseView />, {
       route: "/case/case-1",
       routePath: "/case/:caseId",
     });
-    await settled();
+    expect(await screen.findByRole("heading", { name: "case-1" })).toBeInTheDocument();
+  });
+
+  it("CaseView renders for a specific analysis version", async () => {
+    renderWithProviders(<CaseView />, {
+      route: "/case/case-1/analyses/2",
+      routePath: "/case/:caseId/analyses/:version",
+    });
+    expect(await screen.findByRole("heading", { name: "case-1" })).toBeInTheDocument();
   });
 
   it("SampleList renders empty state", async () => {
