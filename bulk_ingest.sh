@@ -11,18 +11,30 @@
 #   bash bulk_ingest.sh 0 5                       # skip taxprofiler, 5 trana
 #   RESET=1 bash bulk_ingest.sh                   # drop collections first, then ingest
 #
-#   bash bulk_ingest.sh 10 3 --reingest 4         # 4 of the 10 get a second analysis
-#   bash bulk_ingest.sh 6 0 --reingest 2 --reingest-depth 2
+#   bash bulk_ingest.sh 10 3 --reingest 4         # plus 4 re-sequenced cases
+#   bash bulk_ingest.sh 0 0 --reingest 2 --reingest-depth 2
 #                                                 # 2 cases end up with three analyses each
 #   bash bulk_ingest.sh 0 0 --ntc 20              # 20 NTC-only cases for the trends page
 #   WINDOW_DAYS=30 bash bulk_ingest.sh            # tighter date spread
 #
 # A case can be sequenced more than once, so re-ingesting the same --case-id
-# appends an analysis rather than replacing the case. --reingest exercises that:
-# it re-runs N of the freshly created taxprofiler cases, each extra analysis
-# dated a week later than the last, which is what the UI groups under the
-# current run. The sample specs (and therefore subject_id) are reused verbatim,
-# so the ingest subject cross-check passes.
+# appends an analysis rather than replacing the case. --reingest exercises that
+# with backend/test-data/fullcamel, which is one patient's sample set actually
+# sequenced three times (one subdirectory per run date) — so each analysis
+# carries genuinely different profiles and QC, not a replayed bundle.
+#
+# --reingest N creates N such cases, independent of the taxprofiler count.
+# It cannot append to the cases the taxprofiler pass creates: those are
+# subject 26CE100005 (slowowl) and fullcamel is a different patient, which the
+# ingest subject cross-check rejects by design.
+#
+# --reingest-depth controls how many run directories each case consumes, so
+# depth 1 gives two analyses and depth 2 gives three. It is capped at the
+# number of run directories available.
+#
+# fullcamel's samplesheet also carried a second patient (26CE500025); only
+# 26CE500026 and the run's negative controls are declared here. The undeclared
+# columns are inert — both taxpasta and MultiQC are read per declared sample.
 #
 # --ntc N ingests N negative-control-only cases whose kraken2 profiles carry
 # planted recurring contaminants, which is what the NTC trends page looks for.
@@ -205,6 +217,7 @@ REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 TD="$REPO_ROOT/backend/test-data/slowowl"
 TD_TRANA="$REPO_ROOT/backend/test-data/16S_trana"
 TD_NTC="$REPO_ROOT/backend/test-data/ntc"
+TD_FULLCAMEL="$REPO_ROOT/backend/test-data/fullcamel"
 NTC_GENERATOR="$REPO_ROOT/backend/test-data/generate_ntc_test_data.py"
 
 INGEST_SCRIPT="$REPO_ROOT/ingest.py"
@@ -218,6 +231,21 @@ for f in "$ADJECTIVES_FILE" "$ANIMALS_FILE" "$TD" "$TD_TRANA" "$INGEST_SCRIPT"; 
     exit 1
   fi
 done
+
+# ---------------------------------------------------------------------------
+# fullcamel run directories — one per sequencing date, named YYYY-MM-DD.
+#
+# Discovered rather than hard-coded so that dropping a fourth run in extends
+# the maximum --reingest-depth without touching this script. Sorted, so
+# FULLCAMEL_RUNS[0] is the earliest run and index order is version order.
+# Only resolved when --reingest is used; the dataset is optional otherwise.
+# ---------------------------------------------------------------------------
+FULLCAMEL_RUNS=()
+if [[ -d "$TD_FULLCAMEL" ]]; then
+  while IFS= read -r d; do
+    FULLCAMEL_RUNS+=("$d")
+  done < <(find "$TD_FULLCAMEL" -mindepth 1 -maxdepth 1 -type d | sort)
+fi
 
 # ---------------------------------------------------------------------------
 # Case-ID generation
@@ -271,21 +299,52 @@ random_date() {
   return
 }
 
+# As random_date, but leaves $1 days of room before the end of the window. A
+# re-sequenced case dates its later analyses forward from this base, so without
+# the headroom the newest analysis can land after today.
+random_date_with_headroom() {
+  # Declared separately: bash creates every name in a `local` list before
+  # assigning any of them, so referencing headroom on the same line trips
+  # `set -u` and the function silently produces nothing.
+  local headroom="$1"
+  local span=$(( range_days - headroom ))
+  (( span < 0 )) && span=0
+  local offset=$(( RANDOM % (span + 1) ))
+  date -j -r $(( start_epoch + offset * 86400 )) "+%Y-%m-%d"
+  return
+}
+
 # Later order date for a re-sequencing, so version order is visible in the UI.
 date_plus_days() {
   local base="$1" days="$2" base_epoch
-  base_epoch=$(date -j -f "%Y-%m-%d" "$base" "+%s")
+  # Guarded because an empty or malformed base silently yielded 1970-01-01,
+  # which reads as a plausible order date rather than as a failure.
+  if ! base_epoch=$(date -j -f "%Y-%m-%d" "$base" "+%s" 2>/dev/null); then
+    echo "Error: date_plus_days got an invalid base date: '$base'" >&2
+    return 1
+  fi
   date -j -r $(( base_epoch + days * 86400 )) "+%Y-%m-%d"
+  return
+}
+
+# Whole days from $1 to $2 (both YYYY-MM-DD). Used to carry the real spacing
+# between fullcamel run directories onto a freshly picked base date, so the
+# re-sequencing cadence stays authentic without pinning the order dates to
+# 2026 — see the WINDOW_DAYS note above for why pinned dates are a trap.
+days_between() {
+  local from="$1" to="$2" from_epoch to_epoch
+  from_epoch=$(date -j -f "%Y-%m-%d" "$from" "+%s")
+  to_epoch=$(date -j -f "%Y-%m-%d" "$to" "+%s")
+  echo $(( (to_epoch - from_epoch) / 86400 ))
   return
 }
 
 ms() { python3 -c "import time; print(int(time.time()*1000))"; return; }
 
 # ---------------------------------------------------------------------------
-# One taxprofiler ingest. Extracted because --reingest runs the identical
-# invocation again against an existing case to append an analysis; the sample
-# specs (and their subject_id) must match exactly or the subject cross-check
-# rejects the bundle.
+# One taxprofiler ingest of the slowowl dataset — one patient (26CE100005),
+# full metaval tree, three classifiers. Every case the taxprofiler pass creates
+# shares this sample set, so they all land under the same subject.
 #
 # --yes is required, not cosmetic: the CLI confirms before uploading whenever
 # stdin is a terminal, and inside output=$(...) only stdout is redirected — so
@@ -317,12 +376,48 @@ ingest_taxprofiler_case() {
 }
 
 # ---------------------------------------------------------------------------
+# One fullcamel ingest — the re-sequencing dataset. $run_dir is one of the
+# per-run-date directories; calling this repeatedly with the same case_id and
+# successive run directories is what builds a case with several analyses.
+#
+# Only 26CE500026 and the run's negative controls are declared. fullcamel was
+# produced from a single taxprofiler run whose samplesheet also held patient
+# 26CE500025; those columns are simply never referenced, and both taxpasta and
+# MultiQC are read per declared sample, so they contribute nothing.
+#
+# No --metaval and no diamond: this dataset has neither. Cases built from it
+# show two classifiers and an empty metaval view — slowowl remains the source
+# of full-fidelity cases.
+#
+# The stored MultiQC report does still contain 26CE500025, so that tab lists
+# six samples against the case's four. Cosmetic, and only in test data.
+# ---------------------------------------------------------------------------
+ingest_fullcamel_run() {
+  local case_id="$1" run_dir="$2" order_date="$3"
+  python "$INGEST_SCRIPT" taxprofiler \
+    --case-id "$case_id" \
+    --ticket-id "1007646" \
+    --order-date "$order_date" \
+    --multiqc           "$run_dir/multiqc_data.json" \
+    --multiqc-report    "$run_dir/multiqc_report.html" \
+    --pipeline-info     "$run_dir/nf_core_taxprofiler_software_mqc_versions.yml" \
+    --analysis-type     "shotgun" \
+    --sequencing-platform "illumina" \
+    --classifier "kraken2 db=k2_pluspf taxpasta=$run_dir/kraken2_k2_pluspf.tsv krona=$run_dir/kraken2_k2_pluspf.html" \
+    --classifier "centrifuge db=p_compressed+h+v taxpasta=$run_dir/centrifuge_p_compressed+h+v.tsv krona=$run_dir/centrifuge_p_compressed+h+v.html" \
+    --sample "sample_id=26CE500026-DNA subject_id=26CE500026 type=sample material=DNA column_kraken2=26CE500026-DNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=26CE500026-DNA_p_compressed+h+v.centrifuge" \
+    --sample "sample_id=26CE500026-RNA subject_id=26CE500026 type=sample material=RNA column_kraken2=26CE500026-RNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=26CE500026-RNA_p_compressed+h+v.centrifuge" \
+    --sample "sample_id=NTC260707-DNA type=negative_ctrl material=DNA column_kraken2=NTC260707-DNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=NTC260707-DNA_p_compressed+h+v.centrifuge" \
+    --sample "sample_id=NTC260707-RNA type=negative_ctrl material=RNA column_kraken2=NTC260707-RNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=NTC260707-RNA_p_compressed+h+v.centrifuge" \
+    --yes \
+    --url "$URL" \
+    "${KC_ARGS[@]}" 2>&1
+  return
+}
+
+# ---------------------------------------------------------------------------
 # Taxprofiler cases
 # ---------------------------------------------------------------------------
-# Populated by the taxprofiler pass; consumed by --reingest below.
-ingested_case_ids=()
-ingested_dates=()
-
 if [[ "$COUNT" -gt 0 ]]; then
   echo "Ingesting $COUNT taxprofiler case(s) ($START_DATE – $END_DATE)..."
   echo ""
@@ -340,9 +435,6 @@ if [[ "$COUNT" -gt 0 ]]; then
 
     if [[ $rc -eq 0 ]]; then
       success=$(( success + 1 ))
-      # Remember what landed so --reingest can add analyses to real cases.
-      ingested_case_ids+=("$case_id")
-      ingested_dates+=("$order_date")
       echo "  [taxprofiler $i/$COUNT] $case_id — $order_date — ${elapsed}ms (ok: $success, failed: $fail)"
     else
       fail=$(( fail + 1 ))
@@ -481,69 +573,96 @@ if [[ "$NTC_COUNT" -gt 0 ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Re-sequencing pass — append analyses to cases the taxprofiler pass created.
+# Re-sequencing pass — build cases that carry several analyses.
 #
-# Re-running the same --case-id adds an analysis instead of replacing the case,
-# so these end up in the UI as one row with the newest run current and the
-# earlier ones collapsed beneath it.
+# Each case is ingested once per fullcamel run directory under the same
+# --case-id, which appends an analysis instead of replacing the case, so it
+# ends up in the UI as one row with the newest run current and the earlier
+# ones collapsed beneath it. Because the runs are real re-sequencings of the
+# same patient, the analyses differ in profiles and QC rather than being the
+# same bundle replayed.
+#
+# These are cases of their own, not the taxprofiler pass's: fullcamel is a
+# different patient from slowowl, and the ingest subject cross-check rejects
+# an analysis whose subject contradicts the case's.
 # ---------------------------------------------------------------------------
 multi_analysis_cases=()
 
 if [[ "$REINGEST" -gt 0 ]]; then
-  available="${#ingested_case_ids[@]}"
+  runs_available="${#FULLCAMEL_RUNS[@]}"
 
-  if [[ "$available" -eq 0 ]]; then
-    echo "--reingest $REINGEST requested, but no taxprofiler cases were ingested — skipping."
+  if [[ "$runs_available" -lt 2 ]]; then
+    echo "--reingest $REINGEST requested, but $TD_FULLCAMEL holds $runs_available run"
+    echo "directory(ies) — at least 2 are needed to re-sequence. Skipping."
     echo ""
   else
-    targets="$REINGEST"
-    if [[ "$targets" -gt "$available" ]]; then
-      echo "Note: --reingest $REINGEST exceeds the $available case(s) ingested; using $available."
-      targets="$available"
+    # depth is the number of *extra* analyses, so it consumes depth+1 runs.
+    max_depth=$(( runs_available - 1 ))
+    depth="$REINGEST_DEPTH"
+    if [[ "$depth" -gt "$max_depth" ]]; then
+      echo "Note: --reingest-depth $REINGEST_DEPTH exceeds the $runs_available fullcamel run(s); using $max_depth."
+      depth="$max_depth"
     fi
 
-    total_extra=$(( targets * REINGEST_DEPTH ))
-    echo "Re-sequencing $targets case(s), $REINGEST_DEPTH extra analysis(es) each ($total_extra ingest(s))..."
+    # Day offsets of each run from the first, taken from the directory names,
+    # so a case's analyses keep the dataset's real sequencing cadence. Computed
+    # once — they are the same for every case. Directories that are not named
+    # YYYY-MM-DD fall back to weekly spacing rather than failing the run.
+    run_offsets=()
+    first_run_date="$(basename "${FULLCAMEL_RUNS[0]}")"
+    for (( r = 0; r <= depth; r++ )); do
+      run_date="$(basename "${FULLCAMEL_RUNS[$r]}")"
+      if [[ "$first_run_date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ && "$run_date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+        run_offsets+=("$(days_between "$first_run_date" "$run_date")")
+      else
+        run_offsets+=("$(( r * 7 ))")
+      fi
+    done
+
+    total_ingests=$(( REINGEST * (depth + 1) ))
+    echo "Re-sequencing $REINGEST case(s), $((depth + 1)) analysis(es) each ($total_ingests ingest(s))..."
     echo ""
 
     r_success=0; r_fail=0
 
-    for (( c = 0; c < targets; c++ )); do
-      case_id="${ingested_case_ids[$c]}"
-      base_date="${ingested_dates[$c]}"
-      case_extra=0
+    for (( c = 1; c <= REINGEST; c++ )); do
+      case_id=$(generate_case_id)
+      base_date=$(random_date_with_headroom "${run_offsets[$depth]}")
+      case_analyses=0
 
-      for (( d = 1; d <= REINGEST_DEPTH; d++ )); do
-        # Each re-run is a week later than the previous, so the version order
-        # and the order-date order agree.
-        order_date=$(date_plus_days "$base_date" $(( d * 7 )))
-        version=$(( d + 1 ))
+      for (( r = 0; r <= depth; r++ )); do
+        run_dir="${FULLCAMEL_RUNS[$r]}"
+        order_date=$(date_plus_days "$base_date" "${run_offsets[$r]}")
+        version=$(( r + 1 ))
         t0=$(ms)
 
-        output=$(ingest_taxprofiler_case "$case_id" "$order_date") && rc=0 || rc=$?
+        output=$(ingest_fullcamel_run "$case_id" "$run_dir" "$order_date") && rc=0 || rc=$?
 
         elapsed=$(( $(ms) - t0 ))
 
         if [[ $rc -eq 0 ]]; then
           r_success=$(( r_success + 1 ))
-          case_extra=$(( case_extra + 1 ))
-          echo "  [reingest $((c + 1))/$targets] $case_id v$version — $order_date — ${elapsed}ms (ok: $r_success, failed: $r_fail)"
+          case_analyses=$(( case_analyses + 1 ))
+          echo "  [reingest $c/$REINGEST] $case_id v$version — $order_date — $(basename "$run_dir") — ${elapsed}ms (ok: $r_success, failed: $r_fail)"
         else
           r_fail=$(( r_fail + 1 ))
-          echo "  [reingest $((c + 1))/$targets] $case_id v$version — $order_date — ${elapsed}ms FAILED (ok: $r_success, failed: $r_fail)"
+          echo "  [reingest $c/$REINGEST] $case_id v$version — $order_date — $(basename "$run_dir") — ${elapsed}ms FAILED (ok: $r_success, failed: $r_fail)"
           echo "$output" | sed 's/^/    /'
+          # Stop this case here. A later run would still be accepted and would
+          # silently take the failed run's version number, so the case would
+          # claim a history it does not have.
+          break
         fi
       done
 
-      # Only list cases that actually gained an analysis, and report the count
-      # they really have rather than the count that was asked for.
-      if [[ "$case_extra" -gt 0 ]]; then
-        multi_analysis_cases+=("$case_id:$(( case_extra + 1 ))")
+      # Report the analyses the case really has, not the count asked for.
+      if [[ "$case_analyses" -gt 1 ]]; then
+        multi_analysis_cases+=("$case_id:$case_analyses")
       fi
     done
 
     echo ""
-    echo "Re-sequencing: $r_success extra analysis(es) ingested, $r_fail failed."
+    echo "Re-sequencing: $r_success analysis(es) ingested, $r_fail failed."
     echo ""
   fi
 fi
