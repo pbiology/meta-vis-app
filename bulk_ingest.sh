@@ -12,8 +12,8 @@
 #   RESET=1 bash bulk_ingest.sh                   # drop collections first, then ingest
 #
 #   bash bulk_ingest.sh 10 3 --reingest 4         # plus 4 re-sequenced cases
-#   bash bulk_ingest.sh 0 0 --reingest 2 --reingest-depth 2
-#                                                 # 2 cases end up with three analyses each
+#   bash bulk_ingest.sh 0 0 --reingest 2 --reingest-depth 1
+#                                                 # 2 cases with two analyses each
 #   bash bulk_ingest.sh 0 0 --ntc 20              # 20 NTC-only cases for the trends page
 #   WINDOW_DAYS=30 bash bulk_ingest.sh            # tighter date spread
 #
@@ -28,8 +28,9 @@
 # subject 26CE100005 (slowowl) and fullcamel is a different patient, which the
 # ingest subject cross-check rejects by design.
 #
-# --reingest-depth controls how many run directories each case consumes, so
-# depth 1 gives two analyses and depth 2 gives three. It is capped at the
+# --reingest-depth controls how many *extra* analyses each case gets, so depth
+# 1 gives two analyses and depth 2 gives three. Left out, every run directory
+# is used — three analyses per case today. An explicit value is capped at the
 # number of run directories available.
 #
 # fullcamel's samplesheet also carried a second patient (26CE500025); only
@@ -72,7 +73,10 @@ fi
 # ---------------------------------------------------------------------------
 ENV="cg"
 REINGEST=0
-REINGEST_DEPTH=1
+# Empty means "use every available run directory". Left unset rather than
+# defaulting to 1 so that the whole re-sequencing dataset is exercised by
+# default, and so adding a run directory deepens the cases automatically.
+REINGEST_DEPTH=""
 NTC_COUNT=0
 POSITIONAL=()
 
@@ -104,15 +108,22 @@ done
 COUNT="${POSITIONAL[0]:-10}"
 TRANA_COUNT="${POSITIONAL[1]:-3}"
 
-for n in "$REINGEST" "$REINGEST_DEPTH" "$NTC_COUNT"; do
+for n in "$REINGEST" "$NTC_COUNT"; do
   if ! [[ "$n" =~ ^[0-9]+$ ]]; then
-    echo "Error: --reingest, --reingest-depth and --ntc take a non-negative integer (got: '$n')" >&2
+    echo "Error: --reingest and --ntc take a non-negative integer (got: '$n')" >&2
     exit 1
   fi
 done
-if [[ "$REINGEST_DEPTH" -lt 1 ]]; then
-  echo "Error: --reingest-depth must be at least 1" >&2
-  exit 1
+# Only validated when given; unset resolves to the run count in the pass below.
+if [[ -n "$REINGEST_DEPTH" ]]; then
+  if ! [[ "$REINGEST_DEPTH" =~ ^[0-9]+$ ]]; then
+    echo "Error: --reingest-depth takes a non-negative integer (got: '$REINGEST_DEPTH')" >&2
+    exit 1
+  fi
+  if [[ "$REINGEST_DEPTH" -lt 1 ]]; then
+    echo "Error: --reingest-depth must be at least 1" >&2
+    exit 1
+  fi
 fi
 
 case "$ENV" in
@@ -308,7 +319,14 @@ random_date_with_headroom() {
   # `set -u` and the function silently produces nothing.
   local headroom="$1"
   local span=$(( range_days - headroom ))
-  (( span < 0 )) && span=0
+  if (( span < 0 )); then
+    # The cadence is longer than the window, so no base inside the window can
+    # hold it. Anchor the newest analysis on today and let the earlier ones
+    # predate the window — clamping span here instead would still add the full
+    # headroom onto START_DATE and date the newest analysis in the future.
+    date -j -r $(( end_epoch - headroom * 86400 )) "+%Y-%m-%d"
+    return
+  fi
   local offset=$(( RANDOM % (span + 1) ))
   date -j -r $(( start_epoch + offset * 86400 )) "+%Y-%m-%d"
   return
@@ -597,8 +615,9 @@ if [[ "$REINGEST" -gt 0 ]]; then
     echo ""
   else
     # depth is the number of *extra* analyses, so it consumes depth+1 runs.
+    # Unset means every run directory available.
     max_depth=$(( runs_available - 1 ))
-    depth="$REINGEST_DEPTH"
+    depth="${REINGEST_DEPTH:-$max_depth}"
     if [[ "$depth" -gt "$max_depth" ]]; then
       echo "Note: --reingest-depth $REINGEST_DEPTH exceeds the $runs_available fullcamel run(s); using $max_depth."
       depth="$max_depth"
@@ -618,6 +637,18 @@ if [[ "$REINGEST" -gt 0 ]]; then
         run_offsets+=("$(( r * 7 ))")
       fi
     done
+
+    # When the cadence does not fit inside the window,
+    # random_date_with_headroom anchors the newest analysis on today and the
+    # earlier ones fall outside it. Harmless for the analytics pages — they
+    # restrict to the latest analysis — but say so rather than let the dates
+    # look arbitrary.
+    total_span="${run_offsets[$depth]}"
+    if (( total_span > range_days )); then
+      echo "Note: the run directories span $total_span days, more than WINDOW_DAYS=$WINDOW_DAYS."
+      echo "      Earlier analyses will predate the window; the newest lands on today."
+      echo ""
+    fi
 
     total_ingests=$(( REINGEST * (depth + 1) ))
     echo "Re-sequencing $REINGEST case(s), $((depth + 1)) analysis(es) each ($total_ingests ingest(s))..."
