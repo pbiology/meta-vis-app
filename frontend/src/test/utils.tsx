@@ -58,10 +58,7 @@ function Providers({ children, initialEntries, routePath }: ProvidersProps) {
     <QueryClientProvider client={client}>
       <AuthProvider>
         <ReportBuilderProvider>
-          <MemoryRouter
-            initialEntries={initialEntries}
-            future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-          >
+          <MemoryRouter initialEntries={initialEntries}>
             {routePath ? (
               <Routes>
                 <Route path={routePath} element={children} />
