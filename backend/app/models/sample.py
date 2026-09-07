@@ -35,6 +35,33 @@ class SequencingMetadata(_Base):
     num_reads: Optional[int] = None
 
 
+# "unknown" exists so a missing read count on either side cannot be mistaken
+# for "unchanged" — the two are very different clinically.
+ReadDeltaStatus = Literal["new", "increased", "unchanged", "decreased", "unknown"]
+
+
+class SampleReadDelta(_Base):
+    """How a sample's raw input read count compares to an earlier analysis.
+
+    A case is delivered twice on purpose: a deliberately partial dataset first
+    so analysis can start sooner, then a top-up for any sample short of the
+    agreed data amount. This block is what lets the UI tell a topped-up sample
+    from one re-delivered unchanged — the latter being the clinically
+    interesting case, since it is still below depth.
+
+    Computed at read time by ``app.sample_read_deltas``; never stored.
+    """
+
+    status: ReadDeltaStatus
+    current_reads: Optional[int] = None
+    previous_reads: Optional[int] = None
+    # Version of the most recent earlier analysis containing this sample.
+    # None when the sample is new.
+    previous_version: Optional[int] = None
+    delta_reads: Optional[int] = None
+    pct_change: Optional[float] = None
+
+
 class SampleResponse(_Base):
     """Validated response model for sample documents read from MongoDB."""
 
@@ -56,6 +83,18 @@ class SampleResponse(_Base):
     trana: Optional[TranaStats] = None
     profiles: List[ClassifierProfile] = []
     has_krona: bool = False
+    # Raw input reads, resolved server-side by app.sample_read_deltas.read_count
+    # so the displayed count and the comparison behind read_delta come from one
+    # definition. Deriving it again client-side let the two disagree on a
+    # document carrying blocks from both pipelines.
+    total_reads: Optional[int] = None
+    # True when at least one classifier profile carries entries. Lets the UI
+    # tell a control that produced no classifier data from one that was never
+    # part of the run — an empty NTC silently disables contaminant flagging.
+    has_profile_data: bool = False
+    # Absent on a case's first analysis: with nothing to compare against, every
+    # sample would otherwise be labelled as if it had failed to gain data.
+    read_delta: Optional[SampleReadDelta] = None
     # Derived at read time from the parent case: true when a metaval analysis
     # was ingested for the case. Lets the UI distinguish "no metaval run" from
     # "metaval run but no taxa found". Metaval is case-level, so this is the

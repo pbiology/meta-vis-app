@@ -26,6 +26,7 @@ from app.auth.utils import get_current_user, require_role
 from app.config import settings
 from app.constants import HOST_TAXON_IDS
 from app.database import get_client, get_db, maybe_transaction
+from app.sample_read_deltas import attach_read_deltas, read_count
 from app.taxonomy_utils import host_pct_for, non_host_total
 
 router = APIRouter(prefix="/cases", tags=["analyses"])
@@ -136,8 +137,19 @@ async def list_samples_for_analysis(
         doc["top_taxa"] = top_taxa_by_clf
         doc["spike_in_taxa"] = spike_in_by_clf
         doc["host_pct"] = host_pct_by_clf
+        # Recorded before the profiles are dropped from the response: a control
+        # that produced no classifier data disables contaminant flagging, and
+        # the UI cannot tell that from an absent control without this.
+        doc["has_profile_data"] = any(
+            p.get("profile") for p in doc.get("profiles", []) or []
+        )
+        # Served rather than re-derived in the client, so the number in the
+        # table and the comparison behind read_delta cannot disagree.
+        doc["total_reads"] = read_count(doc)
         doc.pop("profiles", None)
         result.append(_serialise_sample(doc))
+
+    await attach_read_deltas(db, analysis, result)
     return result
 
 

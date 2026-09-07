@@ -141,6 +141,24 @@ export interface CaseStats {
   [key: string]: number | string | boolean | null | undefined;
 }
 
+/**
+ * How a sample's raw read count compares to an earlier analysis of its case.
+ *
+ * A case is delivered partially first so analysis can start sooner, then
+ * topped up for any sample short of the agreed data amount. This is what tells
+ * a topped-up sample from one re-delivered unchanged. Computed server-side by
+ * `app/sample_read_deltas.py`; absent on a case's first analysis, where there
+ * is nothing to compare against.
+ */
+export interface SampleReadDelta {
+  status: "new" | "increased" | "unchanged" | "decreased" | "unknown";
+  current_reads: number | null;
+  previous_reads: number | null;
+  previous_version: number | null;
+  delta_reads: number | null;
+  pct_change: number | null;
+}
+
 export interface Sample {
   _id?: string;
   sample_id: string;
@@ -148,6 +166,14 @@ export interface Sample {
   // True when a metaval analysis was ingested for the parent case. Derived
   // server-side; lets the UI tell "no metaval run" from "metaval run, no hits".
   has_metaval?: boolean;
+  // True when at least one classifier profile carries entries. A control
+  // without it disables contaminant flagging, which the UI must announce.
+  has_profile_data?: boolean;
+  // Raw input reads, resolved server-side from whichever pipeline produced the
+  // sample. Rendered as-is rather than re-derived here, so the displayed count
+  // and read_delta always describe the same number.
+  total_reads?: number | null;
+  read_delta?: SampleReadDelta;
   [key: string]: unknown;
 }
 

@@ -90,6 +90,48 @@ run's data should not silently enter another run's report — and anything
 that no longer applies (a sample or taxon absent from the new run) is
 dropped and listed.
 
+.. _which-samples-were-topped-up:
+
+Which samples were topped up
+----------------------------
+
+A case is often delivered twice on purpose: a partial dataset first, so
+analysis can start sooner, then a top-up for any sample that had not
+reached the agreed data amount. From the second analysis onwards, the
+**Total reads** column in the samples table says how each sample compares
+to the most recent earlier run it appeared in:
+
+``▲ +5.2M``
+   Topped up — this sample gained data since that run.
+
+``no top-up``
+   Re-delivered with exactly the same read count. Nothing was added, so
+   the sample is still at whatever depth it had before.
+
+``▼ −0.4M``
+   Fewer reads than before. Not expected on a top-up; worth asking about.
+
+``new``
+   Not present in any earlier run of this case.
+
+``?``
+   The read count is missing on one side, so the two cannot be compared.
+   Shown rather than assumed unchanged.
+
+Hover any marker for the exact before/after counts. A case's first
+analysis has nothing to compare against, so it carries no markers at all.
+
+Negative controls
+-----------------
+
+Contaminant flagging compares a sample against the negative controls from
+the **same run and the same material**. When an analysis has no usable
+control for a material — none was loaded, or the one loaded produced no
+classifier data — an amber banner says so above the samples table, and
+the affected sample pages repeat it. Without a control the taxonomy table
+shows no NTC column and flags no contaminants, which otherwise looks
+identical to a run whose control came back clean.
+
 Below, a tabbed view:
 
 **QC tables**
