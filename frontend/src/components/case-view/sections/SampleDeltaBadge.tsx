@@ -39,6 +39,12 @@ function label(delta: SampleReadDelta): string {
   }
 }
 
+function pctSuffix(pct: number | null): string {
+  if (pct === null) return "";
+  const sign = pct > 0 ? "+" : "";
+  return ` (${sign}${pct}%)`;
+}
+
 function tooltip(delta: SampleReadDelta): string {
   if (delta.status === "new") {
     return "Not present in any earlier run of this case.";
@@ -47,8 +53,7 @@ function tooltip(delta: SampleReadDelta): string {
   if (delta.status === "unknown") {
     return `Read count missing — cannot compare with ${from}.`;
   }
-  const change =
-    delta.pct_change === null ? "" : ` (${delta.pct_change > 0 ? "+" : ""}${delta.pct_change}%)`;
+  const change = pctSuffix(delta.pct_change);
   const to = `this run: ${fmt(delta.current_reads)}`;
   return delta.status === "unchanged"
     ? `Unchanged since ${from} — this sample gained no data.`

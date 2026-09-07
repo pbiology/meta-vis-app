@@ -30,7 +30,9 @@ export function ntcCoverageWarning(samples: Sample[]): string | null {
 
   const missing: string[] = [];
   const empty: string[] = [];
-  for (const material of [...materials].sort()) {
+  // Sorted so the warning names materials in a stable order; localeCompare
+  // rather than the default sort, which orders by UTF-16 code unit.
+  for (const material of [...materials].sort((a, b) => a.localeCompare(b))) {
     const ntcs = samples.filter(
       (s) => s.sample_type === "negative_ctrl" && s.material === material
     );
