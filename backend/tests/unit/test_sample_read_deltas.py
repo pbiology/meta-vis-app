@@ -64,6 +64,17 @@ class TestReadCount:
         assert read_count({"taxprofiler": {"classifiers": {}}}) is None
         assert read_count({}) is None
 
+    def test_empty_trana_block_falls_through_to_taxprofiler(self):
+        # A doc carrying both blocks cannot come out of either ingest path, but
+        # the API serves this number to the samples table as well as using it
+        # for the comparison — so the two must resolve it identically, which
+        # only holds while there is one implementation.
+        doc = {
+            "trana": {"pipeline_info": {}},
+            "taxprofiler": {"fastp": {"total_reads_before_filtering": 77}},
+        }
+        assert read_count(doc) == 77
+
 
 class TestAttachReadDeltas:
     async def test_first_analysis_gets_no_deltas(self, fake_db):

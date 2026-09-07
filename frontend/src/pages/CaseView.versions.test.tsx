@@ -44,6 +44,9 @@ function samplesFor(version: 1 | 2) {
       sample_id: "S1", // identical in both runs, on purpose
       sample_type: "sample",
       material: "DNA",
+      // The server resolves the raw read count from whichever pipeline ran and
+      // serves it as total_reads; the samples table renders that directly.
+      total_reads: RUNS[version].reads,
       taxprofiler: { fastp: { total_reads_before_filtering: RUNS[version].reads } },
     },
   ];

@@ -17,8 +17,10 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.models.sample import ReadDeltaStatus, SampleReadDelta
 
 # Raw input reads, before any filtering — the count that actually reflects how
-# much data the sequencing run delivered. These are the same fields the case
-# view's "Total reads" column renders, so badge and number cannot disagree.
+# much data the sequencing run delivered. ``read_count`` below is also what
+# fills the samples response's ``total_reads``, so the case view's "Total
+# reads" column and the comparison behind the badge resolve the same number by
+# construction rather than by two implementations agreeing.
 _TAXPROFILER_READS = "taxprofiler.fastp.total_reads_before_filtering"
 _TRANA_READS = "trana.nanoplot_unprocessed.number_of_reads"
 

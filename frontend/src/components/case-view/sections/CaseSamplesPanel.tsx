@@ -67,13 +67,6 @@ interface CaseSamplesPanelProps {
   onSelectSample: (sampleId: string) => void;
 }
 
-interface TaxprofilerFastp {
-  fastp?: { total_reads_before_filtering?: number };
-}
-interface TranaNanoplot {
-  nanoplot_unprocessed?: { number_of_reads?: number };
-}
-
 export default function CaseSamplesPanel({
   samples,
   pathogenMap,
@@ -134,8 +127,6 @@ export default function CaseSamplesPanel({
         </thead>
         <tbody>
           {filtered.map((s) => {
-            const trana = s.trana as TranaNanoplot | undefined;
-            const tp = s.taxprofiler as TaxprofilerFastp | undefined;
             const taxonIds = (s.all_taxon_ids as number[] | undefined) ?? [];
             const flagged = taxonIds.filter((id) => id in pathogenMap);
             return (
@@ -173,13 +164,7 @@ export default function CaseSamplesPanel({
                 </td>
                 <td className="px-4 py-3 text-xs text-gray-700">
                   <div className="flex items-center gap-1.5 whitespace-nowrap">
-                    <span>
-                      {fmt(
-                        trana
-                          ? trana.nanoplot_unprocessed?.number_of_reads
-                          : tp?.fastp?.total_reads_before_filtering
-                      )}
-                    </span>
+                    <span>{fmt(s.total_reads)}</span>
                     <SampleDeltaBadge delta={s.read_delta} />
                   </div>
                 </td>

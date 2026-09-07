@@ -26,7 +26,7 @@ from app.auth.utils import get_current_user, require_role
 from app.config import settings
 from app.constants import HOST_TAXON_IDS
 from app.database import get_client, get_db, maybe_transaction
-from app.sample_read_deltas import attach_read_deltas
+from app.sample_read_deltas import attach_read_deltas, read_count
 from app.taxonomy_utils import host_pct_for, non_host_total
 
 router = APIRouter(prefix="/cases", tags=["analyses"])
@@ -143,6 +143,9 @@ async def list_samples_for_analysis(
         doc["has_profile_data"] = any(
             p.get("profile") for p in doc.get("profiles", []) or []
         )
+        # Served rather than re-derived in the client, so the number in the
+        # table and the comparison behind read_delta cannot disagree.
+        doc["total_reads"] = read_count(doc)
         doc.pop("profiles", None)
         result.append(_serialise_sample(doc))
 

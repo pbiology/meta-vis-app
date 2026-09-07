@@ -169,6 +169,10 @@ export interface Sample {
   // True when at least one classifier profile carries entries. A control
   // without it disables contaminant flagging, which the UI must announce.
   has_profile_data?: boolean;
+  // Raw input reads, resolved server-side from whichever pipeline produced the
+  // sample. Rendered as-is rather than re-derived here, so the displayed count
+  // and read_delta always describe the same number.
+  total_reads?: number | null;
   read_delta?: SampleReadDelta;
   [key: string]: unknown;
 }

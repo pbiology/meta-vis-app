@@ -14,7 +14,7 @@ function sample(overrides: Partial<Sample> & { sample_id: string }): Sample {
     _id: `oid-${overrides.sample_id}`,
     sample_type: "sample",
     material: "DNA",
-    taxprofiler: { fastp: { total_reads_before_filtering: 1_000_000 } },
+    total_reads: 1_000_000,
     ...overrides,
   } as Sample;
 }
@@ -47,6 +47,24 @@ function renderPanel(samples: Sample[]) {
 function rowFor(sampleId: string) {
   return screen.getByText(sampleId).closest("tr") as HTMLElement;
 }
+
+describe("total reads", () => {
+  it("renders the server-resolved count rather than picking a pipeline field", () => {
+    // The count and the delta must describe the same number. Deriving it here
+    // from taxprofiler/trana blocks let the two disagree on a document that
+    // carried both.
+    renderPanel([sample({ sample_id: "S1", total_reads: 2_345_678 })]);
+
+    expect(within(rowFor("S1")).getByText("2,345,678")).toBeInTheDocument();
+  });
+
+  it("shows an em dash when the server could not resolve a count", () => {
+    // sample_source is set so the only em dash in the row is the read count.
+    renderPanel([sample({ sample_id: "S1", sample_source: "blood", total_reads: null })]);
+
+    expect(within(rowFor("S1")).getByText("—")).toBeInTheDocument();
+  });
+});
 
 describe("read-delta badges", () => {
   it("marks a topped-up sample with the size of the increase", () => {

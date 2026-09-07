@@ -83,6 +83,11 @@ class SampleResponse(_Base):
     trana: Optional[TranaStats] = None
     profiles: List[ClassifierProfile] = []
     has_krona: bool = False
+    # Raw input reads, resolved server-side by app.sample_read_deltas.read_count
+    # so the displayed count and the comparison behind read_delta come from one
+    # definition. Deriving it again client-side let the two disagree on a
+    # document carrying blocks from both pipelines.
+    total_reads: Optional[int] = None
     # True when at least one classifier profile carries entries. Lets the UI
     # tell a control that produced no classifier data from one that was never
     # part of the run — an empty NTC silently disables contaminant flagging.
