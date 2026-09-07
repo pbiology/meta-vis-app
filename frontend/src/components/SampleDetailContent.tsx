@@ -63,6 +63,27 @@ function auxDataWarningMessage(outbreakError: boolean, ntcError: boolean): strin
   return null;
 }
 
+/**
+ * Announce that this sample has no negative control to be compared against.
+ *
+ * Kept separate from `auxDataWarningMessage` because "failed to load" and
+ * "none exists" are different facts. Without this, TaxonomyTable simply drops
+ * the NTC column and never flags a contaminant, so an uncontrolled run is
+ * indistinguishable from a clean one.
+ */
+function missingNtcMessage(
+  ntcCount: number,
+  ntcError: boolean,
+  sampleType: string,
+  material: string | undefined
+): string | null {
+  // Controls are not compared against themselves, and a load failure is
+  // already reported by the aux warning.
+  if (ntcError || sampleType !== "sample" || ntcCount > 0) return null;
+  const what = material ? `${material} negative control` : "negative control";
+  return `No ${what} in this analysis — contaminants cannot be flagged for this sample.`;
+}
+
 export default function SampleDetailContent({
   sampleId,
   selectionKey,
@@ -154,6 +175,12 @@ export default function SampleDetailContent({
   const classifiers: SampleProfile[] = profile?.profiles ?? [];
   const sampleType = (sample?.sample_type as string | undefined) ?? "sample";
   const auxWarning = auxDataWarningMessage(Boolean(outbreakError), Boolean(ntcError));
+  const noNtcWarning = missingNtcMessage(
+    ntcProfiles.length,
+    Boolean(ntcError),
+    sampleType,
+    sample?.material as string | undefined
+  );
 
   return (
     <div className="flex flex-col h-full">
@@ -207,6 +234,7 @@ export default function SampleDetailContent({
         />
 
         {auxWarning && <DataWarning message={auxWarning} />}
+        {noNtcWarning && <DataWarning message={noNtcWarning} />}
 
         <SampleTaxonomySection
           classifiers={classifiers}

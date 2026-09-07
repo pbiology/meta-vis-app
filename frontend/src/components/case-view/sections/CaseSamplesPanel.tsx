@@ -1,10 +1,63 @@
 import { useMemo, useState } from "react";
 import type { PathogenItem, Sample } from "../../../api/types";
 import Badge from "../../Badge";
+import DataWarning from "../../DataWarning";
+import SampleDeltaBadge from "./SampleDeltaBadge";
 import { fmt } from "../../../utils/format";
 
 const FILTERS = ["All", "Sample", "Controls"] as const;
 type Filter = (typeof FILTERS)[number];
+
+/**
+ * Announce clinical samples whose material has no usable negative control.
+ *
+ * Contaminant flagging compares a sample against NTCs from the same run *and
+ * the same material* (see `routers/samples.py`), and silently does nothing
+ * when there are none — so an analysis with a failed NTC looks exactly like
+ * one with a clean NTC. Material is part of the check because a DNA-only NTC
+ * leaves RNA samples uncovered; a warning that ignored it would be wrong on
+ * every mixed-material case.
+ */
+export function ntcCoverageWarning(samples: Sample[]): string | null {
+  // Coverage is only decidable per material, so a sample without one is left
+  // out rather than described with a material name it does not have. The
+  // ingest models make material mandatory, so this cannot happen in practice.
+  const materials = new Set(
+    samples
+      .filter((s) => s.sample_type === "sample" && typeof s.material === "string")
+      .map((s) => s.material as string)
+  );
+
+  const missing: string[] = [];
+  const empty: string[] = [];
+  for (const material of [...materials].sort()) {
+    const ntcs = samples.filter(
+      (s) => s.sample_type === "negative_ctrl" && s.material === material
+    );
+    if (ntcs.length === 0) {
+      missing.push(material);
+    } else if (ntcs.every((s) => s.has_profile_data === false)) {
+      // Only claimed when the server said so explicitly — an older response
+      // without the field must not be reported as an empty control.
+      empty.push(material);
+    }
+  }
+
+  const parts: string[] = [];
+  if (missing.length > 0) {
+    parts.push(
+      `No ${missing.join(" or ")} negative control in this analysis — ` +
+        `contaminant flagging is unavailable for ${missing.join(" and ")} samples.`
+    );
+  }
+  if (empty.length > 0) {
+    parts.push(
+      `The ${empty.join(" and ")} negative control produced no classifier data — ` +
+        `contaminant flagging is unavailable for ${empty.join(" and ")} samples.`
+    );
+  }
+  return parts.length > 0 ? parts.join(" ") : null;
+}
 
 interface CaseSamplesPanelProps {
   samples: Sample[];
@@ -25,6 +78,8 @@ export default function CaseSamplesPanel({
   onSelectSample,
 }: Readonly<CaseSamplesPanelProps>) {
   const [filter, setFilter] = useState<Filter>("All");
+
+  const ntcWarning = useMemo(() => ntcCoverageWarning(samples), [samples]);
 
   const filtered = useMemo(() => {
     if (filter === "Sample") return samples.filter((s) => s.sample_type === "sample");
@@ -57,6 +112,11 @@ export default function CaseSamplesPanel({
           ))}
         </div>
       </div>
+      {ntcWarning && (
+        <div className="px-4 pt-3">
+          <DataWarning message={ntcWarning} />
+        </div>
+      )}
       <table className="w-full text-left border-collapse">
         <thead>
           <tr>
@@ -110,11 +170,16 @@ export default function CaseSamplesPanel({
                   {(s.sample_source as string | undefined) ?? "—"}
                 </td>
                 <td className="px-4 py-3 text-xs text-gray-700">
-                  {fmt(
-                    trana
-                      ? trana.nanoplot_unprocessed?.number_of_reads
-                      : tp?.fastp?.total_reads_before_filtering
-                  )}
+                  <div className="flex items-center gap-1.5 whitespace-nowrap">
+                    <span>
+                      {fmt(
+                        trana
+                          ? trana.nanoplot_unprocessed?.number_of_reads
+                          : tp?.fastp?.total_reads_before_filtering
+                      )}
+                    </span>
+                    <SampleDeltaBadge delta={s.read_delta} />
+                  </div>
                 </td>
               </tr>
             );
