@@ -152,6 +152,10 @@ re-sequencing never strands the clinical discussion on the older run. The
 new analysis starts unreviewed; the earlier one keeps its own review
 status.
 
+In the new analysis, the samples table marks which samples actually
+gained data and which came back with the same read count as before — see
+:ref:`which-samples-were-topped-up`.
+
 Bulk ingest
 -----------
 
