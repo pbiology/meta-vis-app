@@ -15,7 +15,7 @@ from app.models.taxonomy import ClassifierProfile
 class SampleMetadata(_Base):
     sample_id: str
     sample_source: Optional[str] = None
-    material: Optional[str] = None
+    nucleic_acid: Optional[str] = None
     sample_type: Optional[str] = None
     subject_id: Optional[str] = None
     biopsy_id: Optional[str] = None
@@ -77,7 +77,7 @@ class SampleResponse(_Base):
     sample_id: str
     sample_source: Optional[str] = None
     sample_type: Literal["sample", "positive_ctrl", "negative_ctrl"]
-    material: Literal["DNA", "RNA"]
+    nucleic_acid: Literal["DNA", "RNA"]
     subject_id: Optional[str] = None
     taxprofiler: Optional[TaxprofilerStats] = None
     trana: Optional[TranaStats] = None

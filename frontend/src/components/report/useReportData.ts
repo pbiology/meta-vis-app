@@ -17,7 +17,7 @@ import { compareBySampleType } from "../../utils/sampleOrdering";
 export interface ReportSampleRow {
   sample_id: string;
   sample_type?: string;
-  material?: string;
+  nucleic_acid?: string;
   classifiersAvailable: string[];
   fastp?: {
     total_reads_before_filtering?: number;
@@ -99,7 +99,7 @@ function buildSampleRow(s: Sample, profiles: SampleProfile[]): ReportSampleRow {
   return {
     sample_id: s.sample_id,
     sample_type: readString(s, "sample_type"),
-    material: readString(s, "material"),
+    nucleic_acid: readString(s, "nucleic_acid"),
     classifiersAvailable: profiles.map((p) => p.classifier).sort((a, b) => a.localeCompare(b)),
     fastp: tp?.fastp,
     sample_source: readString(s, "sample_source"),

@@ -74,7 +74,7 @@ OUT_OF_WINDOW = _days_ago(400)
 def make_ntc_doc(
     sample_id: str,
     case_id: str,
-    material: str,
+    nucleic_acid: str,
     order_date: str,
     profile: list[dict] | None = None,
     classified_reads: int | None = None,
@@ -85,7 +85,7 @@ def make_ntc_doc(
         "case_id": case_id,
         "sample_type": "negative_ctrl",
         "is_latest_analysis": True,
-        "material": material,
+        "nucleic_acid": nucleic_acid,
         "order_date": order_date,
         "profiles": [],
         "taxprofiler": {},
@@ -123,18 +123,18 @@ def make_taxon(
 class TestNtcTrendsEmpty:
     async def test_no_ntcs_returns_empty_response(self, fake_db):
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_ntcs"] == 0
         assert data["read_counts"] == []
         assert data["recurring_taxa"] == []
 
-    async def test_no_ntcs_response_contains_material_and_window(self, fake_db):
+    async def test_no_ntcs_response_contains_nucleic_acid_and_window(self, fake_db):
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=RNA&window_days=30")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=RNA&window_days=30")
         data = resp.json()
-        assert data["material"] == "RNA"
+        assert data["nucleic_acid"] == "RNA"
         assert data["window_days"] == 30
 
     async def test_dna_ntcs_not_returned_for_rna_query(self, fake_db):
@@ -142,7 +142,7 @@ class TestNtcTrendsEmpty:
             make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1)
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=RNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=RNA")
         assert resp.json()["total_ntcs"] == 0
 
     async def test_non_ntc_samples_excluded(self, fake_db):
@@ -150,7 +150,7 @@ class TestNtcTrendsEmpty:
         doc["sample_type"] = "sample"
         await fake_db["samples"].insert_one(doc)
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         assert resp.json()["total_ntcs"] == 0
 
 
@@ -160,34 +160,38 @@ class TestNtcTrendsEmpty:
 
 
 class TestNtcTrendsValidation:
-    async def test_missing_material_returns_422(self, fake_db):
+    async def test_missing_nucleic_acid_returns_422(self, fake_db):
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/trends")
         assert resp.status_code == 422
 
-    async def test_invalid_material_returns_422(self, fake_db):
+    async def test_invalid_nucleic_acid_returns_422(self, fake_db):
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=INVALID")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=INVALID")
         assert resp.status_code == 422
 
     async def test_window_days_below_minimum_returns_422(self, fake_db):
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA&window_days=6")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA&window_days=6")
         assert resp.status_code == 422
 
     async def test_window_days_above_maximum_returns_422(self, fake_db):
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA&window_days=366")
+        resp = TestClient(app).get(
+            "/api/v1/ntc/trends?nucleic_acid=DNA&window_days=366"
+        )
         assert resp.status_code == 422
 
     async def test_min_reads_below_minimum_returns_422(self, fake_db):
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA&min_reads=0")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=0")
         assert resp.status_code == 422
 
     async def test_min_case_pct_above_maximum_returns_422(self, fake_db):
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA&min_case_pct=1.1")
+        resp = TestClient(app).get(
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_case_pct=1.1"
+        )
         assert resp.status_code == 422
 
 
@@ -202,7 +206,7 @@ class TestNtcReadCounts:
             make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, classified_reads=500)
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         counts = resp.json()["read_counts"]
         assert len(counts) == 1
         assert counts[0]["classified_reads"] == 500
@@ -218,7 +222,7 @@ class TestNtcReadCounts:
             make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=profile)
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         counts = resp.json()["read_counts"]
         assert counts[0]["classified_reads"] == 300
 
@@ -227,7 +231,7 @@ class TestNtcReadCounts:
             make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1)
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         counts = resp.json()["read_counts"]
         assert counts[0]["classified_reads"] is None
 
@@ -239,7 +243,7 @@ class TestNtcReadCounts:
             make_ntc_doc("NTC-A", "case-A", "DNA", DAY_1, classified_reads=100)
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         counts = resp.json()["read_counts"]
         assert counts[0]["sample_id"] == "NTC-A"
         assert counts[1]["sample_id"] == "NTC-B"
@@ -251,7 +255,7 @@ class TestNtcReadCounts:
             )
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA&window_days=90")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA&window_days=90")
         assert resp.json()["total_ntcs"] == 0
 
 
@@ -271,7 +275,7 @@ class TestRecurringTaxa:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?material=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
         )
         taxa = resp.json()["recurring_taxa"]
         assert len(taxa) == 1
@@ -290,7 +294,7 @@ class TestRecurringTaxa:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?material=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
         )
         assert resp.json()["recurring_taxa"] == []
 
@@ -304,7 +308,7 @@ class TestRecurringTaxa:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?material=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
         )
         assert len(resp.json()["recurring_taxa"]) == 1
 
@@ -318,7 +322,7 @@ class TestRecurringTaxa:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?material=DNA&min_reads=1&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=1&min_case_pct=0.1"
         )
         taxon_ids = [t["taxon_id"] for t in resp.json()["recurring_taxa"]]
         assert 9606 not in taxon_ids
@@ -335,7 +339,7 @@ class TestRecurringTaxa:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?material=DNA&min_reads=1&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=1&min_case_pct=0.1"
         )
         assert resp.json()["recurring_taxa"] == []
 
@@ -350,7 +354,7 @@ class TestRecurringTaxa:
         await fake_db["samples"].insert_many(docs)
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?material=DNA&min_reads=3&min_case_pct=0.5"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.5"
         )
         assert resp.json()["recurring_taxa"] == []
 
@@ -373,7 +377,7 @@ class TestRecurringTaxa:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?material=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
         )
         taxa = resp.json()["recurring_taxa"]
         assert len(taxa) == 1
@@ -395,7 +399,7 @@ class TestRecurringTaxa:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?material=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
         )
         taxa = resp.json()["recurring_taxa"]
         assert taxa[0]["taxon_id"] == 329  # Taxon-B — 3 cases
@@ -411,7 +415,7 @@ class TestRecurringTaxa:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?material=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
         )
         occ = resp.json()["recurring_taxa"][0]["occurrences"]
         assert occ[0]["order_date"] == DAY_1
@@ -425,7 +429,7 @@ class TestRecurringTaxa:
                 "case_id": "case-1",
                 "sample_type": "negative_ctrl",
                 "is_latest_analysis": True,
-                "material": "DNA",
+                "nucleic_acid": "DNA",
                 "order_date": DAY_1,
                 "profiles": [{"classifier": "centrifuge", "profile": [taxon]}],
                 "taxprofiler": {},
@@ -435,7 +439,7 @@ class TestRecurringTaxa:
                 "case_id": "case-2",
                 "sample_type": "negative_ctrl",
                 "is_latest_analysis": True,
-                "material": "DNA",
+                "nucleic_acid": "DNA",
                 "order_date": DAY_2,
                 "profiles": [{"classifier": "centrifuge", "profile": [taxon]}],
                 "taxprofiler": {},
@@ -444,7 +448,7 @@ class TestRecurringTaxa:
         await fake_db["samples"].insert_many(docs)
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?material=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
         )
         assert resp.json()["recurring_taxa"] == []
 
@@ -460,12 +464,12 @@ class TestKingdomBreakdown:
             make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1)
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         assert "kingdom_breakdown" in resp.json()
 
     async def test_kingdom_breakdown_empty_when_no_ntcs(self, fake_db):
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         # No NTCs → early return, kingdom_breakdown not present but total_ntcs=0
         assert resp.json()["total_ntcs"] == 0
 
@@ -478,7 +482,7 @@ class TestKingdomBreakdown:
             make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=profile)
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         entry = resp.json()["kingdom_breakdown"][0]
         assert entry["Bacteria"] == 35
         assert entry["Viruses"] == 0
@@ -492,7 +496,7 @@ class TestKingdomBreakdown:
             make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=profile)
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         entry = resp.json()["kingdom_breakdown"][0]
         assert entry["Viruses"] == 12
         assert entry["Bacteria"] == 0
@@ -508,7 +512,7 @@ class TestKingdomBreakdown:
             make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=profile)
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         entry = resp.json()["kingdom_breakdown"][0]
         assert entry["Bacteria"] == 10
         assert entry["Viruses"] == 5
@@ -524,7 +528,7 @@ class TestKingdomBreakdown:
             make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=profile)
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         entry = resp.json()["kingdom_breakdown"][0]
         assert entry["Other"] == 7
 
@@ -541,7 +545,7 @@ class TestKingdomBreakdown:
             make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=[taxon])
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         entry = resp.json()["kingdom_breakdown"][0]
         assert entry["Other"] == 4
 
@@ -554,7 +558,7 @@ class TestKingdomBreakdown:
             make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=profile)
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         entry = resp.json()["kingdom_breakdown"][0]
         # Homo sapiens (9606) must not contribute to Eukaryota
         assert entry["Eukaryota"] == 0
@@ -571,7 +575,7 @@ class TestKingdomBreakdown:
             make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=profile)
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         entry = resp.json()["kingdom_breakdown"][0]
         assert entry["Bacteria"] == 0
         assert entry["Other"] == 0
@@ -582,7 +586,7 @@ class TestKingdomBreakdown:
             "case_id": "case-1",
             "sample_type": "negative_ctrl",
             "is_latest_analysis": True,
-            "material": "DNA",
+            "nucleic_acid": "DNA",
             "order_date": DAY_1,
             "profiles": [
                 {
@@ -598,7 +602,7 @@ class TestKingdomBreakdown:
         }
         await fake_db["samples"].insert_one(doc)
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         entry = resp.json()["kingdom_breakdown"][0]
         assert entry["Bacteria"] == 0
 
@@ -607,7 +611,7 @@ class TestKingdomBreakdown:
             make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1)
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         entry = resp.json()["kingdom_breakdown"][0]
         assert set(entry.keys()) == {
             "sample_id",
@@ -629,7 +633,7 @@ class TestKingdomBreakdown:
             ]
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         assert len(resp.json()["kingdom_breakdown"]) == 3
 
     async def test_breakdown_sorted_by_order_date(self, fake_db):
@@ -640,7 +644,7 @@ class TestKingdomBreakdown:
             ]
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         breakdown = resp.json()["kingdom_breakdown"]
         assert breakdown[0]["sample_id"] == "NTC-A"
         assert breakdown[1]["sample_id"] == "NTC-B"
@@ -650,7 +654,7 @@ class TestKingdomBreakdown:
             make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=[])
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         entry = resp.json()["kingdom_breakdown"][0]
         assert entry["Bacteria"] == 0
         assert entry["Viruses"] == 0
@@ -667,10 +671,10 @@ class TestKingdomBreakdown:
 class TestNtcTrendsResponseShape:
     async def test_response_contains_all_top_level_keys(self, fake_db):
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         data = resp.json()
         assert set(data.keys()) >= {
-            "material",
+            "nucleic_acid",
             "window_days",
             "total_ntcs",
             "read_counts",
@@ -682,7 +686,9 @@ class TestNtcTrendsResponseShape:
             make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, classified_reads=100)
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA&min_case_pct=0.1")
+        resp = TestClient(app).get(
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_case_pct=0.1"
+        )
         assert "min_case_count" in resp.json()
 
     async def test_min_case_count_is_at_least_one(self, fake_db):
@@ -690,7 +696,9 @@ class TestNtcTrendsResponseShape:
             make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, classified_reads=100)
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA&min_case_pct=0.0")
+        resp = TestClient(app).get(
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_case_pct=0.0"
+        )
         assert resp.json()["min_case_count"] >= 1
 
     async def test_read_count_entry_shape(self, fake_db):
@@ -698,7 +706,7 @@ class TestNtcTrendsResponseShape:
             make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, classified_reads=100)
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         entry = resp.json()["read_counts"][0]
         assert set(entry.keys()) == {
             "sample_id",
@@ -717,7 +725,7 @@ class TestNtcTrendsResponseShape:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?material=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
         )
         entry = resp.json()["recurring_taxa"][0]
         assert set(entry.keys()) >= {

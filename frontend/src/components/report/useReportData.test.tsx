@@ -43,7 +43,7 @@ function seedTwoSampleCase() {
           sample_id: "S001-RNA",
           case_id: "case-1",
           sample_type: "RNA",
-          material: "RNA",
+          nucleic_acid: "RNA",
           subject_id: "subj-1",
         },
         {
@@ -51,7 +51,7 @@ function seedTwoSampleCase() {
           sample_id: "S001-DNA",
           case_id: "case-1",
           sample_type: "DNA",
-          material: "DNA",
+          nucleic_acid: "DNA",
           subject_id: "subj-1",
         },
       ])

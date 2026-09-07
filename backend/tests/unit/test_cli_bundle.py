@@ -9,6 +9,7 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 from app.ingestor.loader import load_taxprofiler_bundle
@@ -98,7 +99,7 @@ async def test_cli_bundle_round_trips_through_loader(tmp_path):
                 "subject_sex": "unknown",
                 "sample_id": "S1",
                 "sample_type": "sample",
-                "material": "DNA",
+                "nucleic_acid": "DNA",
                 "sample_source": "N/A",
                 "columns": {"kraken2": "S1_kraken2"},
             }
@@ -115,3 +116,36 @@ async def test_cli_bundle_round_trips_through_loader(tmp_path):
     assert "kraken2" in inputs.taxpasta
     assert inputs.metaval is None
     assert inputs.multiqc_html is None
+
+
+class TestDeprecatedMaterialAlias:
+    """The nucleic_acid field was renamed from material. Saved clinic ingest
+    command lines still say material=, so the CLI accepts it — loudly, and
+    never when it would have to guess between two conflicting values."""
+
+    def test_material_is_rewritten_to_nucleic_acid_with_a_warning(self, capsys):
+        cli = _load_cli_module()
+        parts = {"sample_id": "S1", "material": "DNA"}
+
+        cli._resolve_nucleic_acid(parts)
+
+        assert parts == {"sample_id": "S1", "nucleic_acid": "DNA"}
+        assert "deprecated" in capsys.readouterr().err
+
+    def test_nucleic_acid_alone_is_left_untouched(self, capsys):
+        cli = _load_cli_module()
+        parts = {"sample_id": "S1", "nucleic_acid": "RNA"}
+
+        cli._resolve_nucleic_acid(parts)
+
+        assert parts == {"sample_id": "S1", "nucleic_acid": "RNA"}
+        assert capsys.readouterr().err == ""
+
+    def test_setting_both_keys_exits_rather_than_picking_one(self):
+        cli = _load_cli_module()
+        parts = {"sample_id": "S1", "material": "DNA", "nucleic_acid": "RNA"}
+
+        with pytest.raises(SystemExit) as exc:
+            cli._resolve_nucleic_acid(parts)
+
+        assert exc.value.code == 1

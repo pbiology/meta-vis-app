@@ -324,7 +324,7 @@ def _build_sample_docs_and_profiles(
                 "order_date": meta.order_date.isoformat() if meta.order_date else None,
                 "subject_id": None,
                 "sample_type": s.sample_type,
-                "material": s.material,
+                "nucleic_acid": s.nucleic_acid,
                 "taxprofiler": {
                     **base_qc,
                     "classifiers": classifier_qc,
@@ -865,7 +865,7 @@ def _prepare_trana_ingest(
                 ),
                 "subject_id": None,
                 "sample_type": s.sample_type,
-                "material": s.material,
+                "nucleic_acid": s.nucleic_acid,
                 "trana": trana_qc,
                 "profiles": profiles,
                 "outbreak_taxa": outbreak_taxa,

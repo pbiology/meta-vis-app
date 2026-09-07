@@ -422,7 +422,7 @@ class TestListSamplesExtended:
                 "analysis_id": analysis_id,
                 "case_id": "testcase",
                 "sample_type": "sample",
-                "material": "DNA",
+                "nucleic_acid": "DNA",
                 "sample": {"sample_id": "SRR001"},
                 "taxprofiler": {"classifiers": {}},
                 "profiles": [
@@ -464,7 +464,7 @@ class TestListSamplesExtended:
                 "case_id": "testcase",
                 "subject_id": subject_oid,
                 "sample_type": "sample",
-                "material": "DNA",
+                "nucleic_acid": "DNA",
                 "sample": {"sample_id": "SRR001"},
                 "taxprofiler": {"classifiers": {}},
                 "profiles": [],

@@ -29,7 +29,7 @@ async def insert_sample(
     db,
     sample_id="SRR001",
     sample_type="sample",
-    material="DNA",
+    nucleic_acid="DNA",
     has_krona=False,
     profiles=None,
     case_reviewed=False,
@@ -57,7 +57,7 @@ async def insert_sample(
             "sample_id": sample_id,
             "sample_source": "blood",
             "sample_type": sample_type,
-            "material": material,
+            "nucleic_acid": nucleic_acid,
             "has_krona": has_krona,
             "taxprofiler": {"fastp": None, "bowtie2": None, "classifiers": {}},
             "profiles": profiles or [],
@@ -207,7 +207,7 @@ class TestGetProfile:
 
 class TestGetNtcProfiles:
     async def test_returns_empty_when_no_ntcs(self, client, fake_db):
-        oid, _ = await insert_sample(fake_db, "SRR001", material="DNA")
+        oid, _ = await insert_sample(fake_db, "SRR001", nucleic_acid="DNA")
         resp = client.get(f"/api/v1/samples/{oid}/ntc_profiles")
         assert resp.status_code == 200
         body = resp.json()
@@ -224,7 +224,7 @@ class TestGetNtcProfiles:
                 "case_id": "testcase",
                 "sample_id": "SRR001",
                 "sample_type": "sample",
-                "material": "DNA",
+                "nucleic_acid": "DNA",
                 "has_krona": False,
                 "profiles": [],
                 "review": {"reviewed": False},
@@ -237,7 +237,7 @@ class TestGetNtcProfiles:
                 "case_id": "testcase",
                 "sample_id": "CTRL01",
                 "sample_type": "negative_ctrl",
-                "material": "DNA",
+                "nucleic_acid": "DNA",
                 "has_krona": False,
                 "profiles": [{"classifier": "kraken2", "profile": []}],
                 "review": {"reviewed": False},
@@ -250,7 +250,7 @@ class TestGetNtcProfiles:
         assert len(body["profiles"]) == 1
         assert body["profiles"][0]["sample_id"] == "CTRL01"
 
-    async def test_excludes_ntcs_of_other_material(self, client, fake_db):
+    async def test_excludes_ntcs_of_other_nucleic_acid(self, client, fake_db):
         # A DNA sample must never receive RNA NTCs in its contaminant baseline —
         # the two are technically incomparable. Invariant guards the
         # contaminant-pill logic downstream.
@@ -261,7 +261,7 @@ class TestGetNtcProfiles:
                 "case_id": "testcase",
                 "sample_id": "SRR001",
                 "sample_type": "sample",
-                "material": "DNA",
+                "nucleic_acid": "DNA",
                 "has_krona": False,
                 "profiles": [],
                 "review": {"reviewed": False},
@@ -275,7 +275,7 @@ class TestGetNtcProfiles:
                 "case_id": "testcase",
                 "sample_id": "CTRL_RNA",
                 "sample_type": "negative_ctrl",
-                "material": "RNA",
+                "nucleic_acid": "RNA",
                 "has_krona": False,
                 "profiles": [{"classifier": "kraken2", "profile": []}],
                 "review": {"reviewed": False},
@@ -289,7 +289,7 @@ class TestGetNtcProfiles:
                 "case_id": "testcase",
                 "sample_id": "CTRL_DNA",
                 "sample_type": "negative_ctrl",
-                "material": "DNA",
+                "nucleic_acid": "DNA",
                 "has_krona": False,
                 "profiles": [{"classifier": "kraken2", "profile": []}],
                 "review": {"reviewed": False},

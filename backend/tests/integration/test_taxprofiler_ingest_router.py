@@ -46,7 +46,7 @@ def _meta_stub(case_id: str = "testcase"):
                 subject_id="SUBJ-1",
                 sample_id="S1",
                 sample_type="sample",
-                material="DNA",
+                nucleic_acid="DNA",
                 columns={"kraken2": "S1_kraken2"},
             )
         ],

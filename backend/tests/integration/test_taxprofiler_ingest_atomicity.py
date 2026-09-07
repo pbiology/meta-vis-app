@@ -60,7 +60,7 @@ def make_meta(**overrides) -> TaxprofilerIngestMeta:
                 subject_id="SUBJ-1",
                 sample_id="SRR001",
                 sample_type="sample",
-                material="DNA",
+                nucleic_acid="DNA",
                 columns={"kraken2": "SRR001_kraken2"},
             )
         ],

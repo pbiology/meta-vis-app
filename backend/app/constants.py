@@ -11,7 +11,7 @@
 HOST_TAXON_IDS: frozenset[int] = frozenset({0, 1, 131567, 9606})
 
 # Contaminant flagging: a sample taxon is flagged as a potential contaminant
-# when the sum of its reads across the case's NTCs (same material, same
+# when the sum of its reads across the case's NTCs (same nucleic acid, same
 # classifier) exceeds this threshold, AND the taxon's rank is in the
 # eligible set. Ranks broader than genus are deliberately excluded — a hit
 # at family level or above is too vague to act on.

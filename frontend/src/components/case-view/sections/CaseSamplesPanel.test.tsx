@@ -13,7 +13,7 @@ function sample(overrides: Partial<Sample> & { sample_id: string }): Sample {
   return {
     _id: `oid-${overrides.sample_id}`,
     sample_type: "sample",
-    material: "DNA",
+    nucleic_acid: "DNA",
     total_reads: 1_000_000,
     ...overrides,
   } as Sample;
@@ -163,19 +163,19 @@ describe("negative-control coverage warning", () => {
     expect(screen.getByText(/No DNA negative control in this analysis/)).toBeInTheDocument();
   });
 
-  it("stays quiet when every material has a usable control", () => {
+  it("stays quiet when every nucleic acid has a usable control", () => {
     renderPanel([sample({ sample_id: "S1" }), ntc()]);
 
     expect(screen.queryByText(/negative control/)).not.toBeInTheDocument();
   });
 
-  it("names only the uncovered material on a mixed-material case", () => {
-    // Contaminant comparison is material-matched, so a DNA-only NTC leaves the
-    // RNA samples uncontrolled — a warning ignoring material would be wrong.
+  it("names only the uncovered nucleic acid on a mixed-nucleic-acid case", () => {
+    // Contaminant comparison is nucleic-acid-matched, so a DNA-only NTC leaves the
+    // RNA samples uncontrolled — a warning ignoring nucleic acid would be wrong.
     const message = ntcCoverageWarning([
-      sample({ sample_id: "S1", material: "DNA" }),
-      sample({ sample_id: "S2", material: "RNA" }),
-      ntc({ material: "DNA" }),
+      sample({ sample_id: "S1", nucleic_acid: "DNA" }),
+      sample({ sample_id: "S2", nucleic_acid: "RNA" }),
+      ntc({ nucleic_acid: "DNA" }),
     ]);
 
     expect(message).toMatch(/No RNA negative control/);

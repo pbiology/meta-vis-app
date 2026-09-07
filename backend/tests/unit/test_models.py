@@ -19,7 +19,7 @@ def minimal_sample_doc(**overrides) -> dict:
         "sample_id": "SRR001",
         "sample_source": "N/A",
         "sample_type": "sample",
-        "material": "DNA",
+        "nucleic_acid": "DNA",
         "ingested_at": datetime.now(timezone.utc).isoformat(),
     }
     doc.update(overrides)
@@ -49,7 +49,7 @@ class TestSampleResponse:
     def test_minimal_valid_document(self):
         result = SampleResponse.model_validate(minimal_sample_doc())
         assert result.sample_type == "sample"
-        assert result.material == "DNA"
+        assert result.nucleic_acid == "DNA"
 
     def test_extra_fields_are_allowed(self):
         doc = minimal_sample_doc(top_taxa={"kraken2": []}, host_pct={"kraken2": 12.5})
@@ -66,8 +66,8 @@ class TestSampleResponse:
         with pytest.raises(ValidationError):
             SampleResponse.model_validate(doc)
 
-    def test_invalid_material_raises(self):
-        doc = minimal_sample_doc(material="protein")
+    def test_invalid_nucleic_acid_raises(self):
+        doc = minimal_sample_doc(nucleic_acid="protein")
         with pytest.raises(ValidationError):
             SampleResponse.model_validate(doc)
 
@@ -80,10 +80,12 @@ class TestSampleResponse:
                 == t
             )
 
-    def test_both_materials_accepted(self):
+    def test_both_nucleic_acids_accepted(self):
         for m in ("DNA", "RNA"):
             assert (
-                SampleResponse.model_validate(minimal_sample_doc(material=m)).material
+                SampleResponse.model_validate(
+                    minimal_sample_doc(nucleic_acid=m)
+                ).nucleic_acid
                 == m
             )
 

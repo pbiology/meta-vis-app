@@ -7,7 +7,7 @@ import type {
 } from "./types";
 
 export interface GetNtcTrendsParams {
-  material: string;
+  nucleicAcid: string;
   windowDays?: number;
   minReads?: number;
   minCasePct?: number;
@@ -15,7 +15,7 @@ export interface GetNtcTrendsParams {
 }
 
 export async function getNtcTrends({
-  material,
+  nucleicAcid,
   windowDays = 90,
   minReads = 3,
   minCasePct = 0.1,
@@ -23,7 +23,7 @@ export async function getNtcTrends({
 }: GetNtcTrendsParams): Promise<NtcTrendsResponse> {
   const res = await client.get<NtcTrendsResponse>("/ntc/trends", {
     params: {
-      material,
+      nucleic_acid: nucleicAcid,
       window_days: windowDays,
       min_reads: minReads,
       min_case_pct: minCasePct,
