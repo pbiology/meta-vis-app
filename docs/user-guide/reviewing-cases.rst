@@ -21,7 +21,7 @@ Core concepts
 
 **Sample**
    One sequencing sample inside an analysis. Has its own metadata (type,
-   material, subject id) and the per-classifier taxonomic profile.
+   nucleic acid, subject id) and the per-classifier taxonomic profile.
    Re-sequencing produces a fresh set of samples belonging to the new
    analysis.
 
@@ -125,8 +125,8 @@ Negative controls
 -----------------
 
 Contaminant flagging compares a sample against the negative controls from
-the **same run and the same material**. When an analysis has no usable
-control for a material — none was loaded, or the one loaded produced no
+the **same run and the same nucleic acid**. When an analysis has no usable
+control for a nucleic acid — none was loaded, or the one loaded produced no
 classifier data — an amber banner says so above the samples table, and
 the affected sample pages repeat it. Without a control the taxonomy table
 shows no NTC column and flags no contaminants, which otherwise looks
@@ -156,7 +156,7 @@ Sample detail
 
 Click a sample name from the case to open the sample page. You get:
 
-- Sample metadata (id, type, material, subject id).
+- Sample metadata (id, type, nucleic acid, subject id).
 - Read counts and quality metrics.
 - One tab per classifier, each with that classifier's QC summary and a
   taxonomy table for the sample.

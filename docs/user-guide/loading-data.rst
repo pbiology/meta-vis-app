@@ -65,7 +65,7 @@ taxprofiler ingest
        --multiqc /path/to/multiqc_data.json \
        --pipeline-info /path/to/software_versions.yml \
        --classifier "kraken2 db=k2_pluspf taxpasta=/path/kraken2.tsv krona=/path/kraken2.html" \
-       --sample "sample_id=PE-04-28 subject_id=SUBJ-01 sex=F type=sample material=DNA column_kraken2=PE-04-28_k2_pluspf" \
+       --sample "sample_id=PE-04-28 subject_id=SUBJ-01 sex=F type=sample nucleic_acid=DNA column_kraken2=PE-04-28_k2_pluspf" \
        --password dev-admin
 
 **Required**
@@ -99,13 +99,20 @@ taxprofiler ingest
 
    --sample "sample_id=<id> [subject_id=<id>] [sex=<F|M|unknown>] \
              type=<sample|positive_ctrl|negative_ctrl> \
-             material=<DNA|RNA> \
+             nucleic_acid=<DNA|RNA> \
              column_<classifier>=<taxpasta-column>"
 
 The ``column_<classifier>=`` mapping is mandatory because taxprofiler
 appends classifier/db suffixes to taxpasta column names, and the CLI
 cannot derive them reliably. Inspect the TSV header to find the exact
 name.
+
+.. note::
+
+   ``nucleic_acid=`` was previously called ``material=``. Existing command
+   lines using ``material=`` still work, but print a deprecation warning and
+   will stop working in a future release — update them to ``nucleic_acid=``.
+   Setting both keys on one sample is an error.
 
 trana ingest
 ------------
@@ -115,7 +122,7 @@ trana ingest
    python ingest.py trana \
        --case-id trana-run-001 \
        --pipeline-info /path/to/software_versions.yml \
-       --sample "sample_id=S1 subject_id=SUBJ-01 sex=F type=sample material=DNA \
+       --sample "sample_id=S1 subject_id=SUBJ-01 sex=F type=sample nucleic_acid=DNA \
                  abundance_path=/path/to/S1_rel-abundance.tsv \
                  nanoplot_path=/path/to/S1_NanoStats.txt" \
        --password dev-admin
