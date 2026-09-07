@@ -34,7 +34,7 @@ class TaxprofilerSampleIngestRequest(BaseModel):
     subject_sex: Literal["F", "M", "X", "unknown"] = "unknown"
     sample_id: str
     sample_type: Literal["sample", "positive_ctrl", "negative_ctrl"]
-    material: Literal["DNA", "RNA"]
+    nucleic_acid: Literal["DNA", "RNA"]
     sample_source: str = "N/A"
     # classifier_name -> taxpasta column name
     columns: dict
@@ -82,7 +82,7 @@ class TranaSampleIngestRequest(BaseModel):
     subject_sex: Literal["F", "M", "X", "unknown"] = "unknown"
     sample_id: str
     sample_type: Literal["sample", "positive_ctrl", "negative_ctrl"]
-    material: Literal["DNA", "RNA"]
+    nucleic_acid: Literal["DNA", "RNA"]
     sample_source: str = "N/A"
     has_krona: bool = False
     has_nanoplot_unprocessed: bool = False

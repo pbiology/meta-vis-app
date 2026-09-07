@@ -75,12 +75,12 @@ function missingNtcMessage(
   ntcCount: number,
   ntcError: boolean,
   sampleType: string,
-  material: string | undefined
+  nucleicAcid: string | undefined
 ): string | null {
   // Controls are not compared against themselves, and a load failure is
   // already reported by the aux warning.
   if (ntcError || sampleType !== "sample" || ntcCount > 0) return null;
-  const what = material ? `${material} negative control` : "negative control";
+  const what = nucleicAcid ? `${nucleicAcid} negative control` : "negative control";
   return `No ${what} in this analysis — contaminants cannot be flagged for this sample.`;
 }
 
@@ -179,7 +179,7 @@ export default function SampleDetailContent({
     ntcProfiles.length,
     Boolean(ntcError),
     sampleType,
-    sample?.material as string | undefined
+    sample?.nucleic_acid as string | undefined
   );
 
   return (

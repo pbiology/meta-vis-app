@@ -154,7 +154,7 @@ async def _ensure_indexes():
     # analyses, and by the viral taxa fields used in the outbreak pipeline
     await db["samples"].create_index([("analysis_id", 1), ("sample_id", 1)])
     await db["samples"].create_index(
-        [("analysis_id", 1), ("sample_type", 1), ("material", 1)]
+        [("analysis_id", 1), ("sample_type", 1), ("nucleic_acid", 1)]
     )
     await db["samples"].create_index([("case_id", 1), ("sample_id", 1)])
     await db["samples"].create_index("profiles.profile.superkingdom")
@@ -199,12 +199,15 @@ async def _ensure_indexes():
     # Deliberately left auto-named: the legacy `ntc_trends_lookup` index has a
     # different key pattern, and reusing that name would raise
     # IndexOptionsConflict on a database that still carries it. The legacy index
-    # is redundant once this one exists and can be dropped by hand.
+    # is redundant once this one exists and can be dropped by hand. The same
+    # applies to the pre-rename index keyed on `material`: a database created
+    # before that field became `nucleic_acid` still carries it, unused, until
+    # dropped by hand.
     await db["samples"].create_index(
         [
             ("is_latest_analysis", 1),
             ("sample_type", 1),
-            ("material", 1),
+            ("nucleic_acid", 1),
             ("order_date", -1),
         ]
     )

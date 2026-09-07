@@ -16,7 +16,7 @@ function fmtPct(rate: number | undefined): string {
 }
 
 // Compact case-level samples table: one row per sample, the columns the
-// reviewer needs at a glance (id, material, source, passed-filter reads, Q30).
+// reviewer needs at a glance (id, nucleic acid, source, passed-filter reads, Q30).
 export default function SamplesListSection({ samples }: Readonly<SamplesListSectionProps>) {
   return (
     <section className="report-section">
@@ -28,7 +28,7 @@ export default function SamplesListSection({ samples }: Readonly<SamplesListSect
           <thead>
             <tr>
               <th>Sample</th>
-              <th>Material</th>
+              <th>Nucleic acid</th>
               <th>Source</th>
               <th className="report-samples-table-num">Passed filter</th>
               <th className="report-samples-table-num">Q30</th>
@@ -38,7 +38,7 @@ export default function SamplesListSection({ samples }: Readonly<SamplesListSect
             {samples.map((s) => (
               <tr key={s.sample_id}>
                 <td className="report-mono">{s.sample_id}</td>
-                <td>{s.material ?? DASH}</td>
+                <td>{s.nucleic_acid ?? DASH}</td>
                 <td>{s.sample_source ?? DASH}</td>
                 <td className="report-mono report-samples-table-num">
                   {fmtNum(s.fastp?.passed_filter_reads)}

@@ -81,7 +81,7 @@ def make_ntc_doc(
         "case_id": case_id,
         "sample_type": "negative_ctrl",
         "is_latest_analysis": True,
-        "material": "DNA",
+        "nucleic_acid": "DNA",
         "order_date": order_date,
         "profiles": [],
         "taxprofiler": {},
@@ -663,7 +663,7 @@ class TestContaminantAlerts:
             "case_id": "case-1",
             "sample_type": "negative_ctrl",
             "is_latest_analysis": True,
-            "material": "DNA",
+            "nucleic_acid": "DNA",
             "order_date": DAY_1,
             "profiles": [
                 {
@@ -777,7 +777,7 @@ class TestIgnorelistExclusionInTrends:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?material=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
         )
         taxon_ids = [t["taxon_id"] for t in resp.json()["recurring_taxa"]]
         assert 1743 not in taxon_ids
@@ -809,7 +809,7 @@ class TestIgnorelistExclusionInTrends:
             make_ntc_doc("NTC-1", "case-1", DAY_1, profile=profile)
         )
         app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/trends?material=DNA")
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         entry = resp.json()["kingdom_breakdown"][0]
         # Only Ralstonia's 10 reads should count; Cutibacterium's 50 are ignored
         assert entry["Bacteria"] == 10
@@ -836,7 +836,7 @@ class TestIgnorelistExclusionInTrends:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?material=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
         )
         taxon_ids = [t["taxon_id"] for t in resp.json()["recurring_taxa"]]
         assert 329 in taxon_ids
@@ -857,7 +857,7 @@ class TestIgnorelistExclusionInTrends:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?material=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
         )
         taxon_ids = [t["taxon_id"] for t in resp.json()["recurring_taxa"]]
         assert 329 in taxon_ids

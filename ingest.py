@@ -19,13 +19,13 @@ Examples:
         --multiqc  /path/to/multiqc_data.json \\
         --pipeline-info /path/to/software_versions.yml \\
         --classifier "kraken2 db=k2_pluspf taxpasta=/path/kraken2.tsv krona=/path/kraken2.html" \\
-        --sample "sample_id=PE-04-28 subject_id=SUBJ-01 sex=F type=sample material=DNA column_kraken2=PE-04-28_k2_pluspf" \\
+        --sample "sample_id=PE-04-28 subject_id=SUBJ-01 sex=F type=sample nucleic_acid=DNA column_kraken2=PE-04-28_k2_pluspf" \\
         --password yourpassword
 
     python ingest.py trana \\
         --case-id trana_run1 \\
         --pipeline-info /path/to/software_versions.yml \\
-        --sample "sample_id=S1 subject_id=SUBJ-01 sex=unknown type=sample material=DNA abundance_path=/path/to/S1_rel-abundance.tsv" \\
+        --sample "sample_id=S1 subject_id=SUBJ-01 sex=unknown type=sample nucleic_acid=DNA abundance_path=/path/to/S1_rel-abundance.tsv" \\
         --password yourpassword
 
 The bundle layout the CLI produces must match what the server's loader expects.
@@ -190,6 +190,31 @@ def _parse_subject_sex(parts: dict, sample_id: str) -> str:
         )
         sys.exit(1)
     return sex
+
+
+def _resolve_nucleic_acid(parts: dict) -> None:
+    """Rewrite a deprecated material= token into nucleic_acid=, in place.
+
+    The field was renamed to match what the clinic calls it. Saved ingest
+    command lines still say material=, so accept it for now — but say so on
+    stderr rather than rewriting a clinical field silently, and refuse when
+    both keys are present instead of picking one.
+    """
+    if "material" not in parts:
+        return
+    sample_id = parts.get("sample_id", "<unknown>")
+    if "nucleic_acid" in parts:
+        print(
+            f"Sample '{sample_id}' sets both nucleic_acid and the deprecated "
+            "material. Remove material."
+        )
+        sys.exit(1)
+    print(
+        f"Warning: sample '{sample_id}' uses the deprecated key 'material'. "
+        "Rename it to 'nucleic_acid' — support for 'material' will be removed.",
+        file=sys.stderr,
+    )
+    parts["nucleic_acid"] = parts.pop("material")
 
 
 def _check_unique_classifier_names(classifier_names: list[str]) -> None:
@@ -557,7 +582,7 @@ def _resolve_trana_sample(s: dict[str, Any]) -> dict[str, Any]:
             "subject_sex": s["subject_sex"],
             "sample_id": sid,
             "sample_type": s["sample_type"],
-            "material": s["material"],
+            "nucleic_acid": s["nucleic_acid"],
             "sample_source": s.get("sample_source", "N/A"),
             "has_krona": krona is not None,
             "has_nanoplot_unprocessed": np_unproc is not None,
@@ -689,7 +714,9 @@ def parse_sample(raw: str, classifier_names: list) -> dict:
         k, v = token.split("=", 1)
         parts[k.strip()] = v.strip()
 
-    required = {"sample_id", "type", "material"}
+    _resolve_nucleic_acid(parts)
+
+    required = {"sample_id", "type", "nucleic_acid"}
     missing = required - parts.keys()
     if missing:
         print(f"Sample is missing required keys: {missing}")
@@ -733,7 +760,7 @@ def parse_sample(raw: str, classifier_names: list) -> dict:
         "subject_sex": _parse_subject_sex(parts, sample_id),
         "sample_id": sample_id,
         "sample_type": parts["type"],
-        "material": parts["material"],
+        "nucleic_acid": parts["nucleic_acid"],
         "sample_source": parts.get("sample_source", "N/A"),
         "columns": columns,
     }
@@ -859,7 +886,9 @@ def parse_trana_sample(raw: str) -> dict:
         k, v = token.split("=", 1)
         parts[k.strip()] = v.strip()
 
-    required = {"sample_id", "type", "material", "abundance_path"}
+    _resolve_nucleic_acid(parts)
+
+    required = {"sample_id", "type", "nucleic_acid", "abundance_path"}
     missing = required - parts.keys()
     if missing:
         print(f"Sample is missing required keys: {missing}")
@@ -876,7 +905,7 @@ def parse_trana_sample(raw: str) -> dict:
         "subject_sex": _parse_subject_sex(parts, parts["sample_id"]),
         "sample_id": parts["sample_id"],
         "sample_type": parts["type"],
-        "material": parts["material"],
+        "nucleic_acid": parts["nucleic_acid"],
         "sample_source": parts.get("sample_source", "N/A"),
         "abundance_path": parts["abundance_path"],
         "krona_path": parts.get("krona_path"),
@@ -959,7 +988,7 @@ def _add_trana_args(parser: argparse.ArgumentParser) -> None:
         required=True,
         metavar="KEY=VALUE ...",
         help=(
-            "Sample descriptor. Required: sample_id, type, material, abundance_path. "
+            "Sample descriptor. Required: sample_id, type, nucleic_acid, abundance_path. "
             "Required for type=sample: subject_id. "
             "Optional: sex (F|M|X|unknown, default unknown), sample_source, "
             "krona_path, nanoplot_unprocessed_path, nanoplot_processed_path. "

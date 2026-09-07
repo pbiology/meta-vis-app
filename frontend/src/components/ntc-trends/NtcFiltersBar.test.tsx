@@ -11,14 +11,14 @@ const PIPELINES: NtcPipelineOption[] = [
 
 function renderBar(overrides: Partial<Parameters<typeof NtcFiltersBar>[0]> = {}) {
   const props = {
-    material: "DNA",
+    nucleicAcid: "DNA",
     pipeline: "taxprofiler",
     windowDays: 90,
     minReads: 3,
     minAbundance: 0.001,
     minCasePct: 10,
     availablePipelines: PIPELINES,
-    onMaterialChange: vi.fn(),
+    onNucleicAcidChange: vi.fn(),
     onPipelineChange: vi.fn(),
     onWindowDaysChange: vi.fn(),
     onMinReadsChange: vi.fn(),
@@ -45,14 +45,14 @@ describe("NtcFiltersBar", () => {
   it("shows abundance dropdown when pipeline is trana, reads dropdown otherwise", () => {
     const { rerender } = renderWithProviders(
       <NtcFiltersBar
-        material="DNA"
+        nucleicAcid="DNA"
         pipeline="taxprofiler"
         windowDays={90}
         minReads={3}
         minAbundance={0.001}
         minCasePct={10}
         availablePipelines={PIPELINES}
-        onMaterialChange={vi.fn()}
+        onNucleicAcidChange={vi.fn()}
         onPipelineChange={vi.fn()}
         onWindowDaysChange={vi.fn()}
         onMinReadsChange={vi.fn()}
@@ -63,14 +63,14 @@ describe("NtcFiltersBar", () => {
     expect(screen.getByText(/min reads/i)).toBeInTheDocument();
     rerender(
       <NtcFiltersBar
-        material="DNA"
+        nucleicAcid="DNA"
         pipeline="trana"
         windowDays={90}
         minReads={3}
         minAbundance={0.001}
         minCasePct={10}
         availablePipelines={PIPELINES}
-        onMaterialChange={vi.fn()}
+        onNucleicAcidChange={vi.fn()}
         onPipelineChange={vi.fn()}
         onWindowDaysChange={vi.fn()}
         onMinReadsChange={vi.fn()}

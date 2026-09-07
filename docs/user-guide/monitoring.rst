@@ -77,11 +77,11 @@ NTC Trends page
 ---------------
 
 Sidebar → **NTC Trends**. Shows what is appearing across all NTCs in a
-chosen window, grouped by extraction material.
+chosen window, grouped by nucleic acid.
 
 **Filters**
 
-- **Material tab** — DNA or RNA. NTCs are tracked separately because
+- **Nucleic acid tab** — DNA or RNA. NTCs are tracked separately because
   contamination profiles differ between extraction protocols.
 - **Minimum reads** — abundance floor (1 / 3 / 5 / 10 / 20). Default 3.
 - **Minimum case %** — only show taxa present in at least this share of

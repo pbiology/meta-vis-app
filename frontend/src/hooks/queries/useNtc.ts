@@ -28,7 +28,7 @@ export function useNtcTrends(params: GetNtcTrendsParams) {
   return useQuery({
     queryKey: ntcKeys.trends(params),
     queryFn: () => getNtcTrends(params),
-    enabled: Boolean(params.material),
+    enabled: Boolean(params.nucleicAcid),
   });
 }
 

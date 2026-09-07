@@ -26,7 +26,7 @@ export default function NtcTrendsContent() {
     [visibleAnalysis]
   );
 
-  const [material, setMaterial] = useState("DNA");
+  const [nucleicAcid, setNucleicAcid] = useState("DNA");
   const [pipeline, setPipeline] = useState(availablePipelines[0]?.value ?? "taxprofiler");
   const [windowDays, setWindowDays] = useState(90);
   const [minReads, setMinReads] = useState(3);
@@ -44,7 +44,7 @@ export default function NtcTrendsContent() {
 
   const isTrana = pipeline === "trana";
   const trendsQ = useNtcTrends({
-    material: isTrana ? "DNA" : material,
+    nucleicAcid: isTrana ? "DNA" : nucleicAcid,
     windowDays,
     minReads: isTrana ? minAbundance : minReads,
     minCasePct: minCasePct / 100,
@@ -62,14 +62,14 @@ export default function NtcTrendsContent() {
   return (
     <div className="flex flex-col h-full">
       <NtcFiltersBar
-        material={material}
+        nucleicAcid={nucleicAcid}
         pipeline={pipeline}
         windowDays={windowDays}
         minReads={minReads}
         minAbundance={minAbundance}
         minCasePct={minCasePct}
         availablePipelines={availablePipelines}
-        onMaterialChange={setMaterial}
+        onNucleicAcidChange={setNucleicAcid}
         onPipelineChange={setPipeline}
         onWindowDaysChange={setWindowDays}
         onMinReadsChange={setMinReads}
@@ -94,7 +94,7 @@ export default function NtcTrendsContent() {
             <NtcContaminantBanner alerts={contaminantAlerts} />
 
             <p className="text-xs text-gray-400">
-              {data.total_ntcs} {material} NTC
+              {data.total_ntcs} {nucleicAcid} NTC
               {data.total_ntcs === 1 ? "" : "s"} in the last {windowDays} days
               {data.recurring_taxa.length > 0 ? (
                 <span className="text-amber-500 font-medium ml-1">

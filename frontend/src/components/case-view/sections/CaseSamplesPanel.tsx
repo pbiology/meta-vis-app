@@ -9,39 +9,39 @@ const FILTERS = ["All", "Sample", "Controls"] as const;
 type Filter = (typeof FILTERS)[number];
 
 /**
- * Announce clinical samples whose material has no usable negative control.
+ * Announce clinical samples whose nucleic acid has no usable negative control.
  *
  * Contaminant flagging compares a sample against NTCs from the same run *and
- * the same material* (see `routers/samples.py`), and silently does nothing
+ * the same nucleic acid* (see `routers/samples.py`), and silently does nothing
  * when there are none — so an analysis with a failed NTC looks exactly like
- * one with a clean NTC. Material is part of the check because a DNA-only NTC
+ * one with a clean NTC. Nucleic acid is part of the check because a DNA-only NTC
  * leaves RNA samples uncovered; a warning that ignored it would be wrong on
- * every mixed-material case.
+ * every mixed-nucleic-acid case.
  */
 export function ntcCoverageWarning(samples: Sample[]): string | null {
-  // Coverage is only decidable per material, so a sample without one is left
-  // out rather than described with a material name it does not have. The
-  // ingest models make material mandatory, so this cannot happen in practice.
-  const materials = new Set(
+  // Coverage is only decidable per nucleic acid, so a sample without one is left
+  // out rather than described with a nucleic acid name it does not have. The
+  // ingest models make nucleic_acid mandatory, so this cannot happen in practice.
+  const nucleicAcids = new Set(
     samples
-      .filter((s) => s.sample_type === "sample" && typeof s.material === "string")
-      .map((s) => s.material as string)
+      .filter((s) => s.sample_type === "sample" && typeof s.nucleic_acid === "string")
+      .map((s) => s.nucleic_acid as string)
   );
 
   const missing: string[] = [];
   const empty: string[] = [];
-  // Sorted so the warning names materials in a stable order; localeCompare
+  // Sorted so the warning names nucleic acids in a stable order; localeCompare
   // rather than the default sort, which orders by UTF-16 code unit.
-  for (const material of [...materials].sort((a, b) => a.localeCompare(b))) {
+  for (const nucleicAcid of [...nucleicAcids].sort((a, b) => a.localeCompare(b))) {
     const ntcs = samples.filter(
-      (s) => s.sample_type === "negative_ctrl" && s.material === material
+      (s) => s.sample_type === "negative_ctrl" && s.nucleic_acid === nucleicAcid
     );
     if (ntcs.length === 0) {
-      missing.push(material);
+      missing.push(nucleicAcid);
     } else if (ntcs.every((s) => s.has_profile_data === false)) {
       // Only claimed when the server said so explicitly — an older response
       // without the field must not be reported as an empty control.
-      empty.push(material);
+      empty.push(nucleicAcid);
     }
   }
 
@@ -115,7 +115,7 @@ export default function CaseSamplesPanel({
       <table className="w-full text-left border-collapse">
         <thead>
           <tr>
-            {["Sample ID", "Material", "Type", "Source", "Total reads"].map((h) => (
+            {["Sample ID", "Nucleic acid", "Type", "Source", "Total reads"].map((h) => (
               <th
                 key={h}
                 className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 border-b border-gray-100 whitespace-nowrap"
@@ -154,7 +154,7 @@ export default function CaseSamplesPanel({
                   </div>
                 </td>
                 <td className="px-4 py-3 text-xs text-gray-500">
-                  {(s.material as string | undefined) ?? "—"}
+                  {(s.nucleic_acid as string | undefined) ?? "—"}
                 </td>
                 <td className="px-4 py-3">
                   <Badge type={(s.sample_type as string | undefined) ?? "sample"} />

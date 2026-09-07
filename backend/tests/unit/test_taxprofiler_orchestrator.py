@@ -443,7 +443,7 @@ def _sample(subject_id: str, subject_sex: str = "unknown"):
         subject_sex=subject_sex,
         sample_id=f"S-{subject_id}",
         sample_type="sample",
-        material="DNA",
+        nucleic_acid="DNA",
         columns={"kraken2": f"S-{subject_id}_k2"},
     )
 
@@ -472,7 +472,7 @@ def _ctrl(sample_id: str, sample_type: str = "negative_ctrl"):
     return TaxprofilerSampleIngestRequest(
         sample_id=sample_id,
         sample_type=sample_type,
-        material="DNA",
+        nucleic_acid="DNA",
         columns={"kraken2": f"{sample_id}_k2"},
     )
 

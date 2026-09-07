@@ -15,7 +15,7 @@ function makeData(overrides: Partial<ReportData> = {}): ReportData {
       {
         sample_id: "S001-DNA",
         sample_type: "DNA",
-        material: "DNA",
+        nucleic_acid: "DNA",
         classifiersAvailable: ["bracken", "kraken2"],
         fastp: {
           total_reads_before_filtering: 1000000,
@@ -27,7 +27,7 @@ function makeData(overrides: Partial<ReportData> = {}): ReportData {
       {
         sample_id: "S001-RNA",
         sample_type: "RNA",
-        material: "RNA",
+        nucleic_acid: "RNA",
         classifiersAvailable: ["kraken2"],
       },
     ],

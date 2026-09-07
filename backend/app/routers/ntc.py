@@ -444,7 +444,7 @@ async def get_contaminant_alerts(
 
 async def _compute_ntc_trends(
     db: AsyncIOMotorDatabase,
-    material: Literal["DNA", "RNA"],
+    nucleic_acid: Literal["DNA", "RNA"],
     window_days: int,
     min_reads: float,
     min_case_pct: float,
@@ -461,7 +461,7 @@ async def _compute_ntc_trends(
 
     base_query: dict = {
         "sample_type": "negative_ctrl",
-        "material": material,
+        "nucleic_acid": nucleic_acid,
         "order_date": {"$gte": cutoff},
         # Latest analyses only, so a re-sequenced case is counted once in the
         # distinct-case tallies below.
@@ -472,7 +472,7 @@ async def _compute_ntc_trends(
 
     if not total_ntcs:
         return {
-            "material": material,
+            "nucleic_acid": nucleic_acid,
             "pipeline": pipeline,
             "window_days": window_days,
             "total_ntcs": 0,
@@ -682,7 +682,7 @@ async def _compute_ntc_trends(
     ]
 
     return {
-        "material": material,
+        "nucleic_acid": nucleic_acid,
         "pipeline": pipeline,
         "window_days": window_days,
         "total_ntcs": total_ntcs,
@@ -695,7 +695,7 @@ async def _compute_ntc_trends(
 
 @router.get("/trends", summary="NTC contamination trends across cases")
 async def get_ntc_trends(
-    material: Literal["DNA", "RNA"] = Query(..., description="DNA or RNA"),
+    nucleic_acid: Literal["DNA", "RNA"] = Query(..., description="DNA or RNA"),
     window_days: int = Query(default=90, ge=7, le=365),
     min_reads: float = Query(default=3, gt=0),
     min_case_pct: float = Query(default=0.10, ge=0.0, le=1.0),
@@ -704,13 +704,13 @@ async def get_ntc_trends(
     _user: dict = Depends(get_current_user),
 ) -> dict:
     """
-    Return NTC trend data for the given material type within a rolling window.
+    Return NTC trend data for the given nucleic acid within a rolling window.
 
     Taxa on the NTC ignorelist are excluded from all three chart datasets.
     Uses MongoDB aggregation pipelines to avoid loading full profile arrays
     into Python memory.
     """
-    cache_key = (material, window_days, min_reads, min_case_pct, pipeline)
+    cache_key = (nucleic_acid, window_days, min_reads, min_case_pct, pipeline)
     now = time.monotonic()
     current_version = await get_cache_version(db)
     cached = _trends_cache.get(cache_key)
@@ -731,7 +731,7 @@ async def get_ntc_trends(
                 return cached_result
 
         result = await _compute_ntc_trends(
-            db, material, window_days, min_reads, min_case_pct, pipeline
+            db, nucleic_acid, window_days, min_reads, min_case_pct, pipeline
         )
         _trends_cache[cache_key] = (current_version, now, result)
 

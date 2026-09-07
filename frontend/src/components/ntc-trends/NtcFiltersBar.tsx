@@ -6,14 +6,14 @@ export interface NtcPipelineOption {
 }
 
 interface NtcFiltersBarProps {
-  material: string;
+  nucleicAcid: string;
   pipeline: string;
   windowDays: number;
   minReads: number;
   minAbundance: number;
   minCasePct: number;
   availablePipelines: NtcPipelineOption[];
-  onMaterialChange: (material: string) => void;
+  onNucleicAcidChange: (nucleicAcid: string) => void;
   onPipelineChange: (pipeline: string) => void;
   onWindowDaysChange: (days: number) => void;
   onMinReadsChange: (n: number) => void;
@@ -21,7 +21,7 @@ interface NtcFiltersBarProps {
   onMinCasePctChange: (pct: number) => void;
 }
 
-const MATERIALS = ["DNA", "RNA"];
+const NUCLEIC_ACIDS = ["DNA", "RNA"];
 const WINDOWS = [30, 90, 180];
 const MIN_READS_OPTIONS = [1, 3, 5, 10, 20];
 const MIN_CASE_PCT_OPTIONS = [5, 10, 20, 25, 50];
@@ -41,14 +41,14 @@ function pillClass(active: boolean) {
 }
 
 export default function NtcFiltersBar({
-  material,
+  nucleicAcid,
   pipeline,
   windowDays,
   minReads,
   minAbundance,
   minCasePct,
   availablePipelines,
-  onMaterialChange,
+  onNucleicAcidChange,
   onPipelineChange,
   onWindowDaysChange,
   onMinReadsChange,
@@ -63,11 +63,11 @@ export default function NtcFiltersBar({
 
       {!isTrana && (
         <div className="flex items-center gap-1">
-          {MATERIALS.map((m) => (
+          {NUCLEIC_ACIDS.map((m) => (
             <button
               key={m}
-              onClick={() => onMaterialChange(m)}
-              className={pillClass(material === m)}
+              onClick={() => onNucleicAcidChange(m)}
+              className={pillClass(nucleicAcid === m)}
             >
               {m}
             </button>
