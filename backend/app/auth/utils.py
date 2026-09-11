@@ -39,7 +39,9 @@ def _highest_role(realm_roles: list[str]) -> str:
     for role in ROLE_PRIORITY:
         if role in lowered:
             return role
-    return "writer"
+    # Least privilege: a user with no client role assigned gets read-only
+    # access rather than inheriting write permissions.
+    return "reader"
 
 
 def verify_access_token(token: str) -> dict:
