@@ -142,7 +142,9 @@ On every protected request:
 4. The user's role is the highest of
    ``resource_access[KEYCLOAK_ROLE_CLIENT].roles`` intersected with
    ``{admin, writer, reader}`` — see ``ROLE_PRIORITY`` in
-   ``app/auth/utils.py``.
+   ``app/auth/utils.py``. If the intersection is empty the user is a
+   ``reader``: the fallback is least-privilege, never write access. The
+   frontend's ``deriveRole`` mirrors this so UI gating matches the API.
 
 The CLI follows the same model: ``ingest.py`` obtains a token from Keycloak
 (client-credentials grant for automation, password grant for local dev) and

@@ -15,7 +15,9 @@ function deriveRole(realmRoles: string[] | undefined): Role {
   for (const role of ROLE_PRIORITY) {
     if (lowered.has(role)) return role;
   }
-  return "writer";
+  // Least privilege: mirrors the backend fallback in app/auth/utils.py, so the
+  // UI never offers actions the API will answer with a 403.
+  return "reader";
 }
 
 // Client roles are emitted in the access token (not the ID token), so we

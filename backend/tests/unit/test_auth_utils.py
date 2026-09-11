@@ -42,6 +42,7 @@ def _make_token(
     sub: str = "user-uuid",
     preferred_username: str = "alice",
     roles: list[str] | None = None,
+    with_resource_access: bool = True,
     azp: str | None = None,
     aud: str | None = None,
     iss: str | None = None,
@@ -56,10 +57,14 @@ def _make_token(
         "iss": iss or settings.keycloak_issuer,
         "iat": now,
         "exp": now + expires_in,
-        "resource_access": {
-            settings.keycloak_role_client: {"roles": roles or ["reader"]}
-        },
     }
+    # `roles=[]` must stay empty — it is how the no-role fallback is exercised.
+    if with_resource_access:
+        payload["resource_access"] = {
+            settings.keycloak_role_client: {
+                "roles": ["reader"] if roles is None else roles
+            }
+        }
     return jwt.encode(payload, key, algorithm="RS256")
 
 
@@ -130,6 +135,20 @@ def test_get_current_user_falls_back_to_reader_when_no_client_roles(
     rsa_keypair, patched_jwks
 ):
     token = _make_token(rsa_keypair, roles=[])
+    result = auth_utils.get_current_user(authorization=f"Bearer {token}")
+    assert result["role"] == "reader"
+
+
+def test_get_current_user_falls_back_to_reader_without_resource_access(
+    rsa_keypair, patched_jwks
+):
+    token = _make_token(rsa_keypair, with_resource_access=False)
+    result = auth_utils.get_current_user(authorization=f"Bearer {token}")
+    assert result["role"] == "reader"
+
+
+def test_get_current_user_ignores_unknown_client_roles(rsa_keypair, patched_jwks):
+    token = _make_token(rsa_keypair, roles=["offline_access", "uma_authorization"])
     result = auth_utils.get_current_user(authorization=f"Bearer {token}")
     assert result["role"] == "reader"
 

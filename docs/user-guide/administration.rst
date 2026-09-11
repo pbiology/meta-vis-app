@@ -60,6 +60,11 @@ Role capability matrix
 Roles ladder up — *writer* implies everything *reader* can do, and
 *admin* implies everything *writer* can do.
 
+**Reader is the default.** A user whose token carries none of the three
+client roles is treated as a *reader*: they can view everything but
+change nothing. Write access is only ever granted by assigning
+``writer`` or ``admin`` in Keycloak.
+
 User accounts
 -------------
 
@@ -77,10 +82,11 @@ To grant a user access:
 3. The user logs in to the app. The role is read from the access
    token and drives both the API and the UI.
 
-If a user reaches the login screen successfully but sees a 403 or a
-near-empty page after login, they have no role assigned yet. The fix
-is in Keycloak, not in this app. See :doc:`../deployment/production`
-for the realm configuration the app expects.
+If a user logs in successfully but finds every editing control missing
+— no *Mark reviewed*, no note or ignorelist buttons — they have no role
+assigned yet and are being treated as a reader. The fix is in Keycloak,
+not in this app. See :doc:`../deployment/production` for the realm
+configuration the app expects.
 
 User preferences
 ----------------

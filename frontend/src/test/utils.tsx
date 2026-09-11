@@ -16,6 +16,9 @@ interface RenderOpts extends Omit<RenderOptions, "wrapper"> {
   sessionStorage?: Record<string, unknown>;
   // When true (default), the OIDC mock reports an authenticated user.
   authenticated?: boolean;
+  // Client roles the mocked access token carries. Defaults to ["admin"] so
+  // existing tests see the full UI; pass [] to render as a role-less user.
+  roles?: string[];
 }
 
 function makeQueryClient() {
@@ -80,13 +83,14 @@ export function renderWithProviders(ui: ReactElement, opts: RenderOpts = {}) {
     routePath,
     sessionStorage: sessionSeed,
     authenticated = true,
+    roles = ["admin"],
     ...rest
   } = opts;
 
   __authState.isAuthenticated = authenticated;
   __authState.isLoading = false;
   __authState.preferredUsername = "tester";
-  __authState.roles = ["admin"];
+  __authState.roles = roles;
 
   if (sessionSeed) {
     for (const [k, v] of Object.entries(sessionSeed)) {
