@@ -3,10 +3,17 @@
 Download and load the NCBI taxonomy dump into the `taxa` collection.
 
 Downloads new_taxdump.tar.gz from the NCBI FTP site, parses rankedlineage.dmp,
-names.dmp, and nodes.dmp, and bulk-upserts all records into MongoDB.
+names.dmp, nodes.dmp, and taxidlineage.dmp, and bulk-upserts all records into
+MongoDB.
 
 Existing records are updated for all taxonomy fields. The `clinical_notes`
 field is never overwritten — it is only set on first insert.
+
+merged.dmp and delnodes.dmp are loaded into the `taxa_retired` collection,
+which is replaced wholesale on every run. Classifier databases are built on
+older taxonomy snapshots, so profiles can carry IDs NCBI has since merged or
+deleted; `taxa_retired` is how the app resolves them instead of treating them
+as unknown.
 
 Usage:
     python load_taxonomy.py
@@ -20,6 +27,7 @@ Schedule:
 """
 
 import argparse
+import array
 import asyncio
 import logging
 import os
@@ -30,7 +38,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
-from motor.motor_asyncio import AsyncIOMotorClient
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from pymongo import UpdateOne
 
 load_dotenv(Path(__file__).parent / ".env")
@@ -40,6 +48,8 @@ log = logging.getLogger(__name__)
 
 TAXDUMP_URL = "https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/new_taxdump/new_taxdump.tar.gz"
 BATCH_SIZE = 10_000
+RETIRED_COLLECTION = "taxa_retired"
+RETIRED_STAGING_COLLECTION = "taxa_retired_staging"
 
 
 def _build_mongo_url() -> str:
@@ -78,7 +88,14 @@ def _download_dump(dest_dir: Path) -> Path:
 
 def _extract_dump(archive: Path, dest_dir: Path) -> None:
     """Extract only the files we need from the archive."""
-    needed = {"rankedlineage.dmp", "names.dmp", "nodes.dmp"}
+    needed = {
+        "rankedlineage.dmp",
+        "names.dmp",
+        "nodes.dmp",
+        "taxidlineage.dmp",
+        "merged.dmp",
+        "delnodes.dmp",
+    }
     log.info("Extracting %s from archive", needed)
     with tarfile.open(archive, "r:gz") as tf:
         for member in tf.getmembers():
@@ -170,6 +187,132 @@ def _parse_nodes(nodes_path: Path) -> dict[int, str | None]:
     return ranks
 
 
+def _parse_taxidlineage(lineage_path: Path) -> dict[int, array.array[int]]:
+    """
+    Parse taxidlineage.dmp and return a mapping of taxon_id → ancestor IDs.
+
+    Format: ``tax_id | space-separated ancestor IDs, outermost first |``.
+    Neither the taxon itself nor root (1) is part of a lineage, so top-level
+    taxa such as root, "cellular organisms" (131567) and Viruses (10239) have
+    an empty one.
+
+    Ancestors are held as ``array('I')`` (4 bytes per ID) rather than lists of
+    ints (a pointer plus a ~28-byte int object per ID): the dump has ~3M
+    lineages, and parsing this file alone peaks at ~1 GB RSS as it is. NCBI
+    taxon IDs are far below the 2**32 limit.
+    """
+    log.info("Parsing taxidlineage.dmp…")
+    ancestors: dict[int, array.array[int]] = {}
+    with open(lineage_path, encoding="utf-8") as fh:
+        for line in fh:
+            parts = line.rstrip("\n").split("\t|\t")
+            if len(parts) < 2:
+                continue
+            ids = parts[1].rstrip("\t|").split()
+            ancestors[int(parts[0].strip())] = array.array("I", map(int, ids))
+    log.info("Parsed %d taxid lineages", len(ancestors))
+    return ancestors
+
+
+def _parse_merged(merged_path: Path) -> dict[int, int]:
+    """
+    Parse merged.dmp and return a mapping of old taxon_id → current taxon_id.
+
+    Format: ``old_tax_id | new_tax_id |``.
+    """
+    log.info("Parsing merged.dmp…")
+    merged: dict[int, int] = {}
+    with open(merged_path, encoding="utf-8") as fh:
+        for line in fh:
+            parts = line.rstrip("\n").split("\t|\t")
+            if len(parts) < 2:
+                continue
+            merged[int(parts[0].strip())] = int(parts[1].rstrip("\t|").strip())
+    log.info("Parsed %d merged taxon IDs", len(merged))
+    return merged
+
+
+def _parse_delnodes(delnodes_path: Path) -> set[int]:
+    """
+    Parse delnodes.dmp and return the set of deleted taxon IDs.
+
+    Format: ``tax_id |``.
+    """
+    log.info("Parsing delnodes.dmp…")
+    deleted: set[int] = set()
+    with open(delnodes_path, encoding="utf-8") as fh:
+        for line in fh:
+            taxon_id = line.split("\t|")[0].strip()
+            if taxon_id:
+                deleted.add(int(taxon_id))
+    log.info("Parsed %d deleted taxon IDs", len(deleted))
+    return deleted
+
+
+def _retired_documents(
+    merged: dict[int, int], deleted: set[int], current_ids: set[int]
+) -> list[dict]:
+    """
+    Build `taxa_retired` documents from the parsed merged and deleted IDs.
+
+    An ID that is both merged and deleted, or retired while still present in
+    the current taxonomy, means the dump is inconsistent. Loading it would give
+    the app two answers for one ID, so this raises instead.
+
+    A merge target missing from the current taxonomy is logged but kept: the
+    app reports such IDs as unplaced rather than dropping their reads.
+    """
+    both = merged.keys() & deleted
+    if both:
+        raise ValueError(
+            f"{len(both)} taxon IDs are both merged and deleted, e.g. "
+            f"{sorted(both)[:5]}"
+        )
+    still_current = (merged.keys() | deleted) & current_ids
+    if still_current:
+        raise ValueError(
+            f"{len(still_current)} retired taxon IDs are still in the current "
+            f"taxonomy, e.g. {sorted(still_current)[:5]}"
+        )
+
+    dangling = {new for new in merged.values() if new not in current_ids}
+    if dangling:
+        log.warning(
+            "%d merge targets are not in the current taxonomy, e.g. %s",
+            len(dangling),
+            sorted(dangling)[:5],
+        )
+
+    docs: list[dict] = [
+        {"taxon_id": old, "status": "merged", "merged_into": new}
+        for old, new in merged.items()
+    ]
+    docs.extend(
+        {"taxon_id": taxon_id, "status": "deleted", "merged_into": None}
+        for taxon_id in deleted
+    )
+    return docs
+
+
+async def _replace_retired(db: AsyncIOMotorDatabase, docs: list[dict]) -> None:
+    """
+    Replace the `taxa_retired` collection with *docs*.
+
+    Written to a staging collection and swapped in with a rename, so the app
+    never reads a half-written or empty collection while this runs — during
+    that window merged IDs would otherwise show up as unknown.
+    """
+    staging = db[RETIRED_STAGING_COLLECTION]
+    await staging.drop()
+    await staging.create_index("taxon_id", unique=True)
+    for batch_start in range(0, len(docs), BATCH_SIZE):
+        await staging.insert_many(
+            docs[batch_start : batch_start + BATCH_SIZE], ordered=False
+        )
+    await staging.rename(RETIRED_COLLECTION, dropTarget=True)
+    log.info("Replaced %s with %d documents", RETIRED_COLLECTION, len(docs))
+
+
 async def load_taxonomy(dump_dir: Path, dry_run: bool) -> None:
     names = _parse_names(dump_dir / "names.dmp")
     lineages = _parse_rankedlineage(dump_dir / "rankedlineage.dmp")
@@ -177,6 +320,14 @@ async def load_taxonomy(dump_dir: Path, dry_run: bool) -> None:
 
     taxon_ids = set(names.keys()) | set(lineages.keys())
     log.info("Total unique taxon IDs to upsert: %d", len(taxon_ids))
+
+    ancestors = _parse_taxidlineage(dump_dir / "taxidlineage.dmp")
+    # Built before the dry-run exit so a dry run also validates consistency.
+    retired_docs = _retired_documents(
+        _parse_merged(dump_dir / "merged.dmp"),
+        _parse_delnodes(dump_dir / "delnodes.dmp"),
+        taxon_ids,
+    )
 
     if dry_run:
         log.info("Dry run — no writes performed.")
@@ -205,6 +356,11 @@ async def load_taxonomy(dump_dir: Path, dry_run: bool) -> None:
             name = names.get(taxon_id, str(taxon_id))
             lin = lineages.get(taxon_id, {})
             rank = ranks.get(taxon_id)
+            # None (not []) when the dump has no lineage for this taxon, so the
+            # app can tell "unplaceable" apart from a top-level taxon's
+            # genuinely empty one.
+            lineage_ids = ancestors.get(taxon_id)
+            ancestor_ids = list(lineage_ids) if lineage_ids is not None else None
 
             ncbi_url = (
                 f"https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi"
@@ -227,6 +383,7 @@ async def load_taxonomy(dump_dir: Path, dry_run: bool) -> None:
                             "family": lin.get("family"),
                             "genus": lin.get("genus"),
                             "species": lin.get("species"),
+                            "ancestor_ids": ancestor_ids,
                             "ncbi_url": ncbi_url,
                             "taxdump_version": dump_version,
                             "updated_at": now,
@@ -260,6 +417,19 @@ async def load_taxonomy(dump_dir: Path, dry_run: bool) -> None:
         upserted,
         modified,
     )
+
+    await _replace_retired(db, retired_docs)
+
+    # Upserts never delete, so taxa that NCBI merged or deleted since an earlier
+    # load keep their old document. taxa_retired takes precedence in the app;
+    # this only makes the leftovers visible.
+    stale = await db["taxa"].count_documents({"updated_at": {"$lt": now}})
+    if stale:
+        log.warning(
+            "%d taxa documents were not in this dump and are stale; "
+            "taxa_retired takes precedence for these IDs",
+            stale,
+        )
     client.close()
 
 
