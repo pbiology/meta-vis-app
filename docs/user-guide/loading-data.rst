@@ -50,10 +50,18 @@ Environment variables::
    KEYCLOAK_PASSWORD         password-grant fallback
    META_VIS_API              backend base URL, e.g. https://<backend-host>
 
-The defaults target the local-dev stack (``http://localhost:8081``,
-realm ``meta-vis``, backend ``http://localhost:8000``). For a fully
-local smoke test, ``make keycloak-up && make up`` and use
-``--password dev-admin``.
+``--keycloak-url`` and ``--url`` override ``KEYCLOAK_URL`` and
+``META_VIS_API``. The defaults target the local-dev stack
+(``http://localhost:8081``, realm ``meta-vis``, backend
+``http://localhost:8000``). For a fully local smoke test,
+``make keycloak-up && make up`` and use ``--password dev-admin``.
+
+Both URLs must use ``https://``. The CLI sends your password or client
+secret to Keycloak and a bearer token to the backend, so it refuses
+plain ``http://`` to any host other than ``localhost`` / ``127.0.0.1`` /
+``::1`` (e.g. a ``kubectl port-forward``) and exits with an explanation
+before making any request. URLs must also not contain credentials
+(``user:pass@host``), a query string or a fragment.
 
 taxprofiler ingest
 ------------------
