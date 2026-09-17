@@ -4,28 +4,13 @@
 # (repo root) must extract cleanly via app.ingestor.loader and produce inputs
 # the orchestrator can consume.
 
-import importlib.util
 import json
-import sys
 from pathlib import Path
 
 import pytest
 import yaml
 
 from app.ingestor.loader import load_taxprofiler_bundle
-
-
-def _load_cli_module():
-    """Load the repo-root ingest.py as a module without executing main()."""
-    # backend/tests/unit/test_cli_bundle.py -> repo root is parents[3]
-    repo_root = Path(__file__).resolve().parents[3]
-    cli_path = repo_root / "ingest.py"
-    spec = importlib.util.spec_from_file_location("ingest_cli", cli_path)
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["ingest_cli"] = module
-    spec.loader.exec_module(module)
-    return module
 
 
 def _write_minimal_inputs(tmp_path: Path) -> dict[str, str]:
@@ -69,8 +54,7 @@ def _write_minimal_inputs(tmp_path: Path) -> dict[str, str]:
     }
 
 
-async def test_cli_bundle_round_trips_through_loader(tmp_path):
-    cli = _load_cli_module()
+async def test_cli_bundle_round_trips_through_loader(tmp_path, cli):
     src = _write_minimal_inputs(tmp_path)
     bundle = tmp_path / "bundle.tar.gz"
     extracted = tmp_path / "extracted"
@@ -123,8 +107,7 @@ class TestDeprecatedMaterialAlias:
     command lines still say material=, so the CLI accepts it — loudly, and
     never when it would have to guess between two conflicting values."""
 
-    def test_material_is_rewritten_to_nucleic_acid_with_a_warning(self, capsys):
-        cli = _load_cli_module()
+    def test_material_is_rewritten_to_nucleic_acid_with_a_warning(self, cli, capsys):
         parts = {"sample_id": "S1", "material": "DNA"}
 
         cli._resolve_nucleic_acid(parts)
@@ -132,8 +115,7 @@ class TestDeprecatedMaterialAlias:
         assert parts == {"sample_id": "S1", "nucleic_acid": "DNA"}
         assert "deprecated" in capsys.readouterr().err
 
-    def test_nucleic_acid_alone_is_left_untouched(self, capsys):
-        cli = _load_cli_module()
+    def test_nucleic_acid_alone_is_left_untouched(self, cli, capsys):
         parts = {"sample_id": "S1", "nucleic_acid": "RNA"}
 
         cli._resolve_nucleic_acid(parts)
@@ -141,8 +123,7 @@ class TestDeprecatedMaterialAlias:
         assert parts == {"sample_id": "S1", "nucleic_acid": "RNA"}
         assert capsys.readouterr().err == ""
 
-    def test_setting_both_keys_exits_rather_than_picking_one(self):
-        cli = _load_cli_module()
+    def test_setting_both_keys_exits_rather_than_picking_one(self, cli):
         parts = {"sample_id": "S1", "material": "DNA", "nucleic_acid": "RNA"}
 
         with pytest.raises(SystemExit) as exc:

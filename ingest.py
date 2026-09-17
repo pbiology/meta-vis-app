@@ -71,7 +71,8 @@ import tarfile
 import tempfile
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
+from urllib.parse import urlsplit
 
 import requests
 
@@ -95,6 +96,22 @@ MULTIQC_ARC = "multiqc/multiqc_data.json"
 MULTIQC_REPORT_DIR = "multiqc_report"
 PIPELINE_INFO_DIR = "pipeline_info"
 METAVAL_DIR = "metaval"
+
+
+# ---------------------------------------------------------------------------
+# Network
+# ---------------------------------------------------------------------------
+
+# Timeouts are (connect, read) in seconds. Connect is bounded everywhere so an
+# unreachable host fails fast instead of hanging. The upload has no read
+# timeout: the server ingests the whole bundle before responding, which can
+# take minutes, and giving up client-side would not stop the server-side
+# ingest — a retry would then create a duplicate analysis version.
+CONNECT_TIMEOUT_S = 10
+READ_TIMEOUT_S = 60
+REQUEST_TIMEOUT = (CONNECT_TIMEOUT_S, READ_TIMEOUT_S)
+UPLOAD_TIMEOUT = (CONNECT_TIMEOUT_S, None)
+INGEST_PATH_PREFIX = "/api/v1/ingest/"
 
 
 def _classifier_taxpasta_arcname(name: str, src: Path) -> str:
@@ -291,7 +308,7 @@ def get_session(
             "password": password,
             "scope": "openid",
         }
-    resp = requests.post(token_url, data=data)
+    resp = requests.post(token_url, data=data, timeout=REQUEST_TIMEOUT)
     login_ms = _ms() - t0
     if resp.status_code != 200:
         print(f"Keycloak login failed ({resp.status_code}): {resp.text}")
@@ -370,7 +387,7 @@ def check_case_available(
     joining an existing case, or creating a new one. The prompt is skipped when
     stdin is not a TTY (CI) or ``--yes`` is passed.
     """
-    resp = session.get(f"{base_url}/api/v1/cases/{case_id}")
+    resp = session.get(f"{base_url}/api/v1/cases/{case_id}", timeout=REQUEST_TIMEOUT)
 
     if resp.status_code == 200:
         try:
@@ -811,6 +828,7 @@ def ingest_taxprofiler(args):
             resp = session.post(
                 f"{args.url}/api/v1/ingest/taxprofiler",
                 files={"bundle": (bundle_path.name, fh, "application/gzip")},
+                timeout=UPLOAD_TIMEOUT,
             )
         api_ms = _ms() - t0
 
@@ -956,6 +974,7 @@ def ingest_trana(args):
             resp = session.post(
                 f"{args.url}/api/v1/ingest/trana",
                 files={"bundle": (bundle_path.name, fh, "application/gzip")},
+                timeout=UPLOAD_TIMEOUT,
             )
         api_ms = _ms() - t0
 
@@ -1036,6 +1055,80 @@ def _print_result(
         sys.exit(1)
 
 
+def _root_cause(exc: BaseException) -> BaseException:
+    """Follow requests → urllib3 → socket wrapping down to the original error.
+
+    requests wraps urllib3's MaxRetryError, whose ``reason`` wraps a
+    NewConnectionError, whose ``__cause__`` is the OSError that actually says
+    what went wrong (e.g. "[Errno 113] No route to host").
+    """
+    seen: set[int] = set()
+    current = exc
+    while id(current) not in seen:
+        seen.add(id(current))
+        reason = getattr(current, "reason", None)
+        wrapped = next((a for a in current.args if isinstance(a, BaseException)), None)
+        nxt = (
+            reason
+            if isinstance(reason, BaseException)
+            else wrapped or current.__cause__ or current.__context__
+        )
+        if nxt is None:
+            break
+        current = nxt
+    return current
+
+
+def _exit_on_request_error(exc: requests.exceptions.RequestException) -> NoReturn:
+    """Print a short diagnosis of a request that got no response, then exit.
+
+    HTTP error statuses are handled where each response is read. This covers
+    failures below HTTP (unreachable host, TLS, proxy, timeout), which would
+    otherwise surface as a urllib3 stack trace.
+    """
+    request = exc.request
+    method = (request.method if request is not None else None) or "request"
+    url = (request.url if request is not None else None) or "<unknown URL>"
+    host = urlsplit(url).hostname or url
+
+    # SSLError, ProxyError and ConnectTimeout all subclass ConnectionError,
+    # so the specific cases must be matched first.
+    if isinstance(exc, requests.exceptions.SSLError):
+        summary = f"TLS/certificate error talking to {host}"
+        hint = "Check the URL, or whether a proxy intercepts HTTPS."
+    elif isinstance(exc, requests.exceptions.ProxyError):
+        summary = f"proxy refused the connection to {host}"
+        hint = "Check the HTTPS_PROXY / NO_PROXY environment variables."
+    elif isinstance(exc, requests.exceptions.ConnectionError):
+        summary = f"cannot reach {host}"
+        hint = (
+            "Check network, VPN and firewall access to the host. Compute nodes "
+            "often have no outbound access — try from a login node."
+        )
+    elif isinstance(exc, requests.exceptions.ReadTimeout):
+        summary = f"{host} accepted the connection but did not respond in time"
+        hint = "The server may be overloaded or unhealthy."
+    else:
+        summary = f"request to {host} failed"
+        hint = ""
+
+    print(f"Error: {summary} ({method} {url}).", file=sys.stderr)
+    print(f"  Cause: {_root_cause(exc)}", file=sys.stderr)
+    if hint:
+        print(f"  {hint}", file=sys.stderr)
+    # A failed upload is ambiguous: the bundle may have reached the server
+    # before the connection broke. Re-ingesting appends a new analysis, so a
+    # blind retry can duplicate one. Warn on every upload failure rather than
+    # guess from urllib3 internals whether bytes were sent.
+    if urlsplit(url).path.startswith(INGEST_PATH_PREFIX):
+        print(
+            "  The upload may have reached the server. Check the case in "
+            "meta-vis before retrying — a retry creates a new analysis version.",
+            file=sys.stderr,
+        )
+    sys.exit(1)
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -1060,10 +1153,13 @@ def main():
 
     args = parser.parse_args()
 
-    if args.command == "taxprofiler":
-        ingest_taxprofiler(args)
-    elif args.command == "trana":
-        ingest_trana(args)
+    try:
+        if args.command == "taxprofiler":
+            ingest_taxprofiler(args)
+        elif args.command == "trana":
+            ingest_trana(args)
+    except requests.exceptions.RequestException as exc:
+        _exit_on_request_error(exc)
 
 
 if __name__ == "__main__":
