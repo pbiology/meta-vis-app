@@ -6,7 +6,11 @@
 # real connection, so set harmless placeholders here, before importing app.*.
 # This keeps the suite self-contained: it does not depend on .env files, CWD,
 # or a CI `env:` block. setdefault means an explicit env override still wins.
+import importlib.util
 import os
+import sys
+from pathlib import Path
+from types import ModuleType
 
 os.environ.setdefault("MONGODB_HOST", "localhost")
 os.environ.setdefault("MONGODB_DB_NAME", "test")
@@ -98,3 +102,21 @@ def make_test_app(router, fake_db, fake_blob, role: str = "admin"):
     patch("app.database.get_blob_store", return_value=fake_blob).start()
 
     return application
+
+
+# ---------------------------------------------------------------------------
+# CLI module (repo-root ingest.py)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def cli() -> ModuleType:
+    """Load the repo-root ingest.py as a module without executing main()."""
+    # backend/tests/conftest.py -> repo root is parents[2]
+    cli_path = Path(__file__).resolve().parents[2] / "ingest.py"
+    spec = importlib.util.spec_from_file_location("ingest_cli", cli_path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["ingest_cli"] = module
+    spec.loader.exec_module(module)
+    return module
