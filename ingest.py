@@ -64,15 +64,17 @@ the K8s-deployed backend.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import sys
 import tarfile
 import tempfile
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, NoReturn
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 import requests
 
@@ -114,6 +116,62 @@ UPLOAD_TIMEOUT = (CONNECT_TIMEOUT_S, None)
 INGEST_PATH_PREFIX = "/api/v1/ingest/"
 
 
+def _is_loopback_host(host: str) -> bool:
+    """True for localhost and loopback IPs (127.0.0.0/8, ::1) — never for
+    look-alikes such as ``localhost.example.org``."""
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _validate_base_url(raw: str, flag: str, error: Callable[[str], NoReturn]) -> str:
+    """Return ``raw`` without a trailing slash, or report why it is unsafe.
+
+    The CLI sends the Keycloak password or client secret to ``--keycloak-url``
+    and a bearer token to ``--url``, so both must be HTTPS. Plain HTTP is only
+    accepted for loopback hosts (local dev, ``kubectl port-forward``), where
+    traffic never leaves the machine. There is deliberately no opt-out flag.
+    """
+    parts = urlsplit(raw)
+    # Checked first, so no later message can echo the credentials back.
+    if parts.username is not None or parts.password is not None:
+        error(
+            f"{flag} must not contain credentials (user:password@host): they "
+            "would be printed in logs and error messages. Pass them with "
+            "--password / --client-secret or environment variables instead."
+        )
+    try:
+        host = parts.hostname
+        _ = parts.port  # raises ValueError on a non-numeric or out-of-range port
+    except ValueError:
+        error(f"{flag} {raw!r} is not a valid URL.")
+
+    if parts.scheme not in ("http", "https") or not host:
+        error(
+            f"{flag} {raw!r} is not a valid base URL. "
+            "Expected e.g. https://meta-vis.example.org"
+        )
+    if parts.query or parts.fragment:
+        error(
+            f"{flag} {raw!r} must be a base URL without '?' or '#'; API paths "
+            "are appended to it."
+        )
+    if parts.scheme == "http" and not _is_loopback_host(host):
+        https_url = parts._replace(scheme="https").geturl().rstrip("/")
+        error(
+            f"{flag} uses plain http:// for the non-local host {host!r}. "
+            "Refusing to connect: the CLI sends your Keycloak password or client "
+            "secret and a bearer token to this address, and over http they would "
+            "travel unencrypted, readable and reusable by anyone on the network "
+            f"path. Use {https_url} instead. Plain http is only allowed for "
+            "localhost (e.g. a kubectl port-forward)."
+        )
+    return raw.rstrip("/")
+
+
 def _classifier_taxpasta_arcname(name: str, src: Path) -> str:
     return f"classifiers/{name}/taxpasta/{src.name}"
 
@@ -145,7 +203,14 @@ def _ms() -> int:
 
 def _add_auth_args(parser: argparse.ArgumentParser) -> None:
     """Attach the auth + server-URL flags shared by every ingest subcommand."""
-    parser.add_argument("--url", default="http://localhost:8000")
+    parser.add_argument(
+        "--url",
+        default=os.environ.get("META_VIS_API", "http://localhost:8000"),
+        help=(
+            "meta-vis backend base URL. Overrides META_VIS_API env var. Must be "
+            "https:// unless the host is localhost."
+        ),
+    )
     parser.add_argument(
         "--yes",
         "-y",
@@ -169,7 +234,10 @@ def _add_auth_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--keycloak-url",
         default=os.environ.get("KEYCLOAK_URL", "http://localhost:8081"),
-        help="Keycloak base URL. Overrides KEYCLOAK_URL env var.",
+        help=(
+            "Keycloak base URL. Overrides KEYCLOAK_URL env var. Must be "
+            "https:// unless the host is localhost."
+        ),
     )
     parser.add_argument(
         "--realm",
@@ -387,7 +455,10 @@ def check_case_available(
     joining an existing case, or creating a new one. The prompt is skipped when
     stdin is not a TTY (CI) or ``--yes`` is passed.
     """
-    resp = session.get(f"{base_url}/api/v1/cases/{case_id}", timeout=REQUEST_TIMEOUT)
+    # Encode every character of case_id, including '/', '?' and '#', so the
+    # value can only ever name a case — never a different API path.
+    case_path = quote(case_id, safe="")
+    resp = session.get(f"{base_url}/api/v1/cases/{case_path}", timeout=REQUEST_TIMEOUT)
 
     if resp.status_code == 200:
         try:
@@ -1152,6 +1223,12 @@ def main():
     _add_trana_args(tr_parser)
 
     args = parser.parse_args()
+    # Validate before any request is made, so no credential is ever sent to
+    # an unsafe address.
+    args.url = _validate_base_url(args.url, "--url", parser.error)
+    args.keycloak_url = _validate_base_url(
+        args.keycloak_url, "--keycloak-url", parser.error
+    )
 
     try:
         if args.command == "taxprofiler":

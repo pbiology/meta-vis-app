@@ -40,7 +40,9 @@ def _run_main_raising(
     monkeypatch.setattr(
         argparse.ArgumentParser,
         "parse_args",
-        lambda _self: argparse.Namespace(command="taxprofiler"),
+        lambda _self: argparse.Namespace(
+            command="taxprofiler", url=API, keycloak_url=API
+        ),
     )
     monkeypatch.setattr(cli, "ingest_taxprofiler", fail)
     with pytest.raises(SystemExit) as exit_info:
