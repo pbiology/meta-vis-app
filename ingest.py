@@ -269,11 +269,10 @@ def _parse_subject_sex(parts: dict, sample_id: str) -> str:
     when omitted, matching the backend's per-subject default."""
     sex = parts.get("sex", "unknown")
     if sex not in _SEX_VALUES:
-        print(
+        _fail(
             f"Sample '{sample_id}' has invalid sex='{sex}'. "
             f"Allowed: {sorted(_SEX_VALUES)}."
         )
-        sys.exit(1)
     return sex
 
 
@@ -289,11 +288,10 @@ def _resolve_nucleic_acid(parts: dict) -> None:
         return
     sample_id = parts.get("sample_id", "<unknown>")
     if "nucleic_acid" in parts:
-        print(
+        _fail(
             f"Sample '{sample_id}' sets both nucleic_acid and the deprecated "
             "material. Remove material."
         )
-        sys.exit(1)
     print(
         f"Warning: sample '{sample_id}' uses the deprecated key 'material'. "
         "Rename it to 'nucleic_acid' — support for 'material' will be removed.",
@@ -310,8 +308,7 @@ def _check_unique_classifier_names(classifier_names: list[str]) -> None:
             dups.append(name)
         seen.add(name)
     if dups:
-        print(f"Duplicate --classifier name(s): {sorted(set(dups))}.")
-        sys.exit(1)
+        _fail(f"Duplicate --classifier name(s): {sorted(set(dups))}.")
 
 
 def _check_unique_sample_ids(samples: list[dict]) -> None:
@@ -323,8 +320,7 @@ def _check_unique_sample_ids(samples: list[dict]) -> None:
             dups.append(sid)
         seen.add(sid)
     if dups:
-        print(f"Duplicate sample_id(s) within this case: {sorted(set(dups))}.")
-        sys.exit(1)
+        _fail(f"Duplicate sample_id(s) within this case: {sorted(set(dups))}.")
 
 
 def _highest_role(roles: list[str]) -> str:
@@ -352,11 +348,10 @@ def get_session(
     Resource Owner Password grant for the local-dev KC."""
     use_client_credentials = bool(client_secret)
     if not use_client_credentials and not password:
-        print(
+        _fail(
             "Password is required. Pass --password, set KEYCLOAK_PASSWORD, or "
             "switch to client_credentials mode by setting KEYCLOAK_CLIENT_SECRET."
         )
-        sys.exit(1)
     t0 = _ms()
     token_url = (
         f"{keycloak_url.rstrip('/')}/realms/{realm}/protocol/openid-connect/token"
@@ -379,8 +374,7 @@ def get_session(
     resp = requests.post(token_url, data=data, timeout=REQUEST_TIMEOUT)
     login_ms = _ms() - t0
     if resp.status_code != 200:
-        print(f"Keycloak login failed ({resp.status_code}): {resp.text}")
-        sys.exit(1)
+        _fail(f"Keycloak login failed ({resp.status_code}): {resp.text}")
     payload = resp.json()
     access_token = payload["access_token"]
 
@@ -411,13 +405,12 @@ def get_session(
     mode = "client_credentials" if use_client_credentials else "password"
     print(f"Logged in as {pref} ({role}) via {mode}")
     if role not in _INGEST_ROLES:
-        print(
+        _fail(
             f"'{pref}' has role '{role}' which cannot ingest cases. "
             f"Required role: one of {sorted(_INGEST_ROLES)}. "
             "If using client_credentials, assign the role to the "
             f"'{client_id}' service-account user in Keycloak."
         )
-        sys.exit(1)
 
     session = requests.Session()
     session.headers["Authorization"] = f"Bearer {access_token}"
@@ -480,7 +473,8 @@ def check_case_available(
         # the underlying error.
         print(
             f"Warning: preflight case check returned {resp.status_code}: "
-            f"{resp.text[:200]}. Continuing anyway."
+            f"{resp.text[:200]}. Continuing anyway.",
+            file=sys.stderr,
         )
         return
 
@@ -488,8 +482,7 @@ def check_case_available(
     if assume_yes or not sys.stdin.isatty():
         return
     if input("Continue? [y/N] ").strip().lower() not in ("y", "yes"):
-        print("Aborted.")
-        sys.exit(1)
+        _fail("Aborted.")
 
 
 # ---------------------------------------------------------------------------
@@ -500,16 +493,14 @@ def check_case_available(
 def _check_file(path: str, label: str) -> Path:
     p = Path(path)
     if not p.is_file():
-        print(f"{label} is not a file: {path}")
-        sys.exit(1)
+        _fail(f"{label} is not a file: {path}")
     return p
 
 
 def _check_dir(path: str, label: str) -> Path:
     p = Path(path)
     if not p.is_dir():
-        print(f"{label} is not a directory: {path}")
-        sys.exit(1)
+        _fail(f"{label} is not a directory: {path}")
     return p
 
 
@@ -770,21 +761,18 @@ def _add_manifest(tar: tarfile.TarFile, manifest: dict[str, Any]) -> None:
 def parse_classifier(raw: str) -> dict:
     tokens = raw.split()
     if not tokens:
-        print("Empty --classifier argument")
-        sys.exit(1)
+        _fail("Empty --classifier argument")
     name = tokens[0]
     parts = {}
     for token in tokens[1:]:
         if "=" not in token:
-            print(f"Invalid classifier token '{token}' — expected key=value")
-            sys.exit(1)
+            _fail(f"Invalid classifier token '{token}' — expected key=value")
         k, v = token.split("=", 1)
         parts[k.strip()] = v.strip()
     required = {"db", "taxpasta"}
     missing = required - parts.keys()
     if missing:
-        print(f"Classifier '{name}' is missing required keys: {missing}")
-        sys.exit(1)
+        _fail(f"Classifier '{name}' is missing required keys: {missing}")
     return {
         "name": name,
         "db": parts["db"],
@@ -797,8 +785,7 @@ def parse_sample(raw: str, classifier_names: list) -> dict:
     parts = {}
     for token in raw.split():
         if "=" not in token:
-            print(f"Invalid sample token '{token}' — expected key=value")
-            sys.exit(1)
+            _fail(f"Invalid sample token '{token}' — expected key=value")
         k, v = token.split("=", 1)
         parts[k.strip()] = v.strip()
 
@@ -807,13 +794,11 @@ def parse_sample(raw: str, classifier_names: list) -> dict:
     required = {"sample_id", "type", "nucleic_acid"}
     missing = required - parts.keys()
     if missing:
-        print(f"Sample is missing required keys: {missing}")
-        sys.exit(1)
+        _fail(f"Sample is missing required keys: {missing}")
 
     sample_id = parts["sample_id"]
     if parts["type"] == "sample" and not parts.get("subject_id"):
-        print(f"Sample '{sample_id}' has type=sample and must provide subject_id.")
-        sys.exit(1)
+        _fail(f"Sample '{sample_id}' has type=sample and must provide subject_id.")
     classifier_set = set(classifier_names)
     columns = {}
     unknown_column_keys = []
@@ -829,19 +814,17 @@ def parse_sample(raw: str, classifier_names: list) -> dict:
     # Unknown column_X=... was silently dropped by previous CLI versions, which
     # produced empty profiles in the DB without warning. Now an explicit error.
     if unknown_column_keys:
-        print(
+        _fail(
             f"Sample '{sample_id}' references classifier(s) that were not declared "
             f"via --classifier: {unknown_column_keys}. "
             f"Declared classifiers: {sorted(classifier_set)}."
         )
-        sys.exit(1)
 
     if not columns:
-        print(
+        _fail(
             f"Sample '{sample_id}' has no classifier columns "
             f"(expected one column_<name>=... per --classifier)."
         )
-        sys.exit(1)
 
     return {
         "subject_id": parts.get("subject_id"),
@@ -970,8 +953,7 @@ def parse_trana_sample(raw: str) -> dict:
     parts = {}
     for token in raw.split():
         if "=" not in token:
-            print(f"Invalid sample token '{token}' — expected key=value")
-            sys.exit(1)
+            _fail(f"Invalid sample token '{token}' — expected key=value")
         k, v = token.split("=", 1)
         parts[k.strip()] = v.strip()
 
@@ -980,14 +962,12 @@ def parse_trana_sample(raw: str) -> dict:
     required = {"sample_id", "type", "nucleic_acid", "abundance_path"}
     missing = required - parts.keys()
     if missing:
-        print(f"Sample is missing required keys: {missing}")
-        sys.exit(1)
+        _fail(f"Sample is missing required keys: {missing}")
 
     if parts["type"] == "sample" and not parts.get("subject_id"):
-        print(
+        _fail(
             f"Sample '{parts['sample_id']}' has type=sample and must provide subject_id."
         )
-        sys.exit(1)
 
     return {
         "subject_id": parts.get("subject_id"),
@@ -1122,8 +1102,7 @@ def _print_result(
             f"total {login_ms + api_ms}ms"
         )
     else:
-        print(f"Ingest failed ({resp.status_code}): {resp.text}")
-        sys.exit(1)
+        _fail(f"Ingest failed ({resp.status_code}): {resp.text}")
 
 
 def _root_cause(exc: BaseException) -> BaseException:
@@ -1148,6 +1127,16 @@ def _root_cause(exc: BaseException) -> BaseException:
             break
         current = nxt
     return current
+
+
+def _fail(message: str) -> NoReturn:
+    """Print an error to stderr and exit 1.
+
+    Errors must not go to stdout: a wrapper script that redirects stdout to a
+    log would otherwise hide why the ingest failed.
+    """
+    print(message, file=sys.stderr)
+    sys.exit(1)
 
 
 def _exit_on_request_error(exc: requests.exceptions.RequestException) -> NoReturn:
