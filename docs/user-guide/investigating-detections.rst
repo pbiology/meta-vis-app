@@ -2,10 +2,11 @@
 Investigating detections
 ==========================
 
-Once you have a sample open, three pieces of UI help you decide whether a
+Once you have a sample open, four pieces of UI help you decide whether a
 detected organism is real and what is known about it: the **taxonomy
-table**, the **metaval details** view (when metaval was run), and the
-**BV-BRC enrichments** on the taxon detail page.
+table**, the **related taxa** tree on the taxon detail page, the
+**metaval details** view (when metaval was run), and the **BV-BRC
+enrichments**.
 
 Taxonomy table
 ==============
@@ -36,6 +37,93 @@ Clicking an organism name opens the **Taxon Detail** page, which adds
 the full taxonomy lineage, NCBI taxon id, clinical notes (if curated),
 the metaval verification status, and the BV-BRC enrichments described
 below.
+
+Related taxa in sample and controls
+===================================
+
+The NTC column in the taxonomy table compares **exact taxon ids**: a
+taxon counts as present in a control only when the control carries that
+same id. Classifiers do not oblige. The same organism can land on a
+sibling strain, on a neighbouring species, or stop at a higher rank,
+depending on read length, database contents and how much of the genome
+was covered. Compared on ids alone, an organism that is plainly in your
+control looks absent from it.
+
+The **Related taxa in sample and controls** section on the taxon detail
+page lays the neighbourhood out instead. It shows every taxon under the
+clicked organism's **genus** that has signal in this sample or in any
+negative control of the same run, as a tree, one column per sample.
+
+A real example — clicking a *Streptomyces* strain with two reads::
+
+   Streptomyces [genus]              sample: 0 / 2      NTC: 880 / 12,405
+     S. xinghaiensis [species]       sample: 0 / 2      NTC: 0
+       S. xinghaiensis S187 [strain] sample: 2 / 2      NTC: 0
+     unclassified Streptomyces       sample: 0          NTC: 406 / 9,067
+       Streptomyces sp. Y1           sample: 0          NTC: 5,624
+
+On exact ids the strain is unique to the sample. In context, the control
+carries 12 405 *Streptomyces* reads spread over other members of the
+genus, and the two reads are almost certainly the same contamination.
+
+Reading the tree
+----------------
+
+Two numbers per cell
+   Classifier counts are **direct**: reads assigned to exactly that
+   taxon, not to its children. Each cell therefore shows the **clade
+   total** (the taxon plus everything below it) and, on rows that have
+   children, the **direct** count as well. Do not add rows up — the
+   parent already includes them.
+
+Reads per million
+   Shown under each value, relative to all reads that classifier
+   processed for that sample. Controls are usually sequenced far
+   shallower than samples, so raw counts are not comparable between
+   columns; rpm is.
+
+Greyed-out rows
+   A taxon with no reads of its own, present only to connect the taxa
+   below it to the genus.
+
+``N more taxa``
+   Siblings beyond the ten strongest are folded into one row carrying
+   their combined signal; click it to show them. **Anything with reads
+   in the sample is always shown**, however weak, as is the organism you
+   clicked.
+
+``includes retired taxid …``
+   NCBI merged that id into this taxon; the reads have been added
+   together. Classifier databases are built on older taxonomy snapshots,
+   so retired ids are common in real profiles.
+
+Amber notice
+   Taxa in the run that could not be placed in the taxonomy at all —
+   deleted ids, or ids the loaded reference does not have. They may
+   belong to the group you are looking at, so they are listed rather
+   than dropped.
+
+Columns are the sample first, then the negative controls of the **same
+pipeline run with the same nucleic acid** — the only controls that say
+anything about this run's contamination. Positive controls are not
+included. A control with no profile for the selected classifier shows
+``—``, which means "no data", not zero.
+
+What it does and does not answer
+--------------------------------
+
+It answers "is this organism's *neighbourhood* in my controls?" and
+leaves the judgement to you — nothing here re-labels a detection as
+contamination.
+
+Two limits worth knowing:
+
+- **It stops at the genus.** Organisms that look alike but sit in
+  different genera — *E. coli* and *Shigella*, the *B. cereus* group —
+  will not appear in each other's trees.
+- **It needs taxonomy lineages.** If the section reports that the
+  reference must be reloaded, run ``load_taxonomy.py`` (see
+  :doc:`loading-data`).
 
 Metaval validation
 ==================

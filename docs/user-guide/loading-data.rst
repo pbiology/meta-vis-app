@@ -229,11 +229,23 @@ What happens:
 
 1. Downloads ``new_taxdump.tar.gz`` (~110 MB) from NCBI.
 2. Parses the taxonomy dump.
-3. Bulk-upserts ~2.4 million records into the ``taxa`` collection.
-4. Takes 10–20 minutes depending on disk and network.
+3. Bulk-upserts ~3 million records into the ``taxa`` collection, each
+   with its ancestor ids — the lineage behind the related-taxa tree
+   (see :doc:`investigating-detections`).
+4. Replaces ``taxa_retired`` with NCBI's merged and deleted ids (~880 000),
+   so profiles carrying ids from an older taxonomy snapshot still resolve.
+5. Takes 10–20 minutes depending on disk and network.
 
 Safe to re-run — existing entries are updated; clinical notes on
 existing taxa are preserved.
+
+The loader stops with an error if the dump contradicts itself, for
+instance an id that is both merged and deleted. Use ``--dry-run`` to
+check a dump without writing anything.
+
+A database loaded before ancestor ids existed has no lineages, and the
+related-taxa tree reports that the reference must be reloaded until this
+script has been run once.
 
 Scheduling
 ----------

@@ -1,5 +1,6 @@
 import client from "./client";
 import type {
+  CladeResponse,
   NtcProfilesResponse,
   PaginatedResponse,
   Sample,
@@ -45,5 +46,16 @@ export async function getKronaUrl(sampleId: string, classifier = "kraken2"): Pro
 
 export async function getNtcProfiles(sampleId: string): Promise<NtcProfilesResponse> {
   const res = await client.get<NtcProfilesResponse>(`/samples/${sampleId}/ntc_profiles`);
+  return res.data;
+}
+
+export async function getClade(
+  sampleId: string,
+  classifier: string,
+  taxonId: number
+): Promise<CladeResponse> {
+  const res = await client.get<CladeResponse>(`/samples/${sampleId}/clade`, {
+    params: { classifier, taxon_id: taxonId },
+  });
   return res.data;
 }

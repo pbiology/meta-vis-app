@@ -9,17 +9,27 @@ import OccurrencesSection from "./taxon-detail/OccurrencesSection";
 import ExternalLinksSection from "./taxon-detail/ExternalLinksSection";
 import LiteratureSection from "./taxon-detail/LiteratureSection";
 import BvbrcSection from "./taxon-detail/BvbrcSection";
+import CladeSection from "./taxon-detail/CladeSection";
 import { KINGDOM_COLOURS, type TaxonDoc } from "./taxon-detail/types";
 
 export interface TaxonDetailContentProps {
   taxonId: string;
+  // Report-selection key: the human sample_id inside CaseView, the Mongo _id
+  // elsewhere. Not safe for API calls — use `sampleOid`.
   sampleId?: string;
+  // Mongo _id of the sample the taxon was opened from. When set, the related
+  // taxa in the sample and its negative controls are shown.
+  sampleOid?: string;
+  // Classifier tab active in the taxonomy table, pre-selected in that section.
+  initialClassifier?: string;
   onBack: () => void;
 }
 
 export default function TaxonDetailContent({
   taxonId,
   sampleId,
+  sampleOid,
+  initialClassifier,
   onBack,
 }: Readonly<TaxonDetailContentProps>) {
   const { role } = useAuth();
@@ -141,6 +151,14 @@ export default function TaxonDetailContent({
             </p>
           )}
         </section>
+
+        {sampleOid && (
+          <CladeSection
+            sampleOid={sampleOid}
+            taxonId={taxon.taxon_id}
+            initialClassifier={initialClassifier}
+          />
+        )}
 
         <ClinicalNotesEditor
           taxonId={taxon.taxon_id}

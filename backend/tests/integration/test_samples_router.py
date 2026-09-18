@@ -301,6 +301,22 @@ class TestGetNtcProfiles:
         profiles = resp.json()["profiles"]
         assert [p["sample_id"] for p in profiles] == ["CTRL_DNA"]
 
+    async def test_negative_control_is_not_its_own_ntc(self, client, fake_db):
+        analysis_id = await seed_case(fake_db, "testcase")
+        ntc_result = await fake_db["samples"].insert_one(
+            {
+                "analysis_id": analysis_id,
+                "case_id": "testcase",
+                "sample_id": "CTRL01",
+                "sample_type": "negative_ctrl",
+                "nucleic_acid": "DNA",
+                "profiles": [{"classifier": "kraken2", "profile": []}],
+            }
+        )
+        resp = client.get(f"/api/v1/samples/{ntc_result.inserted_id}/ntc_profiles")
+        assert resp.status_code == 200
+        assert resp.json()["profiles"] == []
+
     async def test_unknown_sample_returns_404(self, client, fake_db):
         resp = client.get(f"/api/v1/samples/{ObjectId()}/ntc_profiles")
         assert resp.status_code == 404
