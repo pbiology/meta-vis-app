@@ -92,6 +92,8 @@ Layout::
    ├── auth/
    │   └── utils.py        Keycloak token validation, role extraction
    ├── case_access.py      Shared case / analysis lookups used by routers
+   ├── sample_controls.py  Which negative controls a sample is compared against
+   ├── clade/              Related-taxa tree — see "Clade view" below
    ├── ingestor/           See "Ingest" below
    ├── models/             Pydantic models — case, analysis, sample, qc, taxonomy, …
    └── routers/            Resource-shaped API endpoints
@@ -171,6 +173,7 @@ Collection                  Purpose
 ``metaval_results``         BLASTN alignments + IGV metadata per detection
 ``users``                   App-side user metadata, keyed by Keycloak ``sub``
 ``taxa``                    NCBI taxonomy reference (populated by ``load_taxonomy.py``)
+``taxa_retired``            Merged / deleted NCBI ids (replaced by ``load_taxonomy.py``)
 ``outbreak_ignorelist``     Taxa excluded from outbreak alerts
 ``known_pathogens``         Curated pathogen reference list
 ``ntc_ignorelist``          Taxa excluded from NTC tracking
@@ -304,6 +307,66 @@ classifier/db suffixes to sample names, so the CLI requires explicit
 ``column_*=`` mappings per sample. The MultiQC keys are derived by
 splitting on ``.`` and ``_k2``, which is why the mapping cannot be
 inferred.
+
+Clade view
+==========
+
+``GET /samples/{id}/clade`` answers "what else from this taxon's genus is
+in this sample or its negative controls?". The clinical reason is in
+:doc:`../user-guide/investigating-detections`: comparing taxon ids exactly
+misses the same organism classified as a sibling strain or species.
+
+Two modules, split so the rules are testable without a database:
+
+``app/clade/tree.py``
+   Pure functions. Moves signal on merged ids onto their current id,
+   picks the anchor, inserts connector nodes, nests the tree, sums clade
+   totals, computes reads-per-million, and collects what could not be
+   placed. No Mongo, no FastAPI.
+``app/clade/loader.py``
+   Fetches the inputs — the sample, its controls via
+   ``app/sample_controls.py``, and the taxonomy — and calls the above in
+   order.
+
+Taxonomy shape it relies on
+---------------------------
+
+``load_taxonomy.py`` stores ``ancestor_ids`` per taxon, taken from
+``taxidlineage.dmp``. NCBI omits root from every lineage, so top-level
+taxa legitimately have an empty one; a taxon with **no** lineage field is
+a different case and must not be read as "unplaceable" — see below.
+
+``taxa_retired`` holds merged and deleted ids from ``merged.dmp`` and
+``delnodes.dmp``, and is **consulted before** ``taxa``. Upserts never
+delete, so a document for a retired id can linger in ``taxa`` with stale
+data until it is next rebuilt.
+
+Ingest writes a **placeholder** ``taxa`` document (``taxdump_version``
+``None``) for every profile id the reference lacks, including taxon 0.
+These never receive a lineage, so the loader treats a placeholder as
+"not in the taxonomy" (404) and only a *loaded* document without
+``ancestor_ids`` as "reference predates lineage support" (409).
+
+Query shape and cost
+--------------------
+
+Every taxonomy lookup is ``taxon_id $in <ids in this run>`` against the
+unique ``taxon_id`` index, with the anchor filter pushed into the same
+query::
+
+   {"taxon_id": {"$in": profile_ids},
+    "$or": [{"taxon_id": anchor}, {"ancestor_ids": anchor}]}
+
+Cost is therefore bounded by one analysis — one sample plus its controls,
+a few thousand ids — and does not grow with the number of samples in the
+database. On a real profile this returns in tens of milliseconds.
+
+There is deliberately **no index on** ``taxa.ancestor_ids``. The reverse
+query ("every taxon under X") is never issued, and the index would carry
+roughly 57 million entries (3 M taxa × ~19 ancestors), costing RAM and
+slowing every monthly taxonomy load for nothing. A future feature that
+searches *across* samples by clade would need the genus id denormalised
+onto profile entries at ingest instead.
 
 Outbreak detection
 ==================
