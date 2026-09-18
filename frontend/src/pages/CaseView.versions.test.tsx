@@ -30,6 +30,7 @@ function analysisFor(version: 1 | 2) {
     version,
     is_latest: run.isLatest,
     order_date: version === 1 ? "2026-05-01" : "2026-08-01",
+    ingested_at: version === 1 ? "2026-05-12T09:00:00Z" : "2026-08-14T09:00:00Z",
     sequencing_platform: run.platform,
     classifiers: [{ name: "kraken2", db: run.db, krona_id: "kraken2" }],
     review: { reviewed: false },
@@ -120,6 +121,18 @@ describe("CaseView renders the viewed run's data", () => {
     // without this the page contradicted the case list.
     renderAt(2);
     expect(await screen.findByText("This run")).toBeInTheDocument();
+  });
+
+  it("lists each run by ingest date in the version switcher", async () => {
+    // Real re-sequencings share an order date, so the switcher has to show
+    // when each delivery arrived instead.
+    renderAt(2);
+    await userEvent.click(await screen.findByRole("button", { name: /v2/i }));
+
+    const menu = screen.getByRole("menu");
+    expect(within(menu).getByText("2026-05-12")).toBeInTheDocument();
+    expect(within(menu).getByText("2026-08-14")).toBeInTheDocument();
+    expect(within(menu).queryByText("2026-08-01")).not.toBeInTheDocument();
   });
 
   it("does not show a run row when the dates agree", async () => {

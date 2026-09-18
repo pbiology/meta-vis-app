@@ -1,4 +1,5 @@
 import Badge from "./Badge";
+import { fmtDate } from "../utils/format";
 import type { AnalysisSummary, Case } from "../api/types";
 import { analysisLabel, platformLabel } from "../lib/analysisLabels";
 
@@ -159,6 +160,14 @@ export default function CaseListRow({
       )}
       <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
         {analysis.order_date ?? "—"}
+      </td>
+      {/* When this run's data arrived. Every run of a case shares the order
+          date, so this is what distinguishes one delivery from the next. */}
+      <td
+        className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap"
+        title={analysis.ingested_at ?? undefined}
+      >
+        {fmtDate(analysis.ingested_at)}
       </td>
       <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">
         {analysisLabel(analysis.analysis_type)}

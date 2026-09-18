@@ -236,6 +236,7 @@ export default function CaseList() {
                   "Case name",
                   ...(ticketLinksEnabled ? ["Ticket"] : []),
                   "Date",
+                  "Ingested",
                   "Analysis",
                   "Platform",
                   "Samples",
@@ -291,7 +292,7 @@ export default function CaseList() {
               {cases.length === 0 && (
                 <tr>
                   <td
-                    colSpan={role === "admin" ? 9 : 8}
+                    colSpan={9 + (ticketLinksEnabled ? 1 : 0) + (role === "admin" ? 1 : 0)}
                     className="px-4 py-10 text-center text-sm text-gray-400"
                   >
                     No cases found.
