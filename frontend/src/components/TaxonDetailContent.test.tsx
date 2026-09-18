@@ -22,3 +22,20 @@ describe("TaxonDetailContent role gating", () => {
     expect(await screen.findByRole("button", { name: "Add notes" })).toBeInTheDocument();
   });
 });
+
+describe("TaxonDetailContent related taxa section", () => {
+  it("is hidden when the taxon is not opened from a sample", async () => {
+    renderWithProviders(<TaxonDetailContent taxonId="42" onBack={() => {}} />);
+
+    expect(await screen.findByText("Clinical notes")).toBeInTheDocument();
+    expect(screen.queryByText("Related taxa in sample and controls")).not.toBeInTheDocument();
+  });
+
+  it("is shown when the sample's Mongo id is known", async () => {
+    renderWithProviders(
+      <TaxonDetailContent taxonId="42" sampleId="S1" sampleOid="oid-1" onBack={() => {}} />
+    );
+
+    expect(await screen.findByText("Related taxa in sample and controls")).toBeInTheDocument();
+  });
+});

@@ -1,4 +1,5 @@
 import { http, HttpResponse } from "msw";
+import { escherichiaClade } from "./fixtures/clade";
 
 const API = "*/api/v1";
 
@@ -120,6 +121,8 @@ export const defaultHandlers = [
   http.get(`${API}/samples/:sampleId/ntc_profiles`, () =>
     HttpResponse.json({ profiles: [], contaminant_config: null })
   ),
+  // Not empty like its neighbours: a clade response always carries a tree root.
+  http.get(`${API}/samples/:sampleId/clade`, () => HttpResponse.json(escherichiaClade())),
   http.get(`${API}/samples/:sampleId`, ({ params }) =>
     HttpResponse.json({ sample_id: params.sampleId, sample_type: "sample" })
   ),

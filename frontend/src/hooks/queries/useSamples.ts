@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  getClade,
   getKronaUrl,
   getNtcProfiles,
   getProfile,
@@ -16,6 +17,8 @@ export const sampleKeys = {
   ntcProfiles: (sampleId: string) => ["samples", sampleId, "ntcProfiles"] as const,
   krona: (sampleId: string, classifier: string) =>
     ["samples", sampleId, "krona", classifier] as const,
+  clade: (sampleId: string, classifier: string, taxonId: number) =>
+    ["samples", sampleId, "clade", classifier, taxonId] as const,
 };
 
 interface UseSampleOptions {
@@ -42,6 +45,19 @@ export function useSampleProfile(sampleId: string, opts: UseSampleOptions = {}) 
     queryKey: sampleKeys.profile(sampleId),
     queryFn: () => getProfile(sampleId),
     enabled: (opts.enabled ?? true) && Boolean(sampleId),
+  });
+}
+
+export function useSampleClade(
+  sampleId: string,
+  classifier: string | null,
+  taxonId: number,
+  opts: UseSampleOptions = {}
+) {
+  return useQuery({
+    queryKey: sampleKeys.clade(sampleId, classifier ?? "", taxonId),
+    queryFn: () => getClade(sampleId, classifier as string, taxonId),
+    enabled: (opts.enabled ?? true) && Boolean(sampleId) && Boolean(classifier),
   });
 }
 

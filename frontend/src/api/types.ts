@@ -217,6 +217,63 @@ export interface NtcProfilesResponse {
   [key: string]: unknown;
 }
 
+// GET /samples/{id}/clade — mirrors backend app/models/clade.py. No index
+// signatures: the backend model forbids extra fields, so these are exact.
+
+// "reads" for taxprofiler classifiers, "fraction" for TRANA/Emu relative
+// abundance; reads-per-million only exists for "reads".
+export type CladeUnit = "reads" | "fraction";
+
+export interface CladeColumn {
+  sample_id: string;
+  sample_type: "sample" | "positive_ctrl" | "negative_ctrl";
+  // False when the sample has no profile for this classifier: its cells are
+  // absent, which is different from zero signal.
+  has_profile: boolean;
+  classifier_total: number | null;
+}
+
+export interface CladeCell {
+  // Signal assigned exactly to this taxon.
+  direct: number;
+  // Direct signal of this taxon plus everything below it.
+  clade: number;
+  direct_rpm: number | null;
+  clade_rpm: number | null;
+}
+
+export interface CladeTaxon {
+  taxon_id: number;
+  name: string;
+  rank: string | null;
+}
+
+export interface CladeNode extends CladeTaxon {
+  // Keyed by CladeColumn.sample_id; columns without a profile have no entry.
+  cells: Record<string, CladeCell>;
+  is_connector: boolean;
+  merged_from: number[];
+  children: CladeNode[];
+}
+
+export interface UnplacedTaxon {
+  taxon_id: number;
+  name: string | null;
+  reason: "deleted" | "not_in_taxonomy";
+  merged_from: number[];
+  cells: Record<string, CladeCell>;
+}
+
+export interface CladeResponse {
+  classifier: string;
+  unit: CladeUnit;
+  clicked: CladeTaxon;
+  anchor: CladeTaxon;
+  columns: CladeColumn[];
+  root: CladeNode;
+  unplaced: UnplacedTaxon[];
+}
+
 export interface Taxon {
   taxon_id: number;
   name?: string;

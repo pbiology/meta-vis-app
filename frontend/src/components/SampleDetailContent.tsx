@@ -148,6 +148,8 @@ export default function SampleDetailContent({
       <TaxonDetailContent
         taxonId={String(activeTaxonId)}
         sampleId={reportKey}
+        sampleOid={sampleId}
+        initialClassifier={activeTab ?? undefined}
         onBack={() => setActiveTaxonId(null)}
       />
     );

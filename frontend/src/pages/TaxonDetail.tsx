@@ -7,5 +7,13 @@ export default function TaxonDetail() {
   const { sampleId } = useParams<{ sampleId?: string }>();
   const navigate = useNavigate();
 
-  return <TaxonDetailContent taxonId={taxonId} sampleId={sampleId} onBack={() => navigate(-1)} />;
+  // On this route `sampleId` is the Mongo _id, so it doubles as `sampleOid`.
+  return (
+    <TaxonDetailContent
+      taxonId={taxonId}
+      sampleId={sampleId}
+      sampleOid={sampleId}
+      onBack={() => navigate(-1)}
+    />
+  );
 }
