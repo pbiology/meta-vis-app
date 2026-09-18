@@ -221,7 +221,6 @@ async def get_ntc_profiles(
 @router.get(
     "/{sample_id}/clade",
     summary="Taxa related to a clicked taxon in this sample and its negative controls",
-    response_model=CladeResponse,
     responses={
         404: {
             "description": "Sample, classifier profile, or placeable taxon not found"

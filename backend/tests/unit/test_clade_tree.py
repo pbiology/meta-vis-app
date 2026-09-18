@@ -258,15 +258,20 @@ def test_build_tree_lists_merged_ids_on_node():
 
 
 def test_build_tree_raises_when_parent_missing():
+    # K-12 sits under E. coli, which is absent from the records.
+    without_species = records(ESCHERICHIA, K12)
+    signal = resolved(S1={})
+
     with pytest.raises(ValueError, match="Parent 562 of taxon 83333"):
-        build_tree(561, records(ESCHERICHIA, K12), resolved(S1={}), {"S1": None}, "S1")
+        build_tree(561, without_species, signal, {"S1": None}, "S1")
 
 
 def test_build_tree_raises_for_record_outside_anchor():
+    other_genus = records(ESCHERICHIA, SHIGELLA)
+    signal = resolved(S1={})
+
     with pytest.raises(ValueError, match="not below anchor 561"):
-        build_tree(
-            561, records(ESCHERICHIA, SHIGELLA), resolved(S1={}), {"S1": None}, "S1"
-        )
+        build_tree(561, other_genus, signal, {"S1": None}, "S1")
 
 
 # ---------------------------------------------------------------------------

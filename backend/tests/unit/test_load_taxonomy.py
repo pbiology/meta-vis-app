@@ -21,7 +21,8 @@ def loader() -> ModuleType:
     # backend/tests/unit/test_load_taxonomy.py -> backend is parents[2]
     path = Path(__file__).resolve().parents[2] / "load_taxonomy.py"
     spec = importlib.util.spec_from_file_location("load_taxonomy_script", path)
-    assert spec and spec.loader
+    assert spec is not None
+    assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules["load_taxonomy_script"] = module
     spec.loader.exec_module(module)
