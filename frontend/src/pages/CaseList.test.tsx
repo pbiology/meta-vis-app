@@ -17,6 +17,9 @@ function caseRow(id: string, extra: Record<string, unknown> = {}, version = 1) {
       version,
       is_latest: true,
       order_date: "2026-01-01",
+      // Re-sequencings share the order date, so the ingest timestamp is what
+      // separates the deliveries in the list.
+      ingested_at: "2026-01-03T08:15:00Z",
       sample_count: 2,
       control_count: 0,
       analysis_type: "shotgun",
@@ -39,6 +42,7 @@ function caseRowWithHistory(id: string) {
         version: 1,
         is_latest: false,
         order_date: "2025-12-01",
+        ingested_at: "2025-12-04T08:15:00Z",
         sample_count: 2,
         control_count: 0,
         analysis_type: "shotgun",
@@ -158,6 +162,28 @@ describe("CaseList", () => {
     expect(screen.getByText("alice")).toBeInTheDocument();
     // Still nothing on the current run.
     expect(screen.queryByText("v2")).not.toBeInTheDocument();
+  });
+
+  it("shows each run's ingest date beside the order date", async () => {
+    server.use(
+      http.get(`${API}/cases`, () =>
+        HttpResponse.json({
+          items: [caseRowWithHistory("CASE-9")],
+          total: 1,
+          pages: 1,
+          ticket_links_enabled: false,
+        })
+      )
+    );
+    renderWithProviders(<CaseList />, { route: "/cases" });
+    await waitFor(() => expect(screen.getByText("CASE-9")).toBeInTheDocument());
+
+    expect(screen.getByText("2026-01-03")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /show earlier analyses/i }));
+
+    // The superseded run keeps its own ingest date.
+    expect(await screen.findByText("2025-12-04")).toBeInTheDocument();
   });
 
   it("renders the empty state when no cases match", async () => {

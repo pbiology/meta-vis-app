@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { fmtDate } from "../../utils/format";
 import type { AnalysisSummary } from "../../api/types";
 
 interface CaseVersionSwitcherProps {
@@ -79,7 +80,11 @@ export default function CaseVersionSwitcher({
                     latest
                   </span>
                 )}
-                <span className="text-gray-400 ml-auto">{a.order_date ?? "—"}</span>
+                {/* Ingest date, not order date: every run of a case carries the
+                    same order date, so it could not tell the deliveries apart. */}
+                <span className="text-gray-400 ml-auto" title={a.ingested_at ?? undefined}>
+                  {fmtDate(a.ingested_at)}
+                </span>
                 <span className={a.review?.reviewed ? "text-green-600" : "text-amber-500"}>
                   {a.review?.reviewed ? "reviewed" : "pending"}
                 </span>
