@@ -222,6 +222,12 @@ async def _ensure_indexes():
     await db["taxa"].create_index("taxon_id", unique=True)
     await db["taxa"].create_index("superkingdom")
     await db["taxa"].create_index("name")
+    # No index on taxa.ancestor_ids: the clade view looks taxa up by taxon_id
+    # $in over one analysis's profiles and filters by ancestor within that, so
+    # a ~57M-entry multikey index would cost RAM and load time for nothing.
+
+    # taxa_retired — merged/deleted NCBI IDs, replaced by load_taxonomy.py
+    await db["taxa_retired"].create_index("taxon_id", unique=True)
 
     # audit_log — append-only; no TTL (clinical audit logs must not auto-expire)
     await db["audit_log"].create_index([("timestamp", -1)])

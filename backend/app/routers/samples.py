@@ -9,9 +9,12 @@ from fastapi.responses import HTMLResponse
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from bson import ObjectId
 from bson.errors import InvalidId
+from app.models.clade import CladeResponse
 from app.models.sample import SampleResponse
 
 from app.audit import log_audit_event
+from app.clade.loader import load_clade
+from app.sample_controls import matching_negative_controls
 from app.constants import (
     CONTAMINANT_ELIGIBLE_RANKS,
     CONTAMINANT_NTC_READ_THRESHOLD,
@@ -183,19 +186,8 @@ async def get_ntc_profiles(
     if not sample:
         raise HTTPException(status_code=404, detail=f"Sample '{sample_id}' not found")
 
-    # Scoped to the producing analysis rather than the case: the controls a
-    # sample is compared against must come from the same sequencing run.
-    ntc_docs = (
-        await db["samples"]
-        .find(
-            {
-                "analysis_id": sample["analysis_id"],
-                "sample_type": "negative_ctrl",
-                "nucleic_acid": sample["nucleic_acid"],
-            },
-            {"profiles": 1, "sample_id": 1},
-        )
-        .to_list(length=50)
+    ntc_docs = await matching_negative_controls(
+        db, sample, {"profiles": 1, "sample_id": 1}
     )
 
     profiles = []
@@ -224,6 +216,28 @@ async def get_ntc_profiles(
             "eligible_ranks": sorted(CONTAMINANT_ELIGIBLE_RANKS),
         },
     }
+
+
+@router.get(
+    "/{sample_id}/clade",
+    summary="Taxa related to a clicked taxon in this sample and its negative controls",
+    response_model=CladeResponse,
+    responses={
+        404: {
+            "description": "Sample, classifier profile, or placeable taxon not found"
+        },
+        409: {"description": "Taxonomy reference must be reloaded"},
+        422: {"description": "Malformed sample_id or query parameters"},
+    },
+)
+async def get_clade(
+    sample_id: str,
+    classifier: Annotated[str, Query(min_length=1, max_length=64)],
+    taxon_id: Annotated[int, Query(ge=0)],
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    _user: dict = Depends(get_current_user),
+) -> CladeResponse:
+    return await load_clade(db, _oid(sample_id), classifier, taxon_id)
 
 
 @router.get(
