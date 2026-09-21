@@ -185,7 +185,7 @@ export const defaultHandlers = [
   http.get(`${API}/ntc/trends`, () =>
     HttpResponse.json({
       total_ntcs: 0,
-      min_case_count: 0,
+      min_control_count: 0,
       kingdom_breakdown: [],
       read_counts: [],
       recurring_taxa: [],

@@ -5,6 +5,7 @@ import { Group } from "@visx/group";
 import type { NtcReadCountPoint } from "../../api/types";
 import { CHART_MARGIN, useDateScale, usePointerTooltip } from "./chartUtils";
 import ChartAxes from "./ChartAxes";
+import CaseList from "./CaseList";
 
 interface ReadCountChartProps {
   data: NtcReadCountPoint[];
@@ -91,7 +92,7 @@ export default function ReadCountChart({
           style={{ left: tooltip.x + 12, top: tooltip.y - 10 }}
         >
           <div className="font-medium">{tooltip.data.sample_id}</div>
-          <div className="text-gray-400">{tooltip.data.case_id}</div>
+          <CaseList caseIds={tooltip.data.case_ids} />
           <div>
             {tooltip.data.classified_reads.toLocaleString()}{" "}
             {isFraction ? "processed reads" : "classified reads"}

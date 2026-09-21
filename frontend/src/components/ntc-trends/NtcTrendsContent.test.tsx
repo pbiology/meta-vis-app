@@ -19,7 +19,7 @@ describe("NtcTrendsContent", () => {
       http.get(`${API}/ntc/trends`, () =>
         HttpResponse.json({
           total_ntcs: 4,
-          min_case_count: 2,
+          min_control_count: 2,
           read_counts: [],
           kingdom_breakdown: [],
           recurring_taxa: [],
