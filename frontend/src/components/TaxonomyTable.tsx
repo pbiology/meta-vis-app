@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { useAppConfig } from "../context/ConfigContext";
 import KingdomBadge from "./KingdomBadge";
 import { fmt, fmtPct } from "../utils/format";
+import { readTotals } from "../utils/readTotals";
 import type { SampleProfile, SampleProfileEntry } from "../api/types";
 
 const SESSION_KEY = "taxonomy-filters";
@@ -159,22 +160,11 @@ export default function TaxonomyTable({
   }
 
   const allEntries = profile?.profile ?? [];
-  const hostReads = allEntries.find((t) => t.taxon_id === 9606)?.abundance ?? 0;
-  const unclassReads = allEntries.find((t) => t.taxon_id === 0)?.abundance ?? 0;
-  const rootReads = allEntries.find((t) => t.taxon_id === 1)?.abundance ?? 0;
-  const classifiedReads = clfQc?.classified_reads ?? rootReads;
-  const totalReads = unclassReads + classifiedReads;
-  const nonHostTotal =
-    classifiedReads > 0
-      ? classifiedReads - hostReads
-      : allEntries
-          .filter(
-            (t) =>
-              !hostTaxonIds.has(t.taxon_id) &&
-              t.name !== "unclassified" &&
-              !t.name?.startsWith("unclassified ")
-          )
-          .reduce((sum, t) => sum + t.abundance, 0);
+  const {
+    classified: classifiedReads,
+    nonHost: nonHostTotal,
+    hostExceedsClassified,
+  } = readTotals(allEntries, clfQc);
 
   const ntcForClassifier = ntcProfiles.map((ntc) => ({
     sample_id: ntc.sample_id,
@@ -296,14 +286,26 @@ export default function TaxonomyTable({
         <span className="flex-1" />
         {kingdoms.map((k) => kingdomCounts[k] > 0 && <KingdomBadge key={k} kingdom={k} />)}
       </div>
+      {hostExceedsClassified && (
+        <p role="alert" className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+          Host reads exceed the classified total for {profile.classifier}. The QC metrics and the
+          profile disagree, so the read counts and percentages below are unreliable.
+        </p>
+      )}
       <div className="grid grid-cols-4 gap-2">
         <div className="bg-gray-50 rounded-lg px-3 py-2">
           <p className="text-xs text-gray-400 mb-0.5">Total classified</p>
-          <p className="text-sm font-medium text-gray-700">{fmt(totalReads - unclassReads)}</p>
+          {/* Relative-abundance profiles (TRANA/Emu) carry fractions, not read
+              counts, so there is no number to show here. */}
+          <p className="text-sm font-medium text-gray-700">
+            {abundanceIsFraction ? "—" : fmt(classifiedReads)}
+          </p>
         </div>
         <div className="bg-gray-50 rounded-lg px-3 py-2">
           <p className="text-xs text-gray-400 mb-0.5">Non-host reads</p>
-          <p className="text-sm font-medium text-gray-700">{fmt(nonHostTotal)}</p>
+          <p className="text-sm font-medium text-gray-700">
+            {abundanceIsFraction ? "—" : fmt(nonHostTotal)}
+          </p>
         </div>
         <div className="bg-gray-50 rounded-lg px-3 py-2">
           <p className="text-xs text-gray-400 mb-0.5">Organisms shown</p>
