@@ -10,6 +10,7 @@ on the first, so the common path stays short while any run stays addressable.
 Case identity and the note thread live in ``app.routers.cases``.
 """
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -27,7 +28,9 @@ from app.config import settings
 from app.constants import HOST_TAXON_IDS
 from app.database import get_client, get_db, maybe_transaction
 from app.sample_read_deltas import attach_read_deltas, read_count
-from app.taxonomy_utils import host_pct_for, non_host_total
+from app.taxonomy_utils import read_totals
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/cases", tags=["analyses"])
 
@@ -55,8 +58,10 @@ def _serialise_sample(doc: dict) -> dict:
     return doc
 
 
-def _top_taxa_for(entries: list, clf_qc: Optional[dict] = None, n: int = 3) -> list:
-    total = non_host_total(entries, clf_qc)
+def _top_taxa_for(entries: list, total: float, n: int = 3) -> list:
+    # Entries named "unclassified <taxon>" are dropped from the list — a hit
+    # that vague is not a finding — but they stay in `total`, which counts
+    # every placed read. See app/taxonomy_utils.py.
     non_host_entries = [
         e
         for e in entries
@@ -76,12 +81,9 @@ def _top_taxa_for(entries: list, clf_qc: Optional[dict] = None, n: int = 3) -> l
     ]
 
 
-def _spike_in_for(
-    entries: list, spike_in_ids: set, clf_qc: Optional[dict] = None
-) -> list:
+def _spike_in_for(entries: list, spike_in_ids: set, total: float) -> list:
     if not spike_in_ids:
         return []
-    total = non_host_total(entries, clf_qc)
     return [
         {
             "name": e["name"],
@@ -131,9 +133,19 @@ async def list_samples_for_analysis(
             clf = p.get("classifier", "unknown")
             entries = p.get("profile", [])
             clf_qc = doc.get("taxprofiler", {}).get("classifiers", {}).get(clf)
-            top_taxa_by_clf[clf] = _top_taxa_for(entries, clf_qc)
-            spike_in_by_clf[clf] = _spike_in_for(entries, spike_in_ids, clf_qc)
-            host_pct_by_clf[clf] = host_pct_for(entries, clf_qc)
+            # One pass per profile: both percentages share the denominator.
+            totals = read_totals(entries, clf_qc)
+            if totals.host_exceeds_classified:
+                logger.warning(
+                    "Host reads exceed the classified total for sample %s "
+                    "(%s): the QC metrics and the profile disagree, so read "
+                    "percentages for this sample are unreliable.",
+                    doc.get("sample_id"),
+                    clf,
+                )
+            top_taxa_by_clf[clf] = _top_taxa_for(entries, totals.non_host)
+            spike_in_by_clf[clf] = _spike_in_for(entries, spike_in_ids, totals.non_host)
+            host_pct_by_clf[clf] = totals.host_pct
         doc["top_taxa"] = top_taxa_by_clf
         doc["spike_in_taxa"] = spike_in_by_clf
         doc["host_pct"] = host_pct_by_clf

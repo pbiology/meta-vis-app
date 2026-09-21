@@ -10,6 +10,12 @@
 #   9606     — Homo sapiens
 HOST_TAXON_IDS: frozenset[int] = frozenset({0, 1, 131567, 9606})
 
+# Individual IDs from that set, for the read-count maths in taxonomy_utils:
+# unclassified is the only entry that is not a placed read, and Homo sapiens
+# is the only one that is a real organism.
+TAXON_ID_UNCLASSIFIED: int = 0
+TAXON_ID_HUMAN: int = 9606
+
 # Contaminant flagging: a sample taxon is flagged as a potential contaminant
 # when the sum of its reads across the case's NTCs (same nucleic acid, same
 # classifier) exceeds this threshold, AND the taxon's rank is in the

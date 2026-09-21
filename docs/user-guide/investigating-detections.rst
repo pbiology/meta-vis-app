@@ -38,6 +38,42 @@ the full taxonomy lineage, NCBI taxon id, clinical notes (if curated),
 the metaval verification status, and the BV-BRC enrichments described
 below.
 
+Reads and percentages
+---------------------
+
+Classifier counts are **direct**: reads assigned to exactly that taxon,
+never to it plus everything below it. The ``root`` row is therefore only
+the reads that could not be placed any deeper — it is not a total for
+the sample, and rows must not be added up.
+
+Two figures sit above the table:
+
+**Total classified**
+   Every read the classifier placed on some taxon. Taken from the run's
+   QC metrics when they carry it, otherwise summed from the profile.
+
+**Non-host reads**
+   The same total minus the reads assigned to *Homo sapiens*. This is
+   the denominator behind every **%abundance** in the table, so a
+   percentage tells you an organism's share of the non-host material.
+
+Host reads that a classifier stopped at a parent taxon — *Homo*,
+*Hominidae* — cannot be told apart from genuine signal without a
+lineage, so they are not subtracted. In practice Kraken2 assigns human
+reads to *Homo sapiens* itself, and the difference is negligible.
+
+TRANA/Emu profiles carry relative abundances rather than read counts, so
+both figures show ``—``.
+
+.. note::
+
+   An amber banner above the table means the QC metrics report fewer
+   classified reads than the profile assigns to host alone. The two
+   disagree about what was sequenced, so the counts and percentages for
+   that classifier are unreliable — check the run's QC output before
+   reading anything into them, and re-ingest if the bundle was
+   incomplete.
+
 Related taxa in sample and controls
 ===================================
 

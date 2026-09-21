@@ -213,7 +213,7 @@ class TestNtcReadCounts:
         assert counts[0]["sample_id"] == "NTC-1"
         assert counts[0]["case_id"] == "case-1"
 
-    async def test_classified_reads_fallback_to_root_node_in_profile(self, fake_db):
+    async def test_classified_reads_fallback_sums_the_profile(self, fake_db):
         profile = [
             make_taxon(1, "root", 300),
             make_taxon(1743, "Cutibacterium acnes", 25),
@@ -224,7 +224,25 @@ class TestNtcReadCounts:
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
         counts = resp.json()["read_counts"]
-        assert counts[0]["classified_reads"] == 300
+        # Every placed read, not root's 300 — taxpasta counts are direct.
+        assert counts[0]["classified_reads"] == 325
+
+    async def test_classified_reads_fallback_excludes_unclassified(self, fake_db):
+        # A host-heavy profile of the shape Kraken2 actually produces: root is
+        # a fraction of the total, so reporting it under-counted the control.
+        profile = [
+            make_taxon(0, "unclassified", 1000),
+            make_taxon(1, "root", 300),
+            make_taxon(9606, "Homo sapiens", 8000, superkingdom="Eukaryota"),
+            make_taxon(1743, "Cutibacterium acnes", 25),
+        ]
+        await fake_db["samples"].insert_one(
+            make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, profile=profile)
+        )
+        app = make_app(fake_db)
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
+        counts = resp.json()["read_counts"]
+        assert counts[0]["classified_reads"] == 8325
 
     async def test_classified_reads_null_when_no_qc_and_no_profile(self, fake_db):
         await fake_db["samples"].insert_one(
