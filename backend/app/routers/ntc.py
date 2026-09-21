@@ -13,7 +13,7 @@ from app.cache import get_cache_version, bump_cache_version
 from app.database import get_db
 from app.db_utils import fetch_capped
 from app.auth.utils import get_current_user, require_role
-from app.constants import HOST_TAXON_IDS
+from app.constants import HOST_TAXON_IDS, TAXON_ID_UNCLASSIFIED
 
 router = APIRouter(prefix="/ntc", tags=["ntc"])
 
@@ -565,9 +565,11 @@ async def _compute_ntc_trends(
     ]
 
     # Run read_counts query and both aggregations in parallel.
-    # For taxprofiler, a root-node aggregation (taxon_id == 1) provides a fallback
-    # for samples whose QC data doesn't carry classified_reads directly.
-    # For trana, reads come from nanoplot_processed; no root fallback needed.
+    # For taxprofiler, summing the profile provides a fallback for samples whose
+    # QC data doesn't carry classified_reads directly. Taxpasta counts are
+    # direct, so the root node is only the reads that could not be placed deeper
+    # and is not the classified total — see app/taxonomy_utils.py.
+    # For trana, reads come from nanoplot_processed; no profile fallback needed.
     rc_projection: dict = {"sample_id": 1, "case_id": 1, "order_date": 1}
     if pipeline == "trana":
         rc_projection["trana.nanoplot_processed.number_of_reads"] = 1
@@ -582,28 +584,33 @@ async def _compute_ntc_trends(
             db["samples"].aggregate(kb_pipeline).to_list(None),
             db["samples"].aggregate(rt_pipeline).to_list(None),
         )
-        root_by_sample: dict[str, int] = {}
+        profile_total_by_sample: dict[str, int] = {}
     else:
-        root_agg_pipeline: list[dict] = [
+        # Every placed read: the whole profile except unclassified. The
+        # ignorelist deliberately plays no part — this is what the classifier
+        # produced, not the filtered view shown in the trends below.
+        profile_total_pipeline: list[dict] = [
             {"$match": base_query},
             {"$unwind": "$profiles"},
             {"$match": {"profiles.classifier": "kraken2"}},
             {"$unwind": "$profiles.profile"},
-            {"$match": {"profiles.profile.taxon_id": 1}},
+            {"$match": {"profiles.profile.taxon_id": {"$ne": TAXON_ID_UNCLASSIFIED}}},
             {
                 "$group": {
                     "_id": "$sample_id",
-                    "root_abundance": {"$first": "$profiles.profile.abundance"},
+                    "profile_total": {"$sum": "$profiles.profile.abundance"},
                 }
             },
         ]
-        rc_docs, kb_docs, rt_docs, root_docs = await asyncio.gather(
+        rc_docs, kb_docs, rt_docs, profile_total_docs = await asyncio.gather(
             rc_cursor.to_list(None),
             db["samples"].aggregate(kb_pipeline).to_list(None),
             db["samples"].aggregate(rt_pipeline).to_list(None),
-            db["samples"].aggregate(root_agg_pipeline).to_list(None),
+            db["samples"].aggregate(profile_total_pipeline).to_list(None),
         )
-        root_by_sample = {doc["_id"]: doc["root_abundance"] for doc in root_docs}
+        profile_total_by_sample = {
+            doc["_id"]: doc["profile_total"] for doc in profile_total_docs
+        }
 
     # --- Assemble read_counts ---
     read_counts: list[dict] = []
@@ -622,7 +629,7 @@ async def _compute_ntc_trends(
                 .get("classified_reads")
             )
             if classified is None:
-                classified = root_by_sample.get(doc["sample_id"])
+                classified = profile_total_by_sample.get(doc["sample_id"])
         read_counts.append(
             {
                 "sample_id": doc["sample_id"],

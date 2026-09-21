@@ -139,6 +139,21 @@ Below, a tabbed view:
    include read counts, unclassified %, host removal %, species count,
    genera count, top taxa.
 
+   **Host** is the share of everything the classifier processed —
+   classified plus unclassified reads — that landed on *Homo sapiens*.
+   The percentages beside **Top taxa** use a different denominator: the
+   non-host classified reads, matching the taxonomy table. See
+   :doc:`investigating-detections`.
+
+   .. note::
+
+      The **Host** figure was previously divided by host plus
+      unclassified reads, which left out the rest of the run and
+      overstated host content, often by a wide margin. It now divides by
+      all processed reads, so the column reads lower than it used to for
+      the same data. Figures quoted in reports written before this
+      change do not compare like for like.
+
 **Krona**
    Interactive Krona plot, per classifier. Useful for a quick visual
    sense of what dominates each sample.
