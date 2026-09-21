@@ -329,14 +329,14 @@ class TestSampleOrderDate:
         assert TaxprofilerSampleIngestRequest(**self._taxprofiler()).order_date is None
 
     def test_clinical_sample_may_not_carry_its_own_order_date(self):
+        payload = self._taxprofiler(
+            sample_type="sample",
+            subject_id="26CE100005",
+            order_date="2026-03-05",
+        )
+
         with pytest.raises(ValidationError, match="must not set order_date"):
-            TaxprofilerSampleIngestRequest(
-                **self._taxprofiler(
-                    sample_type="sample",
-                    subject_id="26CE100005",
-                    order_date="2026-03-05",
-                )
-            )
+            TaxprofilerSampleIngestRequest(**payload)
 
     def test_clinical_sample_without_a_date_is_accepted(self):
         req = TaxprofilerSampleIngestRequest(
@@ -351,11 +351,11 @@ class TestSampleOrderDate:
         assert req.order_date == date(2026, 3, 5)
 
     def test_trana_clinical_sample_may_not_carry_its_own_order_date(self):
+        payload = self._trana(
+            sample_type="sample",
+            subject_id="1234567890AB",
+            order_date="2026-03-05",
+        )
+
         with pytest.raises(ValidationError, match="must not set order_date"):
-            TranaSampleIngestRequest(
-                **self._trana(
-                    sample_type="sample",
-                    subject_id="1234567890AB",
-                    order_date="2026-03-05",
-                )
-            )
+            TranaSampleIngestRequest(**payload)

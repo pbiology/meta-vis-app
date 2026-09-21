@@ -27,6 +27,17 @@ from app.ntc_controls import (
 
 logger = logging.getLogger(__name__)
 
+# One copy of a control. The same control reaches the database once per case
+# in its run, so this pair — not sample_id alone — identifies a single
+# document, and every per-copy aggregation groups on it. Always spread into a
+# new dict (`{**_CONTROL_COPY_KEY, ...}`) so no pipeline can mutate it.
+_CONTROL_COPY_KEY: dict = {"sample_id": "$sample_id", "case_id": "$case_id"}
+# The same pair re-projected out of a previous $group's key.
+_CONTROL_COPY_KEY_FROM_ID: dict = {
+    "sample_id": "$_id.sample_id",
+    "case_id": "$_id.case_id",
+}
+
 router = APIRouter(prefix="/ntc", tags=["ntc"])
 
 # ---------------------------------------------------------------------------
@@ -692,8 +703,7 @@ async def _compute_ntc_trends(
         {
             "$group": {
                 "_id": {
-                    "sample_id": "$sample_id",
-                    "case_id": "$case_id",
+                    **_CONTROL_COPY_KEY,
                     "order_date": "$order_date",
                     "sk": "$profiles.profile.superkingdom",
                 },
@@ -703,8 +713,7 @@ async def _compute_ntc_trends(
         {
             "$group": {
                 "_id": {
-                    "sample_id": "$_id.sample_id",
-                    "case_id": "$_id.case_id",
+                    **_CONTROL_COPY_KEY_FROM_ID,
                     "order_date": "$_id.order_date",
                 },
                 "kingdoms": {"$push": {"k": "$_id.sk", "v": "$reads"}},
@@ -722,8 +731,7 @@ async def _compute_ntc_trends(
             "$group": {
                 "_id": {
                     "taxon_id": "$profiles.profile.taxon_id",
-                    "sample_id": "$sample_id",
-                    "case_id": "$case_id",
+                    **_CONTROL_COPY_KEY,
                 },
                 "taxon_name": {"$first": "$profiles.profile.name"},
                 "superkingdom": {"$first": "$profiles.profile.superkingdom"},
@@ -745,8 +753,7 @@ async def _compute_ntc_trends(
                 "distinct_controls": {"$addToSet": "$_id.sample_id"},
                 "occurrences": {
                     "$push": {
-                        "case_id": "$_id.case_id",
-                        "sample_id": "$_id.sample_id",
+                        **_CONTROL_COPY_KEY_FROM_ID,
                         "abundance": "$abundance",
                     }
                 },
@@ -786,7 +793,7 @@ async def _compute_ntc_trends(
             {"$match": {"profiles.profile.taxon_id": {"$ne": TAXON_ID_UNCLASSIFIED}}},
             {
                 "$group": {
-                    "_id": {"sample_id": "$sample_id", "case_id": "$case_id"},
+                    "_id": {**_CONTROL_COPY_KEY},
                     "profile_total": {"$sum": "$profiles.profile.abundance"},
                 }
             },
