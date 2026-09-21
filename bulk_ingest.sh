@@ -23,6 +23,15 @@
 # sequenced three times (one subdirectory per run date) — so each analysis
 # carries genuinely different profiles and QC, not a replayed bundle.
 #
+# Every analysis of such a case is ingested with the SAME --order-date: a case
+# is ordered once, and re-sequencing it does not re-order it. The analyses are
+# told apart by their version and ingest date, which the UI shows per analysis.
+#
+# Negative controls declare their own order_date= on --sample. One physical
+# control is sequenced alongside every case in its run, so it appears once per
+# case with the same sample_id; a control that inherited each case's order date
+# instead would show up as one control scattered across the whole window.
+#
 # --reingest N creates N such cases, independent of the taxprofiler count.
 # It cannot append to the cases the taxprofiler pass creates: those are
 # subject 26CE100005 (slowowl) and fullcamel is a different patient, which the
@@ -40,6 +49,8 @@
 # --ntc N ingests N negative-control-only cases whose kraken2 profiles carry
 # planted recurring contaminants, which is what the NTC trends page looks for.
 # Fixtures are generated on demand by backend/test-data/generate_ntc_test_data.py.
+# Each of those cases has a control of its own rather than sharing one, so the
+# case's order date already is the control's and no order_date= is needed.
 #
 # Prerequisites (cg env):
 #   KEYCLOAK_CLIENT_SECRET is read from .env in the repo root automatically.
@@ -310,52 +321,26 @@ random_date() {
   return
 }
 
-# As random_date, but leaves $1 days of room before the end of the window. A
-# re-sequenced case dates its later analyses forward from this base, so without
-# the headroom the newest analysis can land after today.
-random_date_with_headroom() {
-  # Declared separately: bash creates every name in a `local` list before
-  # assigning any of them, so referencing headroom on the same line trips
-  # `set -u` and the function silently produces nothing.
-  local headroom="$1"
-  local span=$(( range_days - headroom ))
-  if (( span < 0 )); then
-    # The cadence is longer than the window, so no base inside the window can
-    # hold it. Anchor the newest analysis on today and let the earlier ones
-    # predate the window — clamping span here instead would still add the full
-    # headroom onto START_DATE and date the newest analysis in the future.
-    date -j -r $(( end_epoch - headroom * 86400 )) "+%Y-%m-%d"
-    return
-  fi
-  local offset=$(( RANDOM % (span + 1) ))
-  date -j -r $(( start_epoch + offset * 86400 )) "+%Y-%m-%d"
+# Order date for one of the shared negative controls, $1 days before today.
+#
+# A control is prepared once and sequenced alongside every case in its run, so
+# its order date belongs to the control and every case that carries it must
+# report the same one — that is what makes the NTC trends page able to collapse
+# a control's copies into a single point. Offsets are fixed rather than drawn
+# from random_date so the page looks the same across re-runs of this script.
+control_order_date() {
+  local offset_days="$1"
+  date -j -r $(( end_epoch - offset_days * 86400 )) "+%Y-%m-%d"
   return
 }
 
-# Later order date for a re-sequencing, so version order is visible in the UI.
-date_plus_days() {
-  local base="$1" days="$2" base_epoch
-  # Guarded because an empty or malformed base silently yielded 1970-01-01,
-  # which reads as a plausible order date rather than as a failure.
-  if ! base_epoch=$(date -j -f "%Y-%m-%d" "$base" "+%s" 2>/dev/null); then
-    echo "Error: date_plus_days got an invalid base date: '$base'" >&2
-    return 1
-  fi
-  date -j -r $(( base_epoch + days * 86400 )) "+%Y-%m-%d"
-  return
-}
-
-# Whole days from $1 to $2 (both YYYY-MM-DD). Used to carry the real spacing
-# between fullcamel run directories onto a freshly picked base date, so the
-# re-sequencing cadence stays authentic without pinning the order dates to
-# 2026 — see the WINDOW_DAYS note above for why pinned dates are a trap.
-days_between() {
-  local from="$1" to="$2" from_epoch to_epoch
-  from_epoch=$(date -j -f "%Y-%m-%d" "$from" "+%s")
-  to_epoch=$(date -j -f "%Y-%m-%d" "$to" "+%s")
-  echo $(( (to_epoch - from_epoch) / 86400 ))
-  return
-}
+# The three datasets' controls, spread across the window so the trends charts
+# have a time axis. Each case's own order date is still drawn at random and is
+# unrelated to these: the cases a run holds were ordered independently of the
+# control that run was sequenced with.
+SLOWOWL_NTC_DATE=$(control_order_date $(( range_days * 3 / 4 )))
+FULLCAMEL_NTC_DATE=$(control_order_date $(( range_days / 2 )))
+TRANA_NTC_DATE=$(control_order_date $(( range_days / 4 )))
 
 ms() { python3 -c "import time; print(int(time.time()*1000))"; return; }
 
@@ -384,8 +369,8 @@ ingest_taxprofiler_case() {
     --classifier "diamond db=diamond taxpasta=$TD/taxprofiler/taxpasta/diamond_diamond.tsv" \
     --sample "sample_id=26CE100005-DNA subject_id=26CE100005 type=sample nucleic_acid=DNA column_kraken2=26CE100005-DNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=26CE100005-DNA_p_compressed+h+v.centrifuge column_diamond=26CE100005-DNA_diamond.diamond" \
     --sample "sample_id=26CE100005-RNA subject_id=26CE100005 type=sample nucleic_acid=RNA column_kraken2=26CE100005-RNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=26CE100005-RNA_p_compressed+h+v.centrifuge column_diamond=26CE100005-RNA_diamond.diamond" \
-    --sample "sample_id=NTC-260305-DNA type=negative_ctrl nucleic_acid=DNA column_kraken2=NTC-260305-DNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=NTC-260305-DNA_p_compressed+h+v.centrifuge column_diamond=NTC-260305-DNA_diamond.diamond" \
-    --sample "sample_id=NTC-260305-RNA type=negative_ctrl nucleic_acid=RNA column_kraken2=NTC-260305-RNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=NTC-260305-RNA_p_compressed+h+v.centrifuge column_diamond=NTC-260305-RNA_diamond.diamond" \
+    --sample "sample_id=NTC-260305-DNA type=negative_ctrl nucleic_acid=DNA order_date=$SLOWOWL_NTC_DATE column_kraken2=NTC-260305-DNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=NTC-260305-DNA_p_compressed+h+v.centrifuge column_diamond=NTC-260305-DNA_diamond.diamond" \
+    --sample "sample_id=NTC-260305-RNA type=negative_ctrl nucleic_acid=RNA order_date=$SLOWOWL_NTC_DATE column_kraken2=NTC-260305-RNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=NTC-260305-RNA_p_compressed+h+v.centrifuge column_diamond=NTC-260305-RNA_diamond.diamond" \
     --metaval "$TD/metaval" \
     --yes \
     --url "$URL" \
@@ -425,8 +410,8 @@ ingest_fullcamel_run() {
     --classifier "centrifuge db=p_compressed+h+v taxpasta=$run_dir/centrifuge_p_compressed+h+v.tsv krona=$run_dir/centrifuge_p_compressed+h+v.html" \
     --sample "sample_id=26CE500026-DNA subject_id=26CE500026 type=sample nucleic_acid=DNA column_kraken2=26CE500026-DNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=26CE500026-DNA_p_compressed+h+v.centrifuge" \
     --sample "sample_id=26CE500026-RNA subject_id=26CE500026 type=sample nucleic_acid=RNA column_kraken2=26CE500026-RNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=26CE500026-RNA_p_compressed+h+v.centrifuge" \
-    --sample "sample_id=NTC260707-DNA type=negative_ctrl nucleic_acid=DNA column_kraken2=NTC260707-DNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=NTC260707-DNA_p_compressed+h+v.centrifuge" \
-    --sample "sample_id=NTC260707-RNA type=negative_ctrl nucleic_acid=RNA column_kraken2=NTC260707-RNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=NTC260707-RNA_p_compressed+h+v.centrifuge" \
+    --sample "sample_id=NTC260707-DNA type=negative_ctrl nucleic_acid=DNA order_date=$FULLCAMEL_NTC_DATE column_kraken2=NTC260707-DNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=NTC260707-DNA_p_compressed+h+v.centrifuge" \
+    --sample "sample_id=NTC260707-RNA type=negative_ctrl nucleic_acid=RNA order_date=$FULLCAMEL_NTC_DATE column_kraken2=NTC260707-RNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=NTC260707-RNA_p_compressed+h+v.centrifuge" \
     --yes \
     --url "$URL" \
     "${KC_ARGS[@]}" 2>&1
@@ -489,7 +474,7 @@ if [[ "$TRANA_COUNT" -gt 0 ]]; then
       --analysis-type     "amplicon" \
       --sequencing-platform "nanopore" \
       --sample "sample_id=1234567890AB subject_id=1234567890AB type=sample nucleic_acid=DNA abundance_path=$TD_TRANA/results/1234567890AB_downsampled.fastq_rel-abundance.tsv krona_path=$TD_TRANA/krona/1234567890AB_krona.html nanoplot_unprocessed_path=$TD_TRANA/nanoplot_unprocessed/1234567890AB_nanoplot_unprocessed_NanoStats.txt nanoplot_processed_path=$TD_TRANA/nanoplot_processed/1234567890AB_nanoplot_processed_NanoStats.txt" \
-      --sample "sample_id=16SNEGABC123 type=negative_ctrl nucleic_acid=DNA abundance_path=$TD_TRANA/results/16SNEGABC123_downsampled.fastq_rel-abundance.tsv krona_path=$TD_TRANA/krona/16SNEGABC123_krona.html nanoplot_unprocessed_path=$TD_TRANA/nanoplot_unprocessed/16SNEGABC123_nanoplot_unprocessed_NanoStats.txt nanoplot_processed_path=$TD_TRANA/nanoplot_processed/16SNEGABC123_nanoplot_processed_NanoStats.txt" \
+      --sample "sample_id=16SNEGABC123 type=negative_ctrl nucleic_acid=DNA order_date=$TRANA_NTC_DATE abundance_path=$TD_TRANA/results/16SNEGABC123_downsampled.fastq_rel-abundance.tsv krona_path=$TD_TRANA/krona/16SNEGABC123_krona.html nanoplot_unprocessed_path=$TD_TRANA/nanoplot_unprocessed/16SNEGABC123_nanoplot_unprocessed_NanoStats.txt nanoplot_processed_path=$TD_TRANA/nanoplot_processed/16SNEGABC123_nanoplot_processed_NanoStats.txt" \
       --yes \
       --url "$URL" \
       "${KC_ARGS[@]}" 2>&1) && rc=0 || rc=$?
@@ -623,33 +608,6 @@ if [[ "$REINGEST" -gt 0 ]]; then
       depth="$max_depth"
     fi
 
-    # Day offsets of each run from the first, taken from the directory names,
-    # so a case's analyses keep the dataset's real sequencing cadence. Computed
-    # once — they are the same for every case. Directories that are not named
-    # YYYY-MM-DD fall back to weekly spacing rather than failing the run.
-    run_offsets=()
-    first_run_date="$(basename "${FULLCAMEL_RUNS[0]}")"
-    for (( r = 0; r <= depth; r++ )); do
-      run_date="$(basename "${FULLCAMEL_RUNS[$r]}")"
-      if [[ "$first_run_date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ && "$run_date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
-        run_offsets+=("$(days_between "$first_run_date" "$run_date")")
-      else
-        run_offsets+=("$(( r * 7 ))")
-      fi
-    done
-
-    # When the cadence does not fit inside the window,
-    # random_date_with_headroom anchors the newest analysis on today and the
-    # earlier ones fall outside it. Harmless for the analytics pages — they
-    # restrict to the latest analysis — but say so rather than let the dates
-    # look arbitrary.
-    total_span="${run_offsets[$depth]}"
-    if (( total_span > range_days )); then
-      echo "Note: the run directories span $total_span days, more than WINDOW_DAYS=$WINDOW_DAYS."
-      echo "      Earlier analyses will predate the window; the newest lands on today."
-      echo ""
-    fi
-
     total_ingests=$(( REINGEST * (depth + 1) ))
     echo "Re-sequencing $REINGEST case(s), $((depth + 1)) analysis(es) each ($total_ingests ingest(s))..."
     echo ""
@@ -658,26 +616,29 @@ if [[ "$REINGEST" -gt 0 ]]; then
 
     for (( c = 1; c <= REINGEST; c++ )); do
       case_id=$(generate_case_id)
-      base_date=$(random_date_with_headroom "${run_offsets[$depth]}")
+      # One order date for every analysis of the case: a case is ordered once,
+      # and re-sequencing it does not re-order it. What distinguishes the
+      # analyses is their ingest date and version, which the UI shows per
+      # analysis.
+      base_date=$(random_date)
       case_analyses=0
 
       for (( r = 0; r <= depth; r++ )); do
         run_dir="${FULLCAMEL_RUNS[$r]}"
-        order_date=$(date_plus_days "$base_date" "${run_offsets[$r]}")
         version=$(( r + 1 ))
         t0=$(ms)
 
-        output=$(ingest_fullcamel_run "$case_id" "$run_dir" "$order_date") && rc=0 || rc=$?
+        output=$(ingest_fullcamel_run "$case_id" "$run_dir" "$base_date") && rc=0 || rc=$?
 
         elapsed=$(( $(ms) - t0 ))
 
         if [[ $rc -eq 0 ]]; then
           r_success=$(( r_success + 1 ))
           case_analyses=$(( case_analyses + 1 ))
-          echo "  [reingest $c/$REINGEST] $case_id v$version — $order_date — $(basename "$run_dir") — ${elapsed}ms (ok: $r_success, failed: $r_fail)"
+          echo "  [reingest $c/$REINGEST] $case_id v$version — $base_date — $(basename "$run_dir") — ${elapsed}ms (ok: $r_success, failed: $r_fail)"
         else
           r_fail=$(( r_fail + 1 ))
-          echo "  [reingest $c/$REINGEST] $case_id v$version — $order_date — $(basename "$run_dir") — ${elapsed}ms FAILED (ok: $r_success, failed: $r_fail)"
+          echo "  [reingest $c/$REINGEST] $case_id v$version — $base_date — $(basename "$run_dir") — ${elapsed}ms FAILED (ok: $r_success, failed: $r_fail)"
           echo "$output" | sed 's/^/    /'
           # Stop this case here. A later run would still be accepted and would
           # silently take the failed run's version number, so the case would

@@ -31,7 +31,7 @@ export default function NtcTrendsContent() {
   const [windowDays, setWindowDays] = useState(90);
   const [minReads, setMinReads] = useState(3);
   const [minAbundance, setMinAbundance] = useState(0.001);
-  const [minCasePct, setMinCasePct] = useState(10);
+  const [minControlPct, setMinControlPct] = useState(10);
 
   // If the user's preferences change such that the active pipeline becomes
   // unavailable, switch to the first available one. Without this, the page
@@ -47,7 +47,7 @@ export default function NtcTrendsContent() {
     nucleicAcid: isTrana ? "DNA" : nucleicAcid,
     windowDays,
     minReads: isTrana ? minAbundance : minReads,
-    minCasePct: minCasePct / 100,
+    minControlPct: minControlPct / 100,
     pipeline,
   });
   const alertsQ = useNtcContaminantAlerts();
@@ -67,14 +67,14 @@ export default function NtcTrendsContent() {
         windowDays={windowDays}
         minReads={minReads}
         minAbundance={minAbundance}
-        minCasePct={minCasePct}
+        minControlPct={minControlPct}
         availablePipelines={availablePipelines}
         onNucleicAcidChange={setNucleicAcid}
         onPipelineChange={setPipeline}
         onWindowDaysChange={setWindowDays}
         onMinReadsChange={setMinReads}
         onMinAbundanceChange={setMinAbundance}
-        onMinCasePctChange={setMinCasePct}
+        onMinControlPctChange={setMinControlPct}
       />
 
       <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-6">
@@ -134,14 +134,14 @@ export default function NtcTrendsContent() {
               <div className="flex items-center justify-between mb-1">
                 <h2 className="text-xs font-medium text-gray-600">Recurring taxa</h2>
                 <span className="text-xs text-gray-400">
-                  ≥ {minCasePct}% of cases ·{" "}
+                  ≥ {minControlPct}% of NTCs ·{" "}
                   {isTrana
                     ? `> ${(minAbundance * 100).toFixed(1)}% abundance · emu`
                     : `> ${minReads} reads · kraken2`}
                 </span>
               </div>
               <p className="text-xs text-gray-400 mb-3">
-                Taxa present in ≥ {data.min_case_count} of {data.total_ntcs} NTCs in this window.
+                Taxa present in ≥ {data.min_control_count} of {data.total_ntcs} NTCs in this window.
               </p>
               {recurringWidth > 0 && (
                 <RecurringTaxaChart

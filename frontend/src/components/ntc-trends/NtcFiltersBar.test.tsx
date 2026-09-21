@@ -16,14 +16,14 @@ function renderBar(overrides: Partial<Parameters<typeof NtcFiltersBar>[0]> = {})
     windowDays: 90,
     minReads: 3,
     minAbundance: 0.001,
-    minCasePct: 10,
+    minControlPct: 10,
     availablePipelines: PIPELINES,
     onNucleicAcidChange: vi.fn(),
     onPipelineChange: vi.fn(),
     onWindowDaysChange: vi.fn(),
     onMinReadsChange: vi.fn(),
     onMinAbundanceChange: vi.fn(),
-    onMinCasePctChange: vi.fn(),
+    onMinControlPctChange: vi.fn(),
     ...overrides,
   };
   renderWithProviders(<NtcFiltersBar {...props} />);
@@ -50,14 +50,14 @@ describe("NtcFiltersBar", () => {
         windowDays={90}
         minReads={3}
         minAbundance={0.001}
-        minCasePct={10}
+        minControlPct={10}
         availablePipelines={PIPELINES}
         onNucleicAcidChange={vi.fn()}
         onPipelineChange={vi.fn()}
         onWindowDaysChange={vi.fn()}
         onMinReadsChange={vi.fn()}
         onMinAbundanceChange={vi.fn()}
-        onMinCasePctChange={vi.fn()}
+        onMinControlPctChange={vi.fn()}
       />
     );
     expect(screen.getByText(/min reads/i)).toBeInTheDocument();
@@ -68,14 +68,14 @@ describe("NtcFiltersBar", () => {
         windowDays={90}
         minReads={3}
         minAbundance={0.001}
-        minCasePct={10}
+        minControlPct={10}
         availablePipelines={PIPELINES}
         onNucleicAcidChange={vi.fn()}
         onPipelineChange={vi.fn()}
         onWindowDaysChange={vi.fn()}
         onMinReadsChange={vi.fn()}
         onMinAbundanceChange={vi.fn()}
-        onMinCasePctChange={vi.fn()}
+        onMinControlPctChange={vi.fn()}
       />
     );
     expect(screen.getByText(/min abundance/i)).toBeInTheDocument();

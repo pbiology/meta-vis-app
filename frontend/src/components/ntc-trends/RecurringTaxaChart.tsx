@@ -6,6 +6,7 @@ import { curveMonotoneX } from "@visx/curve";
 import type { NtcRecurringTaxon, NtcTaxonOccurrence } from "../../api/types";
 import { CHART_MARGIN, TAXON_COLOURS, useDateScale, usePointerTooltip } from "./chartUtils";
 import ChartAxes from "./ChartAxes";
+import CaseList from "./CaseList";
 
 type RecurringTooltipData = NtcTaxonOccurrence & {
   taxon_name: string;
@@ -81,7 +82,7 @@ export default function RecurringTaxaChart({
                 />
                 {taxon.occurrences.map((d) => (
                   <Circle
-                    key={`${d.order_date}-${d.case_id ?? ""}`}
+                    key={`${d.order_date}-${d.sample_id ?? ""}`}
                     cx={xScale(new Date(d.order_date))}
                     cy={yScale(d.abundance)}
                     r={3.5}
@@ -114,7 +115,7 @@ export default function RecurringTaxaChart({
             <span className="text-xs text-gray-500 italic">
               {taxon.taxon_name.replace(/-/g, " ")}
             </span>
-            <span className="text-xs text-gray-300">{taxon.case_count}×</span>
+            <span className="text-xs text-gray-300">{taxon.control_count}×</span>
           </div>
         ))}
       </div>
@@ -128,7 +129,8 @@ export default function RecurringTaxaChart({
             {tooltip.data.taxon_name.replace(/-/g, " ")}
           </div>
           <div className="text-gray-400">taxid:{tooltip.data.taxon_id}</div>
-          <div className="text-gray-400">{tooltip.data.case_id}</div>
+          <div className="font-medium">{tooltip.data.sample_id}</div>
+          <CaseList caseIds={tooltip.data.case_ids} />
           <div>
             {isFraction
               ? `${(tooltip.data.abundance * 100).toFixed(2)}% abundance`

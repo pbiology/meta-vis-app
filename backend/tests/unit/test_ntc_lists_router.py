@@ -25,8 +25,15 @@ from app.auth.utils import get_current_user, require_role
 
 
 @pytest.fixture(autouse=True)
-def clear_trends_cache():
+def clear_ntc_caches():
+    """Clear both NTC caches between tests.
+
+    Each test gets a fresh mongomock database, but the cache version those
+    databases report is identical, so a memoised result from the previous test
+    is served as if it were current.
+    """
     invalidate_ntc_trends_cache()
+    invalidate_contaminant_cache()
 
 
 @pytest.fixture
@@ -514,9 +521,6 @@ class TestNtcContaminantsDelete:
 
 
 class TestContaminantAlerts:
-    def setup_method(self):
-        invalidate_contaminant_cache()
-
     async def test_no_contaminants_returns_empty(self, fake_db):
         app = make_app(fake_db)
         resp = TestClient(app).get("/api/v1/ntc/contaminant-alerts")
@@ -777,7 +781,7 @@ class TestIgnorelistExclusionInTrends:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_control_pct=0.1"
         )
         taxon_ids = [t["taxon_id"] for t in resp.json()["recurring_taxa"]]
         assert 1743 not in taxon_ids
@@ -836,7 +840,7 @@ class TestIgnorelistExclusionInTrends:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_control_pct=0.1"
         )
         taxon_ids = [t["taxon_id"] for t in resp.json()["recurring_taxa"]]
         assert 329 in taxon_ids
@@ -857,7 +861,157 @@ class TestIgnorelistExclusionInTrends:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_control_pct=0.1"
         )
         taxon_ids = [t["taxon_id"] for t in resp.json()["recurring_taxa"]]
         assert 329 in taxon_ids
+
+
+# ---------------------------------------------------------------------------
+# Shared controls in contaminant alerts
+#
+# One contaminated control is sequenced alongside every case in its run, so it
+# reaches the alert as one hit per case. That is one detection affecting
+# several cases, not several detections.
+# ---------------------------------------------------------------------------
+
+
+class TestSharedControlAlerts:
+    async def _contaminant(self, fake_db, taxon_id: int = 329, min_reads: int = 3):
+        await fake_db["ntc_known_contaminants"].insert_one(
+            {
+                "taxon_id": taxon_id,
+                "taxon_name": "Ralstonia pickettii",
+                "superkingdom": "Bacteria",
+                "min_reads": min_reads,
+            }
+        )
+
+    async def _shared_control(self, fake_db, cases=("case-1", "case-2", "case-3")):
+        await fake_db["samples"].insert_many(
+            [
+                make_ntc_doc(
+                    "NTC-260305-DNA",
+                    case_id,
+                    DAY_1,
+                    profile=[make_taxon(329, "Ralstonia pickettii", 10)],
+                )
+                for case_id in cases
+            ]
+        )
+
+    async def test_one_control_in_three_cases_is_one_control(self, fake_db):
+        await self._contaminant(fake_db)
+        await self._shared_control(fake_db)
+        app = make_app(fake_db)
+
+        alert = (
+            TestClient(app).get("/api/v1/ntc/contaminant-alerts").json()["alerts"][0]
+        )
+
+        assert alert["control_count"] == 1
+
+    async def test_every_case_the_control_touched_is_still_affected(self, fake_db):
+        # The cases are what a clinician needs flagged: a contaminated control
+        # puts every result from its run in doubt.
+        await self._contaminant(fake_db)
+        await self._shared_control(fake_db)
+        app = make_app(fake_db)
+
+        body = TestClient(app).get("/api/v1/ntc/contaminant-alerts").json()
+
+        assert body["alerts"][0]["case_count"] == 3
+        assert sorted(body["contaminant_case_ids"]) == ["case-1", "case-2", "case-3"]
+
+    async def test_occurrences_collapse_to_one_per_control(self, fake_db):
+        await self._contaminant(fake_db)
+        await self._shared_control(fake_db)
+        app = make_app(fake_db)
+
+        alert = (
+            TestClient(app).get("/api/v1/ntc/contaminant-alerts").json()["alerts"][0]
+        )
+
+        assert len(alert["occurrences"]) == 1
+        occurrence = alert["occurrences"][0]
+        assert occurrence["sample_id"] == "NTC-260305-DNA"
+        assert occurrence["case_ids"] == ["case-1", "case-2", "case-3"]
+        assert occurrence["abundance"] == 10
+
+    async def test_occurrence_lists_only_the_cases_it_was_detected_in(self, fake_db):
+        # The third case's copy is below the threshold, so that case is not in
+        # doubt and must not be listed against the detection.
+        await self._contaminant(fake_db)
+        await fake_db["samples"].insert_many(
+            [
+                make_ntc_doc(
+                    "NTC-A",
+                    "case-hit",
+                    DAY_1,
+                    profile=[make_taxon(329, "Ralstonia pickettii", 10)],
+                ),
+                make_ntc_doc(
+                    "NTC-A",
+                    "case-miss",
+                    DAY_1,
+                    profile=[make_taxon(329, "Ralstonia pickettii", 1)],
+                ),
+            ]
+        )
+        app = make_app(fake_db)
+
+        alert = (
+            TestClient(app).get("/api/v1/ntc/contaminant-alerts").json()["alerts"][0]
+        )
+
+        assert alert["control_count"] == 1
+        assert alert["case_count"] == 1
+        assert alert["occurrences"][0]["case_ids"] == ["case-hit"]
+
+    async def test_systemic_contaminant_sorts_above_one_bad_run(self, fake_db):
+        # Taxon-A: two distinct controls, two cases. Taxon-B: one control
+        # spread over five cases. Sorting on cases alone put B first and made a
+        # single bad run look like the wider problem.
+        await fake_db["ntc_known_contaminants"].insert_many(
+            [
+                {
+                    "taxon_id": 329,
+                    "taxon_name": "Taxon-A",
+                    "superkingdom": "Bacteria",
+                    "min_reads": 3,
+                },
+                {
+                    "taxon_id": 1743,
+                    "taxon_name": "Taxon-B",
+                    "superkingdom": "Bacteria",
+                    "min_reads": 3,
+                },
+            ]
+        )
+        await fake_db["samples"].insert_many(
+            [
+                make_ntc_doc(
+                    "NTC-A", "case-1", DAY_1, profile=[make_taxon(329, "Taxon-A", 10)]
+                ),
+                make_ntc_doc(
+                    "NTC-B", "case-2", DAY_2, profile=[make_taxon(329, "Taxon-A", 10)]
+                ),
+            ]
+            + [
+                make_ntc_doc(
+                    "NTC-C",
+                    f"case-{i}",
+                    DAY_3,
+                    profile=[make_taxon(1743, "Taxon-B", 10)],
+                )
+                for i in range(3, 8)
+            ]
+        )
+        app = make_app(fake_db)
+
+        alerts = TestClient(app).get("/api/v1/ntc/contaminant-alerts").json()["alerts"]
+
+        assert [a["taxon_id"] for a in alerts] == [329, 1743]
+        assert alerts[0]["control_count"] == 2
+        assert alerts[1]["control_count"] == 1
+        assert alerts[1]["case_count"] == 5

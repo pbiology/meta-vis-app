@@ -10,7 +10,7 @@ export interface GetNtcTrendsParams {
   nucleicAcid: string;
   windowDays?: number;
   minReads?: number;
-  minCasePct?: number;
+  minControlPct?: number;
   pipeline?: string;
 }
 
@@ -18,7 +18,7 @@ export async function getNtcTrends({
   nucleicAcid,
   windowDays = 90,
   minReads = 3,
-  minCasePct = 0.1,
+  minControlPct = 0.1,
   pipeline = "taxprofiler",
 }: GetNtcTrendsParams): Promise<NtcTrendsResponse> {
   const res = await client.get<NtcTrendsResponse>("/ntc/trends", {
@@ -26,7 +26,7 @@ export async function getNtcTrends({
       nucleic_acid: nucleicAcid,
       window_days: windowDays,
       min_reads: minReads,
-      min_case_pct: minCasePct,
+      min_control_pct: minControlPct,
       pipeline,
     },
   });

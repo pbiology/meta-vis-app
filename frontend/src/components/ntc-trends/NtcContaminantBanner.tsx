@@ -34,7 +34,11 @@ export default function NtcContaminantBanner({ alerts }: Readonly<NtcContaminant
           <span className="italic">{alert.taxon_name.replace(/-/g, " ")}</span>
           <span className="text-orange-400">·</span>
           <span className="text-orange-500">
-            {alert.case_count} case{alert.case_count === 1 ? "" : "s"}
+            {alert.control_count} NTC{alert.control_count === 1 ? "" : "s"}
+          </span>
+          <span className="text-orange-400">·</span>
+          <span className="text-orange-500">
+            {alert.case_count} case{alert.case_count === 1 ? "" : "s"} affected
           </span>
           <span className="text-orange-400">·</span>
           <span className="text-orange-400">&gt; {alert.min_reads} reads threshold</span>

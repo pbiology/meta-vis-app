@@ -1,8 +1,11 @@
 # app/routers/ntc.py
 
 import asyncio
+import logging
 import time
 from datetime import date, datetime, timedelta, timezone
+from bson import ObjectId
+from bson.errors import InvalidId
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pydantic import BaseModel
@@ -14,6 +17,26 @@ from app.database import get_db
 from app.db_utils import fetch_capped
 from app.auth.utils import get_current_user, require_role
 from app.constants import HOST_TAXON_IDS, TAXON_ID_UNCLASSIFIED
+from app.ntc_controls import (
+    NtcControl,
+    duplicated_analysis_ids,
+    group_documents_by_control,
+    pick_by_rank,
+    resolve_controls,
+)
+
+logger = logging.getLogger(__name__)
+
+# One copy of a control. The same control reaches the database once per case
+# in its run, so this pair — not sample_id alone — identifies a single
+# document, and every per-copy aggregation groups on it. Always spread into a
+# new dict (`{**_CONTROL_COPY_KEY, ...}`) so no pipeline can mutate it.
+_CONTROL_COPY_KEY: dict = {"sample_id": "$sample_id", "case_id": "$case_id"}
+# The same pair re-projected out of a previous $group's key.
+_CONTROL_COPY_KEY_FROM_ID: dict = {
+    "sample_id": "$_id.sample_id",
+    "case_id": "$_id.case_id",
+}
 
 router = APIRouter(prefix="/ntc", tags=["ntc"])
 
@@ -383,7 +406,10 @@ async def get_contaminant_alerts(
                 {
                     "sample_id": 1,
                     "case_id": 1,
+                    "nucleic_acid": 1,
                     "order_date": 1,
+                    "analysis_id": 1,
+                    "ingested_at": 1,
                     "profiles": 1,
                 },
             )
@@ -404,19 +430,45 @@ async def get_contaminant_alerts(
                             {
                                 "case_id": doc["case_id"],
                                 "sample_id": doc["sample_id"],
+                                "nucleic_acid": doc.get("nucleic_acid"),
                                 "order_date": doc.get("order_date"),
+                                "analysis_id": doc.get("analysis_id"),
+                                "ingested_at": doc.get("ingested_at"),
                                 "abundance": entry["abundance"],
                             }
                         )
+
+        # A contaminated control is sequenced alongside every case in its run,
+        # so one detection reached this loop as one hit per case: the taxon
+        # read as several independent detections when it had been seen once.
+        # The two counts answer different questions and both are kept —
+        # control_count is how recurrent the contaminant is, case_count is how
+        # many clinical results it puts in doubt.
+        hit_groups = {
+            tid: group_documents_by_control(taxon_hits)
+            for tid, taxon_hits in hits.items()
+            if taxon_hits
+        }
+        ambiguous_ids: set[str] = set()
+        for control_groups in hit_groups.values():
+            ambiguous_ids |= duplicated_analysis_ids(control_groups)
+        version_by_analysis = (
+            await _fetch_analysis_versions(db, ambiguous_ids) if ambiguous_ids else {}
+        )
 
         alerts = []
         all_case_ids: set[str] = set()
         for contaminant in contaminants:
             tid = contaminant["taxon_id"]
-            occurrences = hits[tid]
-            if not occurrences:
+            taxon_groups = hit_groups.get(tid)
+            if not taxon_groups:
                 continue
-            case_ids = list({o["case_id"] for o in occurrences})
+            controls = resolve_controls(taxon_groups, version_by_analysis)
+            # Only the cases the taxon was actually detected in, which is what
+            # makes a case suspect — not every case the control was run with.
+            case_ids = {
+                str(hit["case_id"]) for group in taxon_groups.values() for hit in group
+            }
             all_case_ids.update(case_ids)
             alerts.append(
                 {
@@ -424,12 +476,26 @@ async def get_contaminant_alerts(
                     "taxon_name": contaminant["taxon_name"],
                     "superkingdom": contaminant.get("superkingdom"),
                     "min_reads": contaminant["min_reads"],
+                    "control_count": len(controls),
                     "case_count": len(case_ids),
-                    "occurrences": occurrences,
+                    "occurrences": [
+                        {
+                            "sample_id": control.sample_id,
+                            "case_ids": sorted(control.case_ids),
+                            "order_date": control.order_date,
+                            "abundance": control.winner["abundance"],
+                        }
+                        for control in sorted(
+                            controls.values(),
+                            key=lambda c: (c.order_date or "", c.sample_id),
+                        )
+                    ],
                 }
             )
 
-        alerts.sort(key=lambda a: a["case_count"], reverse=True)
+        # Recurrence first: a contaminant in five controls is systemic, where
+        # one in a single control is one bad run however many cases it touched.
+        alerts.sort(key=lambda a: (a["control_count"], a["case_count"]), reverse=True)
 
         result = {"alerts": alerts, "contaminant_case_ids": list(all_case_ids)}
         _contaminant_alert_cache[window_days] = (current_version, result)
@@ -442,12 +508,112 @@ async def get_contaminant_alerts(
 # ---------------------------------------------------------------------------
 
 
+async def _fetch_analysis_versions(
+    db: AsyncIOMotorDatabase, analysis_ids: set[str]
+) -> dict[str, int]:
+    """Map analysis id -> version for the given ids.
+
+    Sample documents carry analysis_id but not the version, and the version is
+    what decides which copy of a shared control came from the newest
+    sequencing. Looked up only for controls that actually have several copies.
+    """
+    object_ids: list[ObjectId] = []
+    for raw in analysis_ids:
+        try:
+            object_ids.append(ObjectId(raw))
+        except (InvalidId, TypeError):
+            # Not fatal — the control still resolves, just without this copy's
+            # version to rank on — but it means a sample points at something
+            # that is not an analysis, which should never happen.
+            logger.warning("NTC sample carries an unusable analysis_id: %r", raw)
+    if not object_ids:
+        return {}
+
+    docs = await (
+        db["case_analysis"]
+        .find({"_id": {"$in": object_ids}}, {"version": 1})
+        .to_list(None)
+    )
+    return {str(doc["_id"]): doc.get("version") or 0 for doc in docs}
+
+
+def _control_read_count(
+    control: NtcControl,
+    pipeline: str,
+    profile_total_by_copy: dict[tuple[str, str], int],
+) -> int | None:
+    """Reads for a control, from the newest copy that reports them.
+
+    Walks the ranking rather than reading the winner alone: a copy whose QC
+    block is missing the count would otherwise plot the control as a gap even
+    though an older run of the same control reported it.
+    """
+    for doc in control.copies:
+        if pipeline == "trana":
+            reads = (
+                doc.get("trana", {})
+                .get("nanoplot_processed", {})
+                .get("number_of_reads")
+            )
+        else:
+            reads = (
+                doc.get("taxprofiler", {})
+                .get("classifiers", {})
+                .get("kraken2", {})
+                .get("classified_reads")
+            )
+            if reads is None:
+                reads = profile_total_by_copy.get(
+                    (control.sample_id, str(doc.get("case_id") or ""))
+                )
+        if reads is not None:
+            return reads
+    return None
+
+
+def _collapse_occurrences(
+    occurrences: list[dict], controls: dict[tuple[str, str], NtcControl]
+) -> list[dict]:
+    """One occurrence per control, from the newest case that carries the taxon.
+
+    The aggregation emits a row per (control, case), so a control shared by
+    seven cases contributed seven identical points to the chart. The control's
+    own order date is used rather than the row's, so the point sits exactly
+    where the read-count and kingdom charts put that control.
+    """
+    by_sample: dict[str, dict[str, dict]] = {}
+    for occurrence in occurrences:
+        by_sample.setdefault(occurrence["sample_id"], {})[occurrence["case_id"]] = (
+            occurrence
+        )
+
+    collapsed: list[dict] = []
+    for control in controls.values():
+        candidates = by_sample.get(control.sample_id)
+        if not candidates:
+            continue
+        chosen = pick_by_rank(control, candidates)
+        if chosen is None:
+            continue
+        collapsed.append(
+            {
+                "sample_id": control.sample_id,
+                "case_ids": sorted(control.case_ids),
+                "order_date": control.order_date,
+                "abundance": chosen["abundance"],
+            }
+        )
+
+    collapsed.sort(key=lambda o: (o["order_date"] or "", o["sample_id"]))
+    return collapsed
+
+
 async def _compute_ntc_trends(
     db: AsyncIOMotorDatabase,
     nucleic_acid: Literal["DNA", "RNA"],
     window_days: int,
     min_reads: float,
-    min_case_pct: float,
+    min_control_pct: float,
     pipeline: Literal["taxprofiler", "trana"],
 ) -> dict:
     """Run the NTC trend aggregations and assemble the result dict."""
@@ -463,12 +629,46 @@ async def _compute_ntc_trends(
         "sample_type": "negative_ctrl",
         "nucleic_acid": nucleic_acid,
         "order_date": {"$gte": cutoff},
-        # Latest analyses only, so a re-sequenced case is counted once in the
-        # distinct-case tallies below.
+        # Latest analyses only, so a re-sequenced case contributes its newest
+        # run and not one control document per run.
         "is_latest_analysis": True,
+        # Scope to the requested pipeline. Only the classifier and the QC block
+        # used to be pipeline-specific, so a trana control was counted in the
+        # taxprofiler totals of the same nucleic acid. The two stats blocks are
+        # mutually exclusive: the orchestrator writes whichever the bundle came
+        # from and never both.
+        ("trana" if pipeline == "trana" else "taxprofiler"): {"$exists": True},
     }
 
-    total_ntcs: int = await db["samples"].count_documents(base_query)
+    # One control is sequenced alongside every case in its run, so it reaches
+    # the database once per case. Collapse to physical controls before counting
+    # anything: total_ntcs is shown to clinicians and sets the recurring-taxon
+    # threshold, and counting documents inflated both — unevenly, by however
+    # many cases each run happened to hold.
+    rc_projection: dict = {
+        "sample_id": 1,
+        "case_id": 1,
+        "nucleic_acid": 1,
+        "order_date": 1,
+        "analysis_id": 1,
+        "ingested_at": 1,
+    }
+    if pipeline == "trana":
+        rc_projection["trana.nanoplot_processed.number_of_reads"] = 1
+    else:
+        rc_projection["taxprofiler.classifiers.kraken2.classified_reads"] = 1
+
+    ntc_docs = await db["samples"].find(base_query, rc_projection).to_list(None)
+    groups = group_documents_by_control(ntc_docs)
+
+    # Only a control with several copies needs its analyses ranked, so the
+    # version lookup is skipped entirely when every control appears once.
+    ambiguous_ids = duplicated_analysis_ids(groups)
+    version_by_analysis = (
+        await _fetch_analysis_versions(db, ambiguous_ids) if ambiguous_ids else {}
+    )
+    controls = resolve_controls(groups, version_by_analysis)
+    total_ntcs = len(controls)
 
     if not total_ntcs:
         return {
@@ -481,7 +681,7 @@ async def _compute_ntc_trends(
             "recurring_taxa": [],
         }
 
-    min_case_count = max(1, round(total_ntcs * min_case_pct))
+    min_control_count = max(1, round(total_ntcs * min_control_pct))
 
     # --- Aggregation pipelines ---
     # Shared opening stages: match NTC samples, unwind to individual profile
@@ -503,8 +703,7 @@ async def _compute_ntc_trends(
         {
             "$group": {
                 "_id": {
-                    "sample_id": "$sample_id",
-                    "case_id": "$case_id",
+                    **_CONTROL_COPY_KEY,
                     "order_date": "$order_date",
                     "sk": "$profiles.profile.superkingdom",
                 },
@@ -514,8 +713,7 @@ async def _compute_ntc_trends(
         {
             "$group": {
                 "_id": {
-                    "sample_id": "$_id.sample_id",
-                    "case_id": "$_id.case_id",
+                    **_CONTROL_COPY_KEY_FROM_ID,
                     "order_date": "$_id.order_date",
                 },
                 "kingdoms": {"$push": {"k": "$_id.sk", "v": "$reads"}},
@@ -523,9 +721,9 @@ async def _compute_ntc_trends(
         },
     ]
 
-    # recurring_taxa: find taxa that appear in >= min_case_count distinct cases.
-    # Deduplicate per (taxon_id, sample_id, case_id) first to avoid double-counting
-    # taxa that appear at multiple ranks within the same sample.
+    # recurring_taxa: find taxa that appear in >= min_control_count distinct
+    # controls. Deduplicate per (taxon_id, sample_id, case_id) first to avoid
+    # double-counting taxa that appear at multiple ranks within the same sample.
     rt_pipeline: list[dict] = _unwind_profiles + [
         {"$match": {"profiles.profile.abundance": {"$gt": min_reads}}},
         # Deduplicate per (taxon, sample, case) — take max abundance.
@@ -533,8 +731,7 @@ async def _compute_ntc_trends(
             "$group": {
                 "_id": {
                     "taxon_id": "$profiles.profile.taxon_id",
-                    "sample_id": "$sample_id",
-                    "case_id": "$case_id",
+                    **_CONTROL_COPY_KEY,
                 },
                 "taxon_name": {"$first": "$profiles.profile.name"},
                 "superkingdom": {"$first": "$profiles.profile.superkingdom"},
@@ -542,53 +739,52 @@ async def _compute_ntc_trends(
                 "abundance": {"$max": "$profiles.profile.abundance"},
             }
         },
-        # Roll up per taxon: collect occurrences and count distinct cases.
+        # Roll up per taxon: collect occurrences and count distinct controls.
+        # Counting sample_ids rather than case_ids is what makes this
+        # comparable to total_ntcs — a control shared by seven cases is one
+        # control here, not seven. The count stays in Mongo so the threshold
+        # still prunes before anything is transferred; the occurrences are
+        # collapsed per control in Python, where the analysis ranking is known.
         {
             "$group": {
                 "_id": "$_id.taxon_id",
                 "taxon_name": {"$first": "$taxon_name"},
                 "superkingdom": {"$first": "$superkingdom"},
-                "distinct_cases": {"$addToSet": "$_id.case_id"},
+                "distinct_controls": {"$addToSet": "$_id.sample_id"},
                 "occurrences": {
                     "$push": {
-                        "case_id": "$_id.case_id",
-                        "sample_id": "$_id.sample_id",
-                        "order_date": "$order_date",
+                        **_CONTROL_COPY_KEY_FROM_ID,
                         "abundance": "$abundance",
                     }
                 },
             }
         },
-        {"$addFields": {"case_count": {"$size": "$distinct_cases"}}},
-        {"$match": {"case_count": {"$gte": min_case_count}}},
-        {"$sort": {"case_count": -1}},
+        {"$addFields": {"control_count": {"$size": "$distinct_controls"}}},
+        {"$match": {"control_count": {"$gte": min_control_count}}},
+        {"$sort": {"control_count": -1}},
     ]
 
-    # Run read_counts query and both aggregations in parallel.
+    # Run both aggregations in parallel.
     # For taxprofiler, summing the profile provides a fallback for samples whose
     # QC data doesn't carry classified_reads directly. Taxpasta counts are
     # direct, so the root node is only the reads that could not be placed deeper
     # and is not the classified total — see app/taxonomy_utils.py.
     # For trana, reads come from nanoplot_processed; no profile fallback needed.
-    rc_projection: dict = {"sample_id": 1, "case_id": 1, "order_date": 1}
     if pipeline == "trana":
-        rc_projection["trana.nanoplot_processed.number_of_reads"] = 1
-    else:
-        rc_projection["taxprofiler.classifiers.kraken2.classified_reads"] = 1
-
-    rc_cursor = db["samples"].find(base_query, rc_projection).sort("order_date", 1)
-
-    if pipeline == "trana":
-        rc_docs, kb_docs, rt_docs = await asyncio.gather(
-            rc_cursor.to_list(None),
+        kb_docs, rt_docs = await asyncio.gather(
             db["samples"].aggregate(kb_pipeline).to_list(None),
             db["samples"].aggregate(rt_pipeline).to_list(None),
         )
-        profile_total_by_sample: dict[str, int] = {}
+        profile_total_by_copy: dict[tuple[str, str], int] = {}
     else:
         # Every placed read: the whole profile except unclassified. The
         # ignorelist deliberately plays no part — this is what the classifier
         # produced, not the filtered view shown in the trends below.
+        #
+        # Grouped per (sample, case) rather than per sample: a control shared
+        # by seven cases is seven documents carrying the same profile, and
+        # summing across them multiplied the fallback read count by the number
+        # of cases in the run.
         profile_total_pipeline: list[dict] = [
             {"$match": base_query},
             {"$unwind": "$profiles"},
@@ -597,82 +793,74 @@ async def _compute_ntc_trends(
             {"$match": {"profiles.profile.taxon_id": {"$ne": TAXON_ID_UNCLASSIFIED}}},
             {
                 "$group": {
-                    "_id": "$sample_id",
+                    "_id": {**_CONTROL_COPY_KEY},
                     "profile_total": {"$sum": "$profiles.profile.abundance"},
                 }
             },
         ]
-        rc_docs, kb_docs, rt_docs, profile_total_docs = await asyncio.gather(
-            rc_cursor.to_list(None),
+        kb_docs, rt_docs, profile_total_docs = await asyncio.gather(
             db["samples"].aggregate(kb_pipeline).to_list(None),
             db["samples"].aggregate(rt_pipeline).to_list(None),
             db["samples"].aggregate(profile_total_pipeline).to_list(None),
         )
-        profile_total_by_sample = {
-            doc["_id"]: doc["profile_total"] for doc in profile_total_docs
+        profile_total_by_copy = {
+            (doc["_id"]["sample_id"], doc["_id"]["case_id"]): doc["profile_total"]
+            for doc in profile_total_docs
         }
 
+    # Controls in date order: one point per control on every chart, at the
+    # control's own date.
+    ordered_controls = sorted(
+        controls.values(), key=lambda c: (c.order_date or "", c.sample_id)
+    )
+
     # --- Assemble read_counts ---
-    read_counts: list[dict] = []
-    for doc in rc_docs:
-        if pipeline == "trana":
-            classified: int | None = (
-                doc.get("trana", {})
-                .get("nanoplot_processed", {})
-                .get("number_of_reads")
-            )
-        else:
-            classified = (
-                doc.get("taxprofiler", {})
-                .get("classifiers", {})
-                .get("kraken2", {})
-                .get("classified_reads")
-            )
-            if classified is None:
-                classified = profile_total_by_sample.get(doc["sample_id"])
-        read_counts.append(
-            {
-                "sample_id": doc["sample_id"],
-                "case_id": doc["case_id"],
-                "order_date": doc.get("order_date"),
-                "classified_reads": classified,
-            }
-        )
+    read_counts: list[dict] = [
+        {
+            "sample_id": control.sample_id,
+            # Every case the control was sequenced alongside, for drill-down.
+            # Was a single case_id, which is meaningless for a shared control.
+            "case_ids": sorted(control.case_ids),
+            "order_date": control.order_date,
+            "classified_reads": _control_read_count(
+                control, pipeline, profile_total_by_copy
+            ),
+        }
+        for control in ordered_controls
+    ]
 
     # --- Assemble kingdom_breakdown ---
+    # Tallies arrive per (sample, case); serve the newest case's, so a control
+    # reports one set of numbers rather than one per case that carried it.
     _known_kingdoms = frozenset(("Bacteria", "Viruses", "Eukaryota", "Archaea"))
     _kingdom_keys = ("Bacteria", "Viruses", "Eukaryota", "Archaea", "Other")
-    kingdom_breakdown: list[dict] = []
+    # Keyed by sample_id alone: base_query pins one nucleic acid, so within a
+    # single response that already identifies the control.
+    tallies_by_sample: dict[str, dict[str, dict[str, int]]] = {}
     for doc in kb_docs:
         tally: dict[str, int] = dict.fromkeys(_kingdom_keys, 0)
         for kv in doc["kingdoms"]:
             sk = kv["k"] if kv["k"] in _known_kingdoms else "Other"
             tally[sk] += kv["v"]
+        tallies_by_sample.setdefault(doc["_id"]["sample_id"], {})[
+            doc["_id"]["case_id"]
+        ] = tally
+
+    kingdom_breakdown: list[dict] = []
+    for control in ordered_controls:
+        by_case = tallies_by_sample.get(control.sample_id, {})
+        # Zeros when no copy had aggregatable entries: no kraken2 profile, an
+        # empty profile, or every entry excluded. Distinguishing that from a
+        # control that was never sequenced is the point of the entry.
+        tally = pick_by_rank(control, by_case) or dict.fromkeys(_kingdom_keys, 0)
         kingdom_breakdown.append(
             {
-                "sample_id": doc["_id"]["sample_id"],
-                "case_id": doc["_id"]["case_id"],
-                "order_date": doc["_id"]["order_date"],
+                "sample_id": control.sample_id,
+                "case_ids": sorted(control.case_ids),
+                "order_date": control.order_date,
                 **tally,
             }
         )
-    # Add all-zeros entries for NTC samples that had no aggregatable profile entries
-    # (no kraken2 profile, empty profile, or every entry was excluded).
-    kb_sample_ids: frozenset[str] = frozenset(
-        entry["sample_id"] for entry in kingdom_breakdown
-    )
-    for doc in rc_docs:
-        if doc["sample_id"] not in kb_sample_ids:
-            kingdom_breakdown.append(
-                {
-                    "sample_id": doc["sample_id"],
-                    "case_id": doc["case_id"],
-                    "order_date": doc.get("order_date"),
-                    **dict.fromkeys(_kingdom_keys, 0),
-                }
-            )
-
-    kingdom_breakdown.sort(key=lambda d: d["order_date"] or "")
 
     # --- Assemble recurring_taxa ---
     recurring_taxa: list[dict] = [
@@ -680,10 +868,8 @@ async def _compute_ntc_trends(
             "taxon_id": doc["_id"],
             "taxon_name": doc["taxon_name"],
             "superkingdom": doc["superkingdom"],
-            "case_count": doc["case_count"],
-            "occurrences": sorted(
-                doc["occurrences"], key=lambda o: o["order_date"] or ""
-            ),
+            "control_count": doc["control_count"],
+            "occurrences": _collapse_occurrences(doc["occurrences"], controls),
         }
         for doc in rt_docs
     ]
@@ -693,7 +879,7 @@ async def _compute_ntc_trends(
         "pipeline": pipeline,
         "window_days": window_days,
         "total_ntcs": total_ntcs,
-        "min_case_count": min_case_count,
+        "min_control_count": min_control_count,
         "read_counts": read_counts,
         "kingdom_breakdown": kingdom_breakdown,
         "recurring_taxa": recurring_taxa,
@@ -705,7 +891,9 @@ async def get_ntc_trends(
     nucleic_acid: Literal["DNA", "RNA"] = Query(..., description="DNA or RNA"),
     window_days: int = Query(default=90, ge=7, le=365),
     min_reads: float = Query(default=3, gt=0),
-    min_case_pct: float = Query(default=0.10, ge=0.0, le=1.0),
+    # Fraction of the window's physical controls, not of its cases: one
+    # control is sequenced alongside every case in its run.
+    min_control_pct: float = Query(default=0.10, ge=0.0, le=1.0),
     pipeline: Literal["taxprofiler", "trana"] = Query(default="taxprofiler"),
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
@@ -717,7 +905,7 @@ async def get_ntc_trends(
     Uses MongoDB aggregation pipelines to avoid loading full profile arrays
     into Python memory.
     """
-    cache_key = (nucleic_acid, window_days, min_reads, min_case_pct, pipeline)
+    cache_key = (nucleic_acid, window_days, min_reads, min_control_pct, pipeline)
     now = time.monotonic()
     current_version = await get_cache_version(db)
     cached = _trends_cache.get(cache_key)
@@ -738,7 +926,7 @@ async def get_ntc_trends(
                 return cached_result
 
         result = await _compute_ntc_trends(
-            db, nucleic_acid, window_days, min_reads, min_case_pct, pipeline
+            db, nucleic_acid, window_days, min_reads, min_control_pct, pipeline
         )
         _trends_cache[cache_key] = (current_version, now, result)
 

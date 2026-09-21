@@ -11,20 +11,20 @@ interface NtcFiltersBarProps {
   windowDays: number;
   minReads: number;
   minAbundance: number;
-  minCasePct: number;
+  minControlPct: number;
   availablePipelines: NtcPipelineOption[];
   onNucleicAcidChange: (nucleicAcid: string) => void;
   onPipelineChange: (pipeline: string) => void;
   onWindowDaysChange: (days: number) => void;
   onMinReadsChange: (n: number) => void;
   onMinAbundanceChange: (n: number) => void;
-  onMinCasePctChange: (pct: number) => void;
+  onMinControlPctChange: (pct: number) => void;
 }
 
 const NUCLEIC_ACIDS = ["DNA", "RNA"];
 const WINDOWS = [30, 90, 180];
 const MIN_READS_OPTIONS = [1, 3, 5, 10, 20];
-const MIN_CASE_PCT_OPTIONS = [5, 10, 20, 25, 50];
+const MIN_CONTROL_PCT_OPTIONS = [5, 10, 20, 25, 50];
 const MIN_ABUNDANCE_OPTIONS = [
   { value: 0.001, label: "0.1%" },
   { value: 0.005, label: "0.5%" },
@@ -46,14 +46,14 @@ export default function NtcFiltersBar({
   windowDays,
   minReads,
   minAbundance,
-  minCasePct,
+  minControlPct,
   availablePipelines,
   onNucleicAcidChange,
   onPipelineChange,
   onWindowDaysChange,
   onMinReadsChange,
   onMinAbundanceChange,
-  onMinCasePctChange,
+  onMinControlPctChange,
 }: Readonly<NtcFiltersBarProps>) {
   const isTrana = pipeline === "trana";
 
@@ -120,13 +120,13 @@ export default function NtcFiltersBar({
       )}
 
       <div className="flex items-center gap-2 border-l border-gray-100 pl-3">
-        <span className="text-xs text-gray-400">Min cases</span>
+        <span className="text-xs text-gray-400">Min NTCs</span>
         <select
-          value={minCasePct}
-          onChange={(e) => onMinCasePctChange(Number(e.target.value))}
+          value={minControlPct}
+          onChange={(e) => onMinControlPctChange(Number(e.target.value))}
           className="text-xs border border-gray-200 rounded-md px-2 py-1 text-gray-600 bg-white focus:outline-none"
         >
-          {MIN_CASE_PCT_OPTIONS.map((v) => (
+          {MIN_CONTROL_PCT_OPTIONS.map((v) => (
             <option key={v} value={v}>
               {v}%
             </option>

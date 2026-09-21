@@ -64,6 +64,7 @@ the K8s-deployed backend.
 from __future__ import annotations
 
 import argparse
+import datetime
 import ipaddress
 import json
 import os
@@ -274,6 +275,26 @@ def _parse_subject_sex(parts: dict, sample_id: str) -> str:
             f"Allowed: {sorted(_SEX_VALUES)}."
         )
     return sex
+
+
+def _parse_sample_order_date(parts: dict, sample_id: str) -> str | None:
+    """Validate the optional order_date= token on a --sample.
+
+    A control is prepared once and sequenced alongside every case in its run, so
+    it carries its own order date; a clinical sample inherits the case's and the
+    backend rejects the token outright. Checked here so a malformed date fails
+    before the bundle is uploaded rather than as a server-side 422.
+    """
+    raw = parts.get("order_date")
+    if raw is None:
+        return None
+    try:
+        return datetime.date.fromisoformat(raw).isoformat()
+    except ValueError:
+        _fail(
+            f"Sample '{sample_id}' has an invalid order_date '{raw}' — "
+            "expected YYYY-MM-DD."
+        )
 
 
 def _resolve_nucleic_acid(parts: dict) -> None:
@@ -663,6 +684,7 @@ def _resolve_trana_sample(s: dict[str, Any]) -> dict[str, Any]:
             "sample_type": s["sample_type"],
             "nucleic_acid": s["nucleic_acid"],
             "sample_source": s.get("sample_source", "N/A"),
+            "order_date": s.get("order_date"),
             "has_krona": krona is not None,
             "has_nanoplot_unprocessed": np_unproc is not None,
             "has_nanoplot_processed": np_proc is not None,
@@ -833,6 +855,7 @@ def parse_sample(raw: str, classifier_names: list) -> dict:
         "sample_type": parts["type"],
         "nucleic_acid": parts["nucleic_acid"],
         "sample_source": parts.get("sample_source", "N/A"),
+        "order_date": _parse_sample_order_date(parts, sample_id),
         "columns": columns,
     }
 
@@ -927,7 +950,12 @@ def _add_taxprofiler_args(parser: argparse.ArgumentParser) -> None:
         action="append",
         required=True,
         metavar="KEY=VALUE ...",
-        help="Sample descriptor. Repeat for each sample.",
+        help=(
+            "Sample descriptor. Repeat for each sample. "
+            "Optional for controls only: order_date=YYYY-MM-DD, the date the "
+            "control itself was ordered — omit it and the sample takes the "
+            "case's order date."
+        ),
     )
     parser.add_argument(
         "--analysis-type",
@@ -976,6 +1004,7 @@ def parse_trana_sample(raw: str) -> dict:
         "sample_type": parts["type"],
         "nucleic_acid": parts["nucleic_acid"],
         "sample_source": parts.get("sample_source", "N/A"),
+        "order_date": _parse_sample_order_date(parts, parts["sample_id"]),
         "abundance_path": parts["abundance_path"],
         "krona_path": parts.get("krona_path"),
         "nanoplot_unprocessed_path": parts.get("nanoplot_unprocessed_path"),
@@ -1062,6 +1091,8 @@ def _add_trana_args(parser: argparse.ArgumentParser) -> None:
             "Required for type=sample: subject_id. "
             "Optional: sex (F|M|X|unknown, default unknown), sample_source, "
             "krona_path, nanoplot_unprocessed_path, nanoplot_processed_path. "
+            "Optional for controls only: order_date=YYYY-MM-DD (defaults to the "
+            "case's order date). "
             "Repeat for each sample."
         ),
     )

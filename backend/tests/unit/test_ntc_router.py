@@ -11,6 +11,7 @@
 from datetime import date, timedelta
 
 import pytest
+from bson import ObjectId
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
 from mongomock_motor import AsyncMongoMockClient
@@ -78,6 +79,9 @@ def make_ntc_doc(
     order_date: str,
     profile: list[dict] | None = None,
     classified_reads: int | None = None,
+    analysis_id: str | None = None,
+    ingested_at: str | None = None,
+    pipeline: str = "taxprofiler",
 ) -> dict:
     """Build a minimal sample document as stored in MongoDB."""
     doc: dict = {
@@ -90,12 +94,24 @@ def make_ntc_doc(
         "profiles": [],
         "taxprofiler": {},
     }
+    if pipeline == "trana":
+        # The two stats blocks are mutually exclusive in real documents, and
+        # the trends query now scopes on which one is present.
+        del doc["taxprofiler"]
+        doc["trana"] = {}
+    if analysis_id is not None:
+        doc["analysis_id"] = analysis_id
+    if ingested_at is not None:
+        doc["ingested_at"] = ingested_at
     if profile is not None:
         doc["profiles"] = [{"classifier": "kraken2", "profile": profile}]
     if classified_reads is not None:
-        doc["taxprofiler"] = {
-            "classifiers": {"kraken2": {"classified_reads": classified_reads}}
-        }
+        if pipeline == "trana":
+            doc["trana"] = {"nanoplot_processed": {"number_of_reads": classified_reads}}
+        else:
+            doc["taxprofiler"] = {
+                "classifiers": {"kraken2": {"classified_reads": classified_reads}}
+            }
     return doc
 
 
@@ -187,10 +203,10 @@ class TestNtcTrendsValidation:
         resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=0")
         assert resp.status_code == 422
 
-    async def test_min_case_pct_above_maximum_returns_422(self, fake_db):
+    async def test_min_control_pct_above_maximum_returns_422(self, fake_db):
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?nucleic_acid=DNA&min_case_pct=1.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_control_pct=1.1"
         )
         assert resp.status_code == 422
 
@@ -211,7 +227,7 @@ class TestNtcReadCounts:
         assert len(counts) == 1
         assert counts[0]["classified_reads"] == 500
         assert counts[0]["sample_id"] == "NTC-1"
-        assert counts[0]["case_id"] == "case-1"
+        assert counts[0]["case_ids"] == ["case-1"]
 
     async def test_classified_reads_fallback_sums_the_profile(self, fake_db):
         profile = [
@@ -293,13 +309,13 @@ class TestRecurringTaxa:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_control_pct=0.1"
         )
         taxa = resp.json()["recurring_taxa"]
         assert len(taxa) == 1
         assert taxa[0]["taxon_id"] == 1743
         assert taxa[0]["taxon_name"] == "Cutibacterium acnes"
-        assert taxa[0]["case_count"] == 2
+        assert taxa[0]["control_count"] == 2
 
     async def test_taxon_at_or_below_min_reads_excluded(self, fake_db):
         # abundance=3, min_reads=3 — must be strictly greater than
@@ -312,7 +328,7 @@ class TestRecurringTaxa:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_control_pct=0.1"
         )
         assert resp.json()["recurring_taxa"] == []
 
@@ -326,7 +342,7 @@ class TestRecurringTaxa:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_control_pct=0.1"
         )
         assert len(resp.json()["recurring_taxa"]) == 1
 
@@ -340,7 +356,7 @@ class TestRecurringTaxa:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=1&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=1&min_control_pct=0.1"
         )
         taxon_ids = [t["taxon_id"] for t in resp.json()["recurring_taxa"]]
         assert 9606 not in taxon_ids
@@ -357,22 +373,22 @@ class TestRecurringTaxa:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=1&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=1&min_control_pct=0.1"
         )
         assert resp.json()["recurring_taxa"] == []
 
-    async def test_taxon_in_single_case_excluded_when_min_case_pct_requires_more(
+    async def test_taxon_in_single_case_excluded_when_min_control_pct_requires_more(
         self, fake_db
     ):
         taxon = make_taxon(1743, "Cutibacterium acnes", 10)
-        # 10 NTCs, taxon in only 1 case; min_case_count = max(1, round(10*0.5)) = 5
+        # 10 NTCs, taxon in only 1 control; threshold = max(1, round(10*0.5)) = 5
         docs = [
             make_ntc_doc(f"NTC-{i}", f"case-{i}", "DNA", DAY_1) for i in range(9)
         ] + [make_ntc_doc("NTC-9", "case-9", "DNA", DAY_1, profile=[taxon])]
         await fake_db["samples"].insert_many(docs)
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.5"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_control_pct=0.5"
         )
         assert resp.json()["recurring_taxa"] == []
 
@@ -395,13 +411,13 @@ class TestRecurringTaxa:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_control_pct=0.1"
         )
         taxa = resp.json()["recurring_taxa"]
         assert len(taxa) == 1
-        assert taxa[0]["case_count"] == 2
+        assert taxa[0]["control_count"] == 2
 
-    async def test_recurring_taxa_sorted_by_case_count_descending(self, fake_db):
+    async def test_recurring_taxa_sorted_by_control_count_descending(self, fake_db):
         taxon_a = make_taxon(1743, "Taxon-A", 10)
         taxon_b = make_taxon(329, "Taxon-B", 10)
         await fake_db["samples"].insert_many(
@@ -417,7 +433,7 @@ class TestRecurringTaxa:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_control_pct=0.1"
         )
         taxa = resp.json()["recurring_taxa"]
         assert taxa[0]["taxon_id"] == 329  # Taxon-B — 3 cases
@@ -433,7 +449,7 @@ class TestRecurringTaxa:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_control_pct=0.1"
         )
         occ = resp.json()["recurring_taxa"][0]["occurrences"]
         assert occ[0]["order_date"] == DAY_1
@@ -466,7 +482,7 @@ class TestRecurringTaxa:
         await fake_db["samples"].insert_many(docs)
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_control_pct=0.1"
         )
         assert resp.json()["recurring_taxa"] == []
 
@@ -633,7 +649,7 @@ class TestKingdomBreakdown:
         entry = resp.json()["kingdom_breakdown"][0]
         assert set(entry.keys()) == {
             "sample_id",
-            "case_id",
+            "case_ids",
             "order_date",
             "Bacteria",
             "Viruses",
@@ -699,25 +715,25 @@ class TestNtcTrendsResponseShape:
             "recurring_taxa",
         }
 
-    async def test_min_case_count_present_when_ntcs_exist(self, fake_db):
+    async def test_min_control_count_present_when_ntcs_exist(self, fake_db):
         await fake_db["samples"].insert_one(
             make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, classified_reads=100)
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?nucleic_acid=DNA&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_control_pct=0.1"
         )
-        assert "min_case_count" in resp.json()
+        assert "min_control_count" in resp.json()
 
-    async def test_min_case_count_is_at_least_one(self, fake_db):
+    async def test_min_control_count_is_at_least_one(self, fake_db):
         await fake_db["samples"].insert_one(
             make_ntc_doc("NTC-1", "case-1", "DNA", DAY_1, classified_reads=100)
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?nucleic_acid=DNA&min_case_pct=0.0"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_control_pct=0.0"
         )
-        assert resp.json()["min_case_count"] >= 1
+        assert resp.json()["min_control_count"] >= 1
 
     async def test_read_count_entry_shape(self, fake_db):
         await fake_db["samples"].insert_one(
@@ -728,7 +744,7 @@ class TestNtcTrendsResponseShape:
         entry = resp.json()["read_counts"][0]
         assert set(entry.keys()) == {
             "sample_id",
-            "case_id",
+            "case_ids",
             "order_date",
             "classified_reads",
         }
@@ -743,7 +759,7 @@ class TestNtcTrendsResponseShape:
         )
         app = make_app(fake_db)
         resp = TestClient(app).get(
-            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_case_pct=0.1"
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_control_pct=0.1"
         )
         entry = resp.json()["recurring_taxa"][0]
         assert set(entry.keys()) >= {
@@ -751,8 +767,359 @@ class TestNtcTrendsResponseShape:
             "taxon_name",
             "superkingdom",
             "occurrences",
-            "case_count",
+            "control_count",
         }
         assert isinstance(entry["occurrences"], list)
         occ = entry["occurrences"][0]
-        assert set(occ.keys()) == {"case_id", "sample_id", "order_date", "abundance"}
+        assert set(occ.keys()) == {
+            "case_ids",
+            "sample_id",
+            "order_date",
+            "abundance",
+        }
+
+
+# ---------------------------------------------------------------------------
+# Shared controls
+#
+# One physical NTC is sequenced alongside every case in its run, so it reaches
+# the database once per case with the same sample_id. Everything the trends
+# page reports counts the control, not the documents.
+# ---------------------------------------------------------------------------
+
+
+def shared_control_docs(
+    sample_id: str = "NTC-260305-DNA",
+    cases: tuple[str, ...] = ("case-a", "case-b", "case-c"),
+    order_date: str = DAY_1,
+    **kwargs,
+) -> list[dict]:
+    """One control as it really arrives: the same sample_id under N cases."""
+    return [
+        make_ntc_doc(sample_id, case_id, "DNA", order_date, **kwargs)
+        for case_id in cases
+    ]
+
+
+class TestSharedControlIsCountedOnce:
+    async def test_total_ntcs_counts_controls_not_documents(self, fake_db):
+        await fake_db["samples"].insert_many(shared_control_docs())
+        app = make_app(fake_db)
+
+        resp = TestClient(app).get("/api/v1/ntc/trends?nucleic_acid=DNA")
+
+        assert resp.json()["total_ntcs"] == 1
+
+    async def test_read_counts_plot_one_point_per_control(self, fake_db):
+        await fake_db["samples"].insert_many(
+            shared_control_docs(classified_reads=11032789)
+        )
+        app = make_app(fake_db)
+
+        counts = (
+            TestClient(app)
+            .get("/api/v1/ntc/trends?nucleic_acid=DNA")
+            .json()["read_counts"]
+        )
+
+        assert len(counts) == 1
+        assert counts[0]["classified_reads"] == 11032789
+
+    async def test_read_count_lists_every_case_for_drill_down(self, fake_db):
+        await fake_db["samples"].insert_many(shared_control_docs(classified_reads=500))
+        app = make_app(fake_db)
+
+        counts = (
+            TestClient(app)
+            .get("/api/v1/ntc/trends?nucleic_acid=DNA")
+            .json()["read_counts"]
+        )
+
+        assert counts[0]["case_ids"] == ["case-a", "case-b", "case-c"]
+
+    async def test_kingdom_breakdown_has_one_entry_per_control(self, fake_db):
+        taxon = make_taxon(1743, "Cutibacterium acnes", 50, superkingdom="Bacteria")
+        await fake_db["samples"].insert_many(shared_control_docs(profile=[taxon]))
+        app = make_app(fake_db)
+
+        breakdown = (
+            TestClient(app)
+            .get("/api/v1/ntc/trends?nucleic_acid=DNA")
+            .json()["kingdom_breakdown"]
+        )
+
+        assert len(breakdown) == 1
+        # The tally is one case's, never the sum across the copies.
+        assert breakdown[0]["Bacteria"] == 50
+
+    async def test_threshold_denominator_counts_controls(self, fake_db):
+        # Ten documents, two controls. A denominator of 10 would put the
+        # threshold at 5 and hide a taxon present in both controls.
+        taxon = make_taxon(1743, "Cutibacterium acnes", 10)
+        await fake_db["samples"].insert_many(
+            shared_control_docs(
+                "NTC-A", ("c1", "c2", "c3", "c4", "c5"), DAY_1, profile=[taxon]
+            )
+            + shared_control_docs(
+                "NTC-B", ("c6", "c7", "c8", "c9", "c10"), DAY_2, profile=[taxon]
+            )
+        )
+        app = make_app(fake_db)
+
+        body = (
+            TestClient(app)
+            .get("/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_control_pct=0.5")
+            .json()
+        )
+
+        assert body["total_ntcs"] == 2
+        assert body["min_control_count"] == 1
+        assert [t["taxon_id"] for t in body["recurring_taxa"]] == [1743]
+
+    async def test_taxon_in_one_shared_control_counts_one(self, fake_db):
+        # The headline regression: a taxon in a single control that happens to
+        # be bundled into seven cases reported control_count 7.
+        taxon = make_taxon(1743, "Cutibacterium acnes", 10)
+        await fake_db["samples"].insert_many(
+            shared_control_docs(
+                "NTC-A", tuple(f"case-{i}" for i in range(7)), DAY_1, profile=[taxon]
+            )
+        )
+        app = make_app(fake_db)
+
+        taxa = (
+            TestClient(app)
+            .get("/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_control_pct=0.1")
+            .json()["recurring_taxa"]
+        )
+
+        assert taxa[0]["control_count"] == 1
+        assert len(taxa[0]["occurrences"]) == 1
+        assert taxa[0]["occurrences"][0]["case_ids"] == [f"case-{i}" for i in range(7)]
+
+    async def test_taxon_in_two_controls_counts_two(self, fake_db):
+        taxon = make_taxon(1743, "Cutibacterium acnes", 10)
+        await fake_db["samples"].insert_many(
+            shared_control_docs("NTC-A", ("c1", "c2"), DAY_1, profile=[taxon])
+            + shared_control_docs("NTC-B", ("c3", "c4"), DAY_2, profile=[taxon])
+        )
+        app = make_app(fake_db)
+
+        taxa = (
+            TestClient(app)
+            .get("/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_control_pct=0.1")
+            .json()["recurring_taxa"]
+        )
+
+        assert taxa[0]["control_count"] == 2
+        assert len(taxa[0]["occurrences"]) == 2
+
+    async def test_profile_fallback_is_not_multiplied_by_copy_count(self, fake_db):
+        # No classified_reads, so the read count falls back to summing the
+        # profile. Summed across the copies it came out 3x too high.
+        taxon = make_taxon(1743, "Cutibacterium acnes", 1000)
+        await fake_db["samples"].insert_many(shared_control_docs(profile=[taxon]))
+        app = make_app(fake_db)
+
+        counts = (
+            TestClient(app)
+            .get("/api/v1/ntc/trends?nucleic_acid=DNA")
+            .json()["read_counts"]
+        )
+
+        assert counts[0]["classified_reads"] == 1000
+
+
+class TestControlDateIsStable:
+    async def test_control_is_plotted_at_its_own_date(self, fake_db):
+        await fake_db["samples"].insert_many(
+            shared_control_docs(order_date=DAY_2, classified_reads=500)
+        )
+        app = make_app(fake_db)
+
+        counts = (
+            TestClient(app)
+            .get("/api/v1/ntc/trends?nucleic_acid=DNA")
+            .json()["read_counts"]
+        )
+
+        assert counts[0]["order_date"] == DAY_2
+
+    async def test_date_does_not_move_when_copies_disagree(self, fake_db):
+        # Data ingested before a control could carry its own date inherited each
+        # case's. The earliest is served: it is the only choice that cannot
+        # shift as analyses are added.
+        await fake_db["samples"].insert_many(
+            [
+                make_ntc_doc("NTC-A", "case-late", "DNA", DAY_3, classified_reads=5),
+                make_ntc_doc("NTC-A", "case-early", "DNA", DAY_1, classified_reads=5),
+            ]
+        )
+        app = make_app(fake_db)
+
+        counts = (
+            TestClient(app)
+            .get("/api/v1/ntc/trends?nucleic_acid=DNA")
+            .json()["read_counts"]
+        )
+
+        assert len(counts) == 1
+        assert counts[0]["order_date"] == DAY_1
+
+
+class TestNewestAnalysisWins:
+    async def test_highest_analysis_version_supplies_the_values(self, fake_db):
+        older = "6a9ea6568c6197583da39320"
+        newer = "6a9ea6568c6197583da39321"
+        await fake_db["case_analysis"].insert_many(
+            [
+                {"_id": ObjectId(older), "case_id": "case-a", "version": 1},
+                {"_id": ObjectId(newer), "case_id": "case-b", "version": 3},
+            ]
+        )
+        await fake_db["samples"].insert_many(
+            [
+                make_ntc_doc(
+                    "NTC-A",
+                    "case-a",
+                    "DNA",
+                    DAY_1,
+                    classified_reads=100,
+                    analysis_id=older,
+                ),
+                make_ntc_doc(
+                    "NTC-A",
+                    "case-b",
+                    "DNA",
+                    DAY_1,
+                    classified_reads=999,
+                    analysis_id=newer,
+                ),
+            ]
+        )
+        app = make_app(fake_db)
+
+        counts = (
+            TestClient(app)
+            .get("/api/v1/ntc/trends?nucleic_acid=DNA")
+            .json()["read_counts"]
+        )
+
+        assert counts[0]["classified_reads"] == 999
+
+    async def test_ingested_at_breaks_a_version_tie(self, fake_db):
+        # Versions are per case, so copies from different cases tie routinely.
+        await fake_db["samples"].insert_many(
+            [
+                make_ntc_doc(
+                    "NTC-A",
+                    "case-a",
+                    "DNA",
+                    DAY_1,
+                    classified_reads=100,
+                    ingested_at="2026-09-07 11:53:46",
+                ),
+                make_ntc_doc(
+                    "NTC-A",
+                    "case-b",
+                    "DNA",
+                    DAY_1,
+                    classified_reads=999,
+                    ingested_at="2026-09-17 08:26:04",
+                ),
+            ]
+        )
+        app = make_app(fake_db)
+
+        counts = (
+            TestClient(app)
+            .get("/api/v1/ntc/trends?nucleic_acid=DNA")
+            .json()["read_counts"]
+        )
+
+        assert counts[0]["classified_reads"] == 999
+
+    async def test_value_missing_on_the_newest_copy_falls_back(self, fake_db):
+        # The newest copy has no read count at all; reporting a gap would be
+        # worse than serving the older run's number.
+        await fake_db["samples"].insert_many(
+            [
+                make_ntc_doc(
+                    "NTC-A",
+                    "case-old",
+                    "DNA",
+                    DAY_1,
+                    classified_reads=100,
+                    ingested_at="2026-09-01 10:00:00",
+                ),
+                make_ntc_doc(
+                    "NTC-A",
+                    "case-new",
+                    "DNA",
+                    DAY_1,
+                    ingested_at="2026-09-17 10:00:00",
+                ),
+            ]
+        )
+        app = make_app(fake_db)
+
+        counts = (
+            TestClient(app)
+            .get("/api/v1/ntc/trends?nucleic_acid=DNA")
+            .json()["read_counts"]
+        )
+
+        assert counts[0]["classified_reads"] == 100
+
+
+class TestPipelineScoping:
+    async def test_trana_control_excluded_from_taxprofiler_totals(self, fake_db):
+        await fake_db["samples"].insert_many(
+            [
+                make_ntc_doc("NTC-TP", "case-a", "DNA", DAY_1, classified_reads=500),
+                make_ntc_doc(
+                    "16SNEGABC123",
+                    "case-b",
+                    "DNA",
+                    DAY_2,
+                    classified_reads=1000,
+                    pipeline="trana",
+                ),
+            ]
+        )
+        app = make_app(fake_db)
+
+        body = (
+            TestClient(app)
+            .get("/api/v1/ntc/trends?nucleic_acid=DNA&pipeline=taxprofiler")
+            .json()
+        )
+
+        assert body["total_ntcs"] == 1
+        assert [c["sample_id"] for c in body["read_counts"]] == ["NTC-TP"]
+
+    async def test_taxprofiler_control_excluded_from_trana_totals(self, fake_db):
+        await fake_db["samples"].insert_many(
+            [
+                make_ntc_doc("NTC-TP", "case-a", "DNA", DAY_1, classified_reads=500),
+                make_ntc_doc(
+                    "16SNEGABC123",
+                    "case-b",
+                    "DNA",
+                    DAY_2,
+                    classified_reads=1000,
+                    pipeline="trana",
+                ),
+            ]
+        )
+        app = make_app(fake_db)
+
+        body = (
+            TestClient(app)
+            .get("/api/v1/ntc/trends?nucleic_acid=DNA&pipeline=trana")
+            .json()
+        )
+
+        assert body["total_ntcs"] == 1
+        assert body["read_counts"][0]["sample_id"] == "16SNEGABC123"
+        assert body["read_counts"][0]["classified_reads"] == 1000

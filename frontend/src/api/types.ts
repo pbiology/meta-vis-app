@@ -306,6 +306,10 @@ export interface NtcContaminantItem extends TaxonListItem {
 export interface NtcContaminantAlert {
   taxon_id: number;
   taxon_name: string;
+  // Distinct physical controls the contaminant was detected in: how recurrent
+  // it is. case_count is how many clinical results it puts in doubt, which is
+  // larger whenever one control was sequenced alongside several cases.
+  control_count: number;
   case_count: number;
   min_reads: number;
 }
@@ -318,6 +322,9 @@ export interface NtcContaminantAlertsResponse {
 
 export interface NtcKingdomPoint {
   sample_id: string;
+  // Every case the control was sequenced alongside. One physical control is
+  // run with each case in its batch, so a single point can belong to several.
+  case_ids?: string[];
   order_date: string;
   Bacteria?: number;
   Viruses?: number;
@@ -329,7 +336,7 @@ export interface NtcKingdomPoint {
 
 export interface NtcReadCountPoint {
   sample_id: string;
-  case_id?: string;
+  case_ids?: string[];
   order_date: string;
   classified_reads: number;
 }
@@ -337,19 +344,22 @@ export interface NtcReadCountPoint {
 export interface NtcTaxonOccurrence {
   order_date: string;
   abundance: number;
-  case_id?: string;
+  sample_id?: string;
+  case_ids?: string[];
 }
 
 export interface NtcRecurringTaxon {
   taxon_id: number;
   taxon_name: string;
-  case_count: number;
+  // Distinct physical controls carrying the taxon, comparable to total_ntcs.
+  control_count: number;
   occurrences: NtcTaxonOccurrence[];
 }
 
 export interface NtcTrendsResponse {
+  // Physical controls in the window, not sample documents.
   total_ntcs: number;
-  min_case_count: number;
+  min_control_count: number;
   kingdom_breakdown: NtcKingdomPoint[];
   read_counts: NtcReadCountPoint[];
   recurring_taxa: NtcRecurringTaxon[];

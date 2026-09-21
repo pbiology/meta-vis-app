@@ -1,6 +1,7 @@
 # tests/unit/test_taxprofiler_orchestrator.py
 
 import pytest
+from datetime import date
 
 from app.ingestor.inputs import MultiQCRaw
 from app.ingestor.orchestrator import (
@@ -8,6 +9,7 @@ from app.ingestor.orchestrator import (
     _extract_base_qc,
     _extract_classifier_qc,
     _pick_case_subject,
+    _resolve_sample_order_date,
 )
 from app.models.ingest import TaxprofilerSampleIngestRequest
 
@@ -492,3 +494,30 @@ def test_pick_case_subject_ignores_controls():
 def test_pick_case_subject_raises_on_multiple_subjects():
     with pytest.raises(ValueError, match="exactly one subject"):
         _pick_case_subject([_sample("A"), _sample("B")])
+
+
+# ---------------------------------------------------------------------------
+# _resolve_sample_order_date
+#
+# A control is prepared once and sequenced alongside every case in its run, so
+# it carries its own order date and every copy of it agrees. Without that, one
+# control inherits as many dates as the cases it was bundled into.
+# ---------------------------------------------------------------------------
+
+
+def test_control_order_date_wins_over_the_case_date():
+    assert (
+        _resolve_sample_order_date(date(2026, 3, 5), date(2026, 9, 3)) == "2026-03-05"
+    )
+
+
+def test_sample_falls_back_to_the_case_order_date():
+    assert _resolve_sample_order_date(None, date(2026, 9, 3)) == "2026-09-03"
+
+
+def test_no_date_anywhere_stays_none():
+    assert _resolve_sample_order_date(None, None) is None
+
+
+def test_control_date_is_kept_when_the_case_has_none():
+    assert _resolve_sample_order_date(date(2026, 3, 5), None) == "2026-03-05"

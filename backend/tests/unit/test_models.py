@@ -1,12 +1,16 @@
 # tests/unit/test_models.py
 
 import pytest
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pydantic import ValidationError
 
 from app.models.analysis import CaseAnalysisResponse
 from app.models.case import CaseResponse
 from app.models.common import ReviewStatus
+from app.models.ingest import (
+    TaxprofilerSampleIngestRequest,
+    TranaSampleIngestRequest,
+)
 from app.models.pipeline import PipelineConfiguration
 from app.models.qc import ClassifierQcStats
 from app.models.sample import SampleResponse
@@ -281,3 +285,77 @@ class TestReviewStatus:
     def test_unknown_fields_ignored(self):
         r = ReviewStatus.model_validate({"reviewed": True, "extra": "ignored"})
         assert r.reviewed is True
+
+
+class TestSampleOrderDate:
+    """Only a control carries its own order date. A clinical sample is ordered
+    as part of its case, so a per-sample date there could only disagree with
+    the case — which is the drift this field exists to remove, not to add."""
+
+    def _taxprofiler(self, **overrides) -> dict:
+        payload = {
+            "sample_id": "NTC-260305-DNA",
+            "sample_type": "negative_ctrl",
+            "nucleic_acid": "DNA",
+            "columns": {"kraken2": "NTC-260305-DNA_k2_pluspf"},
+        }
+        payload.update(overrides)
+        return payload
+
+    def _trana(self, **overrides) -> dict:
+        payload = {
+            "sample_id": "16SNEGABC123",
+            "sample_type": "negative_ctrl",
+            "nucleic_acid": "DNA",
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_control_may_carry_its_own_order_date(self):
+        req = TaxprofilerSampleIngestRequest(
+            **self._taxprofiler(order_date="2026-03-05")
+        )
+
+        assert req.order_date == date(2026, 3, 5)
+
+    def test_positive_control_may_carry_its_own_order_date(self):
+        req = TaxprofilerSampleIngestRequest(
+            **self._taxprofiler(sample_type="positive_ctrl", order_date="2026-03-05")
+        )
+
+        assert req.order_date == date(2026, 3, 5)
+
+    def test_order_date_defaults_to_none(self):
+        assert TaxprofilerSampleIngestRequest(**self._taxprofiler()).order_date is None
+
+    def test_clinical_sample_may_not_carry_its_own_order_date(self):
+        payload = self._taxprofiler(
+            sample_type="sample",
+            subject_id="26CE100005",
+            order_date="2026-03-05",
+        )
+
+        with pytest.raises(ValidationError, match="must not set order_date"):
+            TaxprofilerSampleIngestRequest(**payload)
+
+    def test_clinical_sample_without_a_date_is_accepted(self):
+        req = TaxprofilerSampleIngestRequest(
+            **self._taxprofiler(sample_type="sample", subject_id="26CE100005")
+        )
+
+        assert req.order_date is None
+
+    def test_trana_control_may_carry_its_own_order_date(self):
+        req = TranaSampleIngestRequest(**self._trana(order_date="2026-03-05"))
+
+        assert req.order_date == date(2026, 3, 5)
+
+    def test_trana_clinical_sample_may_not_carry_its_own_order_date(self):
+        payload = self._trana(
+            sample_type="sample",
+            subject_id="1234567890AB",
+            order_date="2026-03-05",
+        )
+
+        with pytest.raises(ValidationError, match="must not set order_date"):
+            TranaSampleIngestRequest(**payload)
