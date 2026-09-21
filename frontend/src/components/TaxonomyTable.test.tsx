@@ -3,7 +3,8 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import TaxonomyTable from "./TaxonomyTable";
 import { renderWithProviders } from "../test/utils";
-import { taxprofilerProfile, tranaProfile } from "../test/fixtures/samples";
+import { entry, taxprofilerProfile, tranaProfile } from "../test/fixtures/samples";
+import type { SampleProfile } from "../api/types";
 
 const baseProps = {
   sampleId: "sample-1",
@@ -125,5 +126,93 @@ describe("TaxonomyTable — report selection", () => {
     expect(hivCheckbox).not.toBeChecked();
     await userEvent.click(hivCheckbox);
     expect(onToggle).toHaveBeenCalledWith(11676);
+  });
+});
+
+describe("TaxonomyTable — read totals", () => {
+  // Kraken2 via taxpasta reports DIRECT counts, so root holds only the reads
+  // that could not be placed deeper: it is far smaller than the host row and
+  // smaller than a single family. Proportions follow a production run.
+  function directCountProfile(): SampleProfile {
+    return {
+      classifier: "kraken2",
+      classifier_db: "k2_pluspf",
+      profile: [
+        entry(0, "unclassified", null, 1_000_000),
+        entry(1, "root", null, 2_700_000, "no rank"),
+        entry(131567, "cellular organisms", null, 50_000, "no rank"),
+        entry(543, "Enterobacteriaceae", "Bacteria", 4_350_000, "family"),
+        entry(9606, "Homo sapiens", "Eukaryota", 17_500_000),
+        entry(11676, "HIV-1", "Viruses", 250),
+      ],
+    };
+  }
+
+  function cardValue(label: string) {
+    return screen.getByText(label).parentElement?.querySelector("p:last-child")?.textContent;
+  }
+
+  it("derives the totals from direct counts, not from the root row", () => {
+    renderWithProviders(<TaxonomyTable {...baseProps} profile={directCountProfile()} />, {
+      sessionStorage: ALL_KINGDOMS,
+    });
+
+    // Every row except unclassified: 24,600,250 — not root's 2,700,000.
+    expect(cardValue("Total classified")).toBe((24_600_250).toLocaleString());
+    // Minus direct host reads. Using root made this negative.
+    expect(cardValue("Non-host reads")).toBe((7_100_250).toLocaleString());
+  });
+
+  it("uses the corrected denominator for row percentages", () => {
+    renderWithProviders(<TaxonomyTable {...baseProps} profile={directCountProfile()} />, {
+      sessionStorage: ALL_KINGDOMS,
+    });
+
+    // 4,350,000 / 7,100,250. The root fallback left the denominator negative,
+    // so every row rendered as 0.000%.
+    const familyRow = screen.getByText("Enterobacteriaceae").closest("tr")!;
+    expect(within(familyRow).getByText("61.265%")).toBeInTheDocument();
+    const hivRow = screen.getByText("HIV-1").closest("tr")!;
+    expect(within(hivRow).getByText("0.004%")).toBeInTheDocument();
+  });
+
+  it("prefers the classified total from QC when it is present", () => {
+    renderWithProviders(
+      <TaxonomyTable
+        {...baseProps}
+        profile={directCountProfile()}
+        clfQc={{ classified_reads: 38_734_323 }}
+      />,
+      { sessionStorage: ALL_KINGDOMS }
+    );
+
+    expect(cardValue("Total classified")).toBe((38_734_323).toLocaleString());
+    expect(cardValue("Non-host reads")).toBe((21_234_323).toLocaleString());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("warns when QC contradicts the profile instead of showing a clamped total silently", () => {
+    renderWithProviders(
+      <TaxonomyTable
+        {...baseProps}
+        profile={directCountProfile()}
+        clfQc={{ classified_reads: 1000 }}
+      />,
+      { sessionStorage: ALL_KINGDOMS }
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/host reads exceed the classified total/i);
+    expect(cardValue("Non-host reads")).toBe("0");
+  });
+
+  it("shows no read counts for relative-abundance profiles", () => {
+    // TRANA/Emu profiles are fractions; rounding them to reads printed "1".
+    renderWithProviders(
+      <TaxonomyTable {...baseProps} profile={tranaProfile()} abundanceIsFraction />,
+      { sessionStorage: ALL_KINGDOMS }
+    );
+
+    expect(cardValue("Total classified")).toBe("—");
+    expect(cardValue("Non-host reads")).toBe("—");
   });
 });
