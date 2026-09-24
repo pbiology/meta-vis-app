@@ -16,10 +16,10 @@ ARG VITE_MODE=production
 
 # Copy lockfile separately for better layer caching.
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
 
 COPY . .
-RUN npm run build -- --mode ${VITE_MODE}
+RUN npm run build -- --mode "${VITE_MODE}"
 
 # ---------- runtime ----------
 # nginx-unprivileged runs as non-root (UID 101) and listens on 8080 by

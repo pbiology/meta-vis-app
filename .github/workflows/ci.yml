@@ -142,7 +142,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Run tsc type check
         run: npm run typecheck
@@ -167,7 +167,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Run vitest
         run: npm run test:run
@@ -239,5 +239,5 @@ jobs:
         if: matrix.component == 'frontend'
         working-directory: frontend
         run: |
-          npm install
+          npm ci --ignore-scripts
           npm run format:check
