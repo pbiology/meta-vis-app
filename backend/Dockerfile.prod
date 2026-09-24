@@ -8,7 +8,7 @@
 # used for `docker compose up` against backend/docker-compose.yml.
 
 # ---------- builder ----------
-FROM python:3.13-slim-trixie AS builder
+FROM python:3.14-slim-trixie AS builder
 
 # uv binary copied from its pinned image — installing it with pip would itself
 # be an unlocked install. Stays in the builder; the runtime stage never sees it.
@@ -34,7 +34,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-build --no-install-project
 
 # ---------- runtime ----------
-FROM python:3.13-slim-trixie AS runtime
+FROM python:3.14-slim-trixie AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
