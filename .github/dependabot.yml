@@ -1,0 +1,40 @@
+# Dependabot keeps the locked dependency sets current. Locking (backend/uv.lock,
+# frontend/package-lock.json) stops versions drifting silently; this is what
+# makes sure security fixes still arrive — as reviewable PRs that CI checks.
+#
+# Minor + patch updates are grouped into one PR per ecosystem to limit noise;
+# major updates arrive as individual PRs since they are the ones that break.
+# Security updates bypass the schedule and are raised as soon as advisories land.
+
+version: 2
+
+updates:
+  - package-ecosystem: uv
+    directory: /backend
+    schedule:
+      interval: weekly
+    groups:
+      python-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directories: [/backend, /frontend]
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    # "/" covers .github/workflows; the composite action is listed explicitly.
+    directories: [/, /.github/actions/setup-backend]
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
