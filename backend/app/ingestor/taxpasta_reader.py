@@ -80,12 +80,16 @@ def extract_sample_profile(df: pd.DataFrame, sample_column: str) -> list[TaxonEn
     work = df[cols].copy()
     work = work.rename(columns={sample_column: "abundance"})
     work["abundance"] = pd.to_numeric(work["abundance"], errors="coerce").fillna(0.0)
-    work = work[work["abundance"] > 0]
-    work = work[
-        work["abundance"].apply(
-            lambda x: isinstance(x, (int, float)) and x == x and x != float("inf")
+    # NaN was zeroed above, so the only non-finite values left are +/-inf. These
+    # mean corrupt input; fail loudly rather than dropping clinical data silently.
+    infinite = work["abundance"].abs() == float("inf")
+    if infinite.any():
+        bad_ids = work.loc[infinite, "taxon_id"].head(5).tolist()
+        raise ValueError(
+            f"Sample column '{sample_column}' contains infinite abundance values "
+            f"(first taxon_ids: {bad_ids})"
         )
-    ]
+    work = work[work["abundance"] > 0]
 
     records: list[TaxonEntry] = []
     for row in work.itertuples(index=False):

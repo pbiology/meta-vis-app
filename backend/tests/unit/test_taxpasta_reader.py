@@ -86,6 +86,23 @@ def test_zero_abundance_rows_filtered(tmp_path):
     assert records == []
 
 
+def test_infinite_abundance_raises(tmp_path):
+    tsv = (
+        "taxonomy_id\tname\trank\tlineage\tSAMPLE1\n"
+        "9606\tHomo sapiens\tspecies\tEukaryota;Chordata\t100\n"
+        "1279\tStaphylococcus\tgenus\tBacteria;Firmicutes\tinf\n"
+    )
+    path = write_tsv(tmp_path, tsv)
+    with pytest.raises(ValueError, match=r"infinite abundance.*\[1279\]"):
+        read_taxpasta(path, "SAMPLE1")
+
+
+def test_negative_infinite_abundance_raises(tmp_path):
+    path = write_tsv(tmp_path, "taxonomy_id\tname\tSAMPLE1\n1279\tStaph\t-inf\n")
+    with pytest.raises(ValueError, match="infinite abundance"):
+        read_taxpasta(path, "SAMPLE1")
+
+
 # ---------------------------------------------------------------------------
 # No lineage column
 # ---------------------------------------------------------------------------
