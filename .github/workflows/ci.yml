@@ -26,7 +26,7 @@ jobs:
         env:
           MONGODB_DB_NAME: test
           JWT_SECRET: ci-test-secret
-        run: uv run --no-sync pytest --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=70
+        run: pytest --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=70
 
       - name: Upload coverage report
         if: always()
@@ -51,7 +51,7 @@ jobs:
         uses: ./.github/actions/setup-backend
 
       - name: Run Bandit security scan
-        run: uv run --no-sync bandit -r app/ -f json -o bandit-report.json || true
+        run: bandit -r app/ -f json -o bandit-report.json || true
 
       - name: Check Bandit results
         run: |
@@ -99,7 +99,7 @@ jobs:
         uses: ./.github/actions/setup-backend
 
       - name: Run mypy type check
-        run: uv run --no-sync mypy app/
+        run: mypy app/
 
   frontend-type-check:
     name: Frontend type checking (tsc)
@@ -179,7 +179,7 @@ jobs:
           # enforcement. No fix released; supplier maintains the key length
           # is the application's responsibility. Our tokens are RS256-signed
           # by Keycloak (not HMAC), so this does not apply.
-          uv run --no-sync pip-audit --disable-pip -r requirements-audit.txt \
+          pip-audit --disable-pip -r requirements-audit.txt \
             --ignore-vuln PYSEC-2025-183
 
       - name: Set up Node (frontend)
@@ -214,12 +214,12 @@ jobs:
       - name: Check backend formatting (Ruff)
         if: matrix.component == 'backend'
         working-directory: backend
-        run: uv run --no-sync ruff format --check app/
+        run: ruff format --check app/
 
       - name: Lint backend (Ruff)
         if: matrix.component == 'backend'
         working-directory: backend
-        run: uv run --no-sync ruff check app/ tests/
+        run: ruff check app/ tests/
 
       - name: Set up Node (frontend)
         if: matrix.component == 'frontend'

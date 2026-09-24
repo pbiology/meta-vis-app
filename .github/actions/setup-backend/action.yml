@@ -31,3 +31,10 @@ runs:
       #   --no-build           wheels only: never execute a package's build scripts
       #   --no-install-project tests and tools import app/ from the working dir
       run: uv sync --locked --no-build --no-install-project --extra dev
+
+    # Later steps call tools (pytest, mypy, ruff, …) directly rather than via
+    # `uv run`: the venv above is the only place they come from, and is only
+    # ever populated by the locked, wheels-only sync.
+    - name: Put backend venv on PATH
+      shell: bash
+      run: echo "$GITHUB_WORKSPACE/backend/.venv/bin" >> "$GITHUB_PATH"
