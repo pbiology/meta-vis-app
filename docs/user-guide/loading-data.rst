@@ -24,6 +24,13 @@ Two supported pipelines, each with its own subcommand:
 
 Run ``python ingest.py --help`` for the authoritative reference.
 
+``ingest.py`` is a standalone script: it needs Python 3.13 and
+``requests``, nothing from the backend. Both are declared in the
+script's header (PEP 723), so on any machine with uv,
+``uv run ingest.py …`` fetches them into a throwaway environment. Plain
+``python ingest.py …`` works in any environment that has ``requests``
+installed, such as ``backend/.venv``.
+
 Authentication
 --------------
 
@@ -221,9 +228,8 @@ On bare metal:
 
 .. code-block:: bash
 
-   conda activate meta-vis-app
    cd backend
-   python load_taxonomy.py
+   uv run python load_taxonomy.py
 
 What happens:
 
@@ -255,7 +261,7 @@ monthly cron run is enough:
 
 .. code-block:: text
 
-   0 3 2 * *  cd /path/to/meta-vis-app && /path/to/conda/envs/meta-vis-app/bin/python backend/load_taxonomy.py
+   0 3 2 * *  cd /path/to/meta-vis-app && backend/.venv/bin/python backend/load_taxonomy.py
 
 Run at 03:00 on the 2nd of the month — that gives NCBI's mirrors time
 to settle after the 1st-of-month publish.

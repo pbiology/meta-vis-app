@@ -94,6 +94,54 @@ Useful shells and helpers
    make lint             # ruff + mypy
    make format           # ruff --fix
 
+Running the backend without Docker
+==================================
+
+The backend's Python environment is managed by `uv <https://docs.astral.sh/uv/>`_
+(``brew install uv``, or see its docs for other platforms). Everything is
+installed from ``backend/uv.lock``, so your versions match CI and the images
+exactly.
+
+.. code-block:: bash
+
+   cd backend
+   uv sync --locked --extra dev          # creates backend/.venv
+   uv run uvicorn app.main:app --reload  # API at http://localhost:8000
+   uv run pytest
+   ../ci-check.sh                        # every CI check, locally
+
+``uv run`` executes inside ``backend/.venv``; alternatively activate it with
+``source .venv/bin/activate`` and run tools directly. Set
+``MONGODB_HOST=localhost`` in ``backend/.env`` (see `First-run setup`_).
+
+Python dependencies
+===================
+
+``backend/pyproject.toml`` declares *ranges*; ``backend/uv.lock`` pins the
+exact version and hash of every package, including transitive ones. The lock
+is committed, and CI and both Dockerfiles install with ``--locked``, which
+fails if the lock is out of date with ``pyproject.toml``.
+
+.. code-block:: bash
+
+   uv add "somepackage>=1.2"              # runtime dependency
+   uv add --optional dev "sometool>=3.0"  # dev-only tool
+   uv lock --upgrade-package somepackage  # upgrade one package in the lock
+   uv lock                                # after editing pyproject.toml by hand
+
+Commit ``pyproject.toml`` and ``uv.lock`` together.
+
+Two rules are enforced through ``[tool.uv]`` in ``pyproject.toml``:
+
+- **Wheels only** (``no-build``). No package's build script ever runs during
+  install. A new dependency without a prebuilt wheel for Python 3.13 on Linux
+  fails to install — by design; pick a version (or alternative) that ships one.
+- **The app is not installed as a package** (``package = false``). ``app/`` is
+  imported from the ``backend/`` working directory.
+
+Dependabot opens weekly update PRs for the lock (and for npm, Docker base
+images and GitHub Actions); review and merge them like any other change.
+
 Authentication: pick a Keycloak
 ================================
 

@@ -1,4 +1,8 @@
 #!/usr/bin/env python
+# /// script
+# requires-python = ">=3.13"
+# dependencies = ["requests>=2.32.0"]
+# ///
 """
 Ingest pipeline results into meta-vis-app.
 

@@ -19,22 +19,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-          cache: pip
-
-      - name: Install dependencies
-        run: |
-          pip install -e ".[dev]"
-          pip install mongomock-motor pytest-cov
+      - name: Set up backend
+        uses: ./.github/actions/setup-backend
 
       - name: Run tests
         env:
           MONGODB_DB_NAME: test
           JWT_SECRET: ci-test-secret
-        run: pytest --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=70
+        run: uv run --no-sync pytest --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=70
 
       - name: Upload coverage report
         if: always()
@@ -55,17 +47,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-          cache: pip
-
-      - name: Install dependencies
-        run: pip install bandit[toml]>=1.7.5
+      - name: Set up backend
+        uses: ./.github/actions/setup-backend
 
       - name: Run Bandit security scan
-        run: bandit -r app/ -f json -o bandit-report.json || true
+        run: uv run --no-sync bandit -r app/ -f json -o bandit-report.json || true
 
       - name: Check Bandit results
         run: |
@@ -109,18 +95,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-          cache: pip
-
-      - name: Install dependencies
-        run: |
-          pip install -e ".[dev]"
+      - name: Set up backend
+        uses: ./.github/actions/setup-backend
 
       - name: Run mypy type check
-        run: mypy app/
+        run: uv run --no-sync mypy app/
 
   frontend-type-check:
     name: Frontend type checking (tsc)
@@ -184,16 +163,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up backend
+        if: matrix.component == 'backend'
+        uses: ./.github/actions/setup-backend
+
       - name: Audit backend dependencies
         if: matrix.component == 'backend'
         working-directory: backend
         run: |
-          pip install pip-audit
+          # Audit exactly the locked runtime set that ships in the image (no
+          # dev extra), not whatever would resolve fresh today.
+          uv export --locked --no-emit-project --format requirements-txt \
+            -o requirements-audit.txt
           # PYSEC-2025-183: disputed pyjwt advisory about HMAC key length
           # enforcement. No fix released; supplier maintains the key length
           # is the application's responsibility. Our tokens are RS256-signed
           # by Keycloak (not HMAC), so this does not apply.
-          pip-audit --ignore-vuln PYSEC-2025-183 .
+          uv run --no-sync pip-audit --disable-pip -r requirements-audit.txt \
+            --ignore-vuln PYSEC-2025-183
 
       - name: Set up Node (frontend)
         if: matrix.component == 'frontend'
@@ -220,12 +207,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up backend
+        if: matrix.component == 'backend'
+        uses: ./.github/actions/setup-backend
+
       - name: Check backend formatting (Ruff)
         if: matrix.component == 'backend'
         working-directory: backend
-        run: |
-          pip install ruff>=0.15.0
-          ruff format --check app/
+        run: uv run --no-sync ruff format --check app/
 
       - name: Set up Node (frontend)
         if: matrix.component == 'frontend'

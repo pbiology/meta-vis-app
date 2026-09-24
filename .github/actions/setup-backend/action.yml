@@ -1,0 +1,31 @@
+name: Set up backend
+description: >
+  Install Python and uv, then sync the backend's locked dependencies
+  (runtime + dev extra) from backend/uv.lock. Single place to bump the uv
+  version or change install flags for every backend CI job.
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v10
+      with:
+        # Keep in step with the uv image tag in backend/Dockerfile*.
+        version: "0.12.18"
+        enable-cache: true
+        cache-dependency-glob: backend/uv.lock
+
+    - name: Install locked dependencies
+      shell: bash
+      working-directory: backend
+      env:
+        UV_PYTHON_DOWNLOADS: never
+      #   --locked             fail if uv.lock is out of date with pyproject.toml
+      #   --no-build           wheels only: never execute a package's build scripts
+      #   --no-install-project tests and tools import app/ from the working dir
+      run: uv sync --locked --no-build --no-install-project --extra dev
