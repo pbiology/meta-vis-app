@@ -216,6 +216,11 @@ jobs:
         working-directory: backend
         run: uv run --no-sync ruff format --check app/
 
+      - name: Lint backend (Ruff)
+        if: matrix.component == 'backend'
+        working-directory: backend
+        run: uv run --no-sync ruff check app/ tests/
+
       - name: Set up Node (frontend)
         if: matrix.component == 'frontend'
         uses: actions/setup-node@v4
