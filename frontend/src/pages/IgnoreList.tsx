@@ -48,7 +48,7 @@ export default function IgnoreList() {
 
   const superkingdoms = [...new Set(items.map((i) => i.superkingdom))]
     .filter((s): s is string => Boolean(s))
-    .sort();
+    .sort((a, b) => a.localeCompare(b));
 
   return (
     <div className="flex flex-col h-full">

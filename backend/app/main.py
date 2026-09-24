@@ -44,6 +44,10 @@ app = FastAPI(
 
 # Parse CORS origins from comma-separated config string
 origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+# Order matters: Starlette wraps in reverse, so the LAST middleware added is
+# outermost. CORS must be outermost so every response, including ones produced
+# by inner middleware, carries CORS headers and preflights are answered early.
+app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -51,7 +55,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
-app.add_middleware(RequestLoggingMiddleware)
 
 # API routers
 app.include_router(auth.router, prefix="/api/v1")

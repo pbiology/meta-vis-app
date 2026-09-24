@@ -176,7 +176,7 @@ class TestGetExternalLinks:
         links = resp.json()["links"]
         # tax_id should be excluded; the two URL fields become links
         assert len(links) == 2
-        names = {l["name"] for l in links}
+        names = {link["name"] for link in links}
         assert "Wikipedia" in names
 
     def test_returns_empty_list_on_network_error(self):
