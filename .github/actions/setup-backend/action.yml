@@ -13,7 +13,9 @@ runs:
         python-version: "3.13"
 
     - name: Set up uv
-      uses: astral-sh/setup-uv@v10
+      # Pinned to a commit SHA: setup-uv publishes no floating major tag (e.g.
+      # v10) after v7, and a SHA cannot be re-pointed. Dependabot bumps both.
+      uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       with:
         # Keep in step with the uv image tag in backend/Dockerfile*.
         version: "0.12.18"
