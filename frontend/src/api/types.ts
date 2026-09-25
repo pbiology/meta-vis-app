@@ -174,6 +174,10 @@ export interface Sample {
   // and read_delta always describe the same number.
   total_reads?: number | null;
   read_delta?: SampleReadDelta;
+  // sample_ids of the negative controls this sample is compared against, as
+  // declared at ingest. [] means it was explicitly ingested without one, which
+  // the UI must announce; null on a negative control, which has none.
+  negative_control_sample_ids?: string[] | null;
   [key: string]: unknown;
 }
 

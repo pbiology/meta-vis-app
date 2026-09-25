@@ -68,20 +68,23 @@ function auxDataWarningMessage(outbreakError: boolean, ntcError: boolean): strin
  *
  * Kept separate from `auxDataWarningMessage` because "failed to load" and
  * "none exists" are different facts. Without this, TaxonomyTable simply drops
- * the NTC column and never flags a contaminant, so an uncontrolled run is
+ * the NTC column and never flags a contaminant, so an uncontrolled sample is
  * indistinguishable from a clean one.
+ *
+ * Decided from the controls declared at ingest rather than from how many NTC
+ * profiles came back: the declaration is the fact, and a declared control that
+ * cannot be loaded is a load failure, which the aux warning reports.
  */
-function missingNtcMessage(
-  ntcCount: number,
-  ntcError: boolean,
+export function missingNtcMessage(
   sampleType: string,
-  nucleicAcid: string | undefined
+  declaredControls: string[] | null | undefined
 ): string | null {
-  // Controls are not compared against themselves, and a load failure is
-  // already reported by the aux warning.
-  if (ntcError || sampleType !== "sample" || ntcCount > 0) return null;
-  const what = nucleicAcid ? `${nucleicAcid} negative control` : "negative control";
-  return `No ${what} in this analysis — contaminants cannot be flagged for this sample.`;
+  // Controls are not compared against a negative control of their own.
+  if (sampleType !== "sample") return null;
+  // Ingest always writes the list on a clinical sample; a missing one is
+  // announced like an empty one rather than assumed to be covered.
+  if (declaredControls && declaredControls.length > 0) return null;
+  return "No negative control was declared for this sample — contaminants cannot be flagged.";
 }
 
 export default function SampleDetailContent({
@@ -177,12 +180,7 @@ export default function SampleDetailContent({
   const classifiers: SampleProfile[] = profile?.profiles ?? [];
   const sampleType = (sample?.sample_type as string | undefined) ?? "sample";
   const auxWarning = auxDataWarningMessage(Boolean(outbreakError), Boolean(ntcError));
-  const noNtcWarning = missingNtcMessage(
-    ntcProfiles.length,
-    Boolean(ntcError),
-    sampleType,
-    sample?.nucleic_acid as string | undefined
-  );
+  const noNtcWarning = missingNtcMessage(sampleType, sample?.negative_control_sample_ids);
 
   return (
     <div className="flex flex-col h-full">

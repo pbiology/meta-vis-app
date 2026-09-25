@@ -124,7 +124,11 @@ export const defaultHandlers = [
   // Not empty like its neighbours: a clade response always carries a tree root.
   http.get(`${API}/samples/:sampleId/clade`, () => HttpResponse.json(escherichiaClade())),
   http.get(`${API}/samples/:sampleId`, ({ params }) =>
-    HttpResponse.json({ sample_id: params.sampleId, sample_type: "sample" })
+    HttpResponse.json({
+      sample_id: params.sampleId,
+      sample_type: "sample",
+      negative_control_sample_ids: [],
+    })
   ),
 
   // subjects

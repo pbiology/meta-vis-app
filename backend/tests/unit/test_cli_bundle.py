@@ -86,6 +86,7 @@ async def test_cli_bundle_round_trips_through_loader(tmp_path, cli):
                 "sample_type": "sample",
                 "nucleic_acid": "DNA",
                 "sample_source": "N/A",
+                "negative_controls": [],
                 "columns": {"kraken2": "S1_kraken2"},
             }
         ],
@@ -184,6 +185,58 @@ class TestControlOrderDate:
         assert parsed["order_date"] == "2026-03-05"
 
 
+class TestNegativeControlsToken:
+    """negative_controls= names the controls a sample is compared against.
+    The CLI only parses it; whether it is required and whether the names
+    resolve is the backend's call, since only the manifest sees every sample."""
+
+    def test_comma_separated_names_become_a_list(self, cli):
+        parts = {"negative_controls": "NTC-ELB-DNA,NTC-EXTR-DNA"}
+
+        assert cli._parse_negative_controls(parts, "S1") == [
+            "NTC-ELB-DNA",
+            "NTC-EXTR-DNA",
+        ]
+
+    def test_none_declares_no_control(self, cli):
+        assert cli._parse_negative_controls({"negative_controls": "none"}, "S1") == []
+
+    def test_absent_token_is_none(self, cli):
+        # Left to the backend to reject on a clinical sample; a negative
+        # control must not carry it at all.
+        assert cli._parse_negative_controls({}, "S1") is None
+
+    @pytest.mark.parametrize("raw", ["", "NTC-A,", ",NTC-A", "NTC-A,,NTC-B"])
+    def test_empty_entry_exits(self, cli, raw):
+        with pytest.raises(SystemExit) as exc:
+            cli._parse_negative_controls({"negative_controls": raw}, "S1")
+
+        assert exc.value.code == 1
+
+    def test_parse_sample_carries_the_token(self, cli):
+        parsed = cli.parse_sample(
+            "sample_id=S1 subject_id=SUBJ-1 type=sample nucleic_acid=DNA "
+            "negative_controls=NTC-DNA column_kraken2=S1_k2_pluspf",
+            ["kraken2"],
+        )
+
+        assert parsed["negative_controls"] == ["NTC-DNA"]
+
+    def test_trana_manifest_entry_carries_the_token(self, cli, tmp_path):
+        # The trana builder rebuilds each manifest entry field by field, so a
+        # key it does not list is silently dropped from the bundle.
+        abundance = tmp_path / "abundance.tsv"
+        abundance.write_text("tax_id\tabundance\n")
+        parsed = cli.parse_trana_sample(
+            "sample_id=S1 subject_id=SUBJ-1 type=sample nucleic_acid=DNA "
+            f"negative_controls=16SNEG abundance_path={abundance}"
+        )
+
+        resolved = cli._resolve_trana_sample(parsed)
+
+        assert resolved["meta"]["negative_controls"] == ["16SNEG"]
+
+
 async def test_control_order_date_survives_the_bundle(tmp_path, cli):
     """The control's date must reach the manifest the backend validates. The
     taxprofiler builder passes samples through verbatim, but the trana builder
@@ -220,6 +273,7 @@ async def test_control_order_date_survives_the_bundle(tmp_path, cli):
                 "nucleic_acid": "DNA",
                 "sample_source": "N/A",
                 "order_date": None,
+                "negative_controls": ["NTC-260305-DNA"],
                 "columns": {"kraken2": "S1_kraken2"},
             },
             {
@@ -244,3 +298,4 @@ async def test_control_order_date_survives_the_bundle(tmp_path, cli):
     # The clinical sample keeps inheriting the case's date.
     assert by_id["S1"].order_date is None
     assert meta.order_date == date(2026, 9, 3)
+    assert by_id["S1"].negative_controls == ["NTC-260305-DNA"]

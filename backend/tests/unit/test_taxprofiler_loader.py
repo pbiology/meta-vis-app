@@ -43,6 +43,7 @@ def _minimal_manifest(**overrides):
                 "sample_id": "S1",
                 "sample_type": "sample",
                 "nucleic_acid": "DNA",
+                "negative_controls": [],
                 "columns": {"kraken2": "S1_kraken2"},
             }
         ],

@@ -325,6 +325,9 @@ def _build_sample_docs_and_profiles(
                 "subject_id": None,
                 "sample_type": s.sample_type,
                 "nucleic_acid": s.nucleic_acid,
+                # Validated against the bundle by the manifest model; null only
+                # on a negative control.
+                "negative_control_sample_ids": s.negative_controls,
                 "taxprofiler": {
                     **base_qc,
                     "classifiers": classifier_qc,
@@ -864,6 +867,7 @@ def _prepare_trana_ingest(
                 "subject_id": None,
                 "sample_type": s.sample_type,
                 "nucleic_acid": s.nucleic_acid,
+                "negative_control_sample_ids": s.negative_controls,
                 "trana": trana_qc,
                 "profiles": profiles,
                 "outbreak_taxa": outbreak_taxa,

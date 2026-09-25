@@ -23,14 +23,21 @@ Examples:
         --multiqc  /path/to/multiqc_data.json \\
         --pipeline-info /path/to/software_versions.yml \\
         --classifier "kraken2 db=k2_pluspf taxpasta=/path/kraken2.tsv krona=/path/kraken2.html" \\
-        --sample "sample_id=PE-04-28 subject_id=SUBJ-01 sex=F type=sample nucleic_acid=DNA column_kraken2=PE-04-28_k2_pluspf" \\
+        --sample "sample_id=PE-04-28 subject_id=SUBJ-01 sex=F type=sample nucleic_acid=DNA negative_controls=NTC-DNA column_kraken2=PE-04-28_k2_pluspf" \\
+        --sample "sample_id=NTC-DNA type=negative_ctrl nucleic_acid=DNA column_kraken2=NTC-DNA_k2_pluspf" \\
         --password yourpassword
 
     python ingest.py trana \\
         --case-id trana_run1 \\
         --pipeline-info /path/to/software_versions.yml \\
-        --sample "sample_id=S1 subject_id=SUBJ-01 sex=unknown type=sample nucleic_acid=DNA abundance_path=/path/to/S1_rel-abundance.tsv" \\
+        --sample "sample_id=S1 subject_id=SUBJ-01 sex=unknown type=sample nucleic_acid=DNA negative_controls=NEG1 abundance_path=/path/to/S1_rel-abundance.tsv" \\
+        --sample "sample_id=NEG1 type=negative_ctrl nucleic_acid=DNA abundance_path=/path/to/NEG1_rel-abundance.tsv" \\
         --password yourpassword
+
+Every clinical sample and positive control names its negative controls with
+negative_controls= (comma-separated sample_ids, or "none"). The link is never
+inferred: a run can hold several controls per nucleic acid, e.g. one per prep
+method, and only the operator knows which one belongs to which sample.
 
 The bundle layout the CLI produces must match what the server's loader expects.
 The canonical layout is documented in backend/app/ingestor/loader.py; the
@@ -299,6 +306,28 @@ def _parse_sample_order_date(parts: dict, sample_id: str) -> str | None:
             f"Sample '{sample_id}' has an invalid order_date '{raw}' — "
             "expected YYYY-MM-DD."
         )
+
+
+def _parse_negative_controls(parts: dict, sample_id: str) -> list[str] | None:
+    """Parse the negative_controls= token on a --sample.
+
+    A comma-separated list of the sample_ids of the negative controls this
+    sample is compared against, or the literal ``none`` for a sample that has
+    no control. Absent returns None; whether the token is required, and whether
+    the names resolve, is decided by the backend, which sees the whole bundle.
+    """
+    raw = parts.get("negative_controls")
+    if raw is None:
+        return None
+    if raw == "none":
+        return []
+    names = raw.split(",")
+    if any(not name for name in names):
+        _fail(
+            f"Sample '{sample_id}' has an empty entry in negative_controls="
+            f"'{raw}' — expected comma-separated sample_ids or 'none'."
+        )
+    return names
 
 
 def _resolve_nucleic_acid(parts: dict) -> None:
@@ -689,6 +718,7 @@ def _resolve_trana_sample(s: dict[str, Any]) -> dict[str, Any]:
             "nucleic_acid": s["nucleic_acid"],
             "sample_source": s.get("sample_source", "N/A"),
             "order_date": s.get("order_date"),
+            "negative_controls": s.get("negative_controls"),
             "has_krona": krona is not None,
             "has_nanoplot_unprocessed": np_unproc is not None,
             "has_nanoplot_processed": np_proc is not None,
@@ -860,6 +890,7 @@ def parse_sample(raw: str, classifier_names: list) -> dict:
         "nucleic_acid": parts["nucleic_acid"],
         "sample_source": parts.get("sample_source", "N/A"),
         "order_date": _parse_sample_order_date(parts, sample_id),
+        "negative_controls": _parse_negative_controls(parts, sample_id),
         "columns": columns,
     }
 
@@ -956,6 +987,10 @@ def _add_taxprofiler_args(parser: argparse.ArgumentParser) -> None:
         metavar="KEY=VALUE ...",
         help=(
             "Sample descriptor. Repeat for each sample. "
+            "Required for type=sample and type=positive_ctrl: "
+            "negative_controls=<sample_id>[,<sample_id>...] naming the "
+            "negative controls in this bundle the sample is compared against, "
+            "or negative_controls=none. "
             "Optional for controls only: order_date=YYYY-MM-DD, the date the "
             "control itself was ordered — omit it and the sample takes the "
             "case's order date."
@@ -1009,6 +1044,7 @@ def parse_trana_sample(raw: str) -> dict:
         "nucleic_acid": parts["nucleic_acid"],
         "sample_source": parts.get("sample_source", "N/A"),
         "order_date": _parse_sample_order_date(parts, parts["sample_id"]),
+        "negative_controls": _parse_negative_controls(parts, parts["sample_id"]),
         "abundance_path": parts["abundance_path"],
         "krona_path": parts.get("krona_path"),
         "nanoplot_unprocessed_path": parts.get("nanoplot_unprocessed_path"),
@@ -1093,6 +1129,9 @@ def _add_trana_args(parser: argparse.ArgumentParser) -> None:
         help=(
             "Sample descriptor. Required: sample_id, type, nucleic_acid, abundance_path. "
             "Required for type=sample: subject_id. "
+            "Required for type=sample and type=positive_ctrl: "
+            "negative_controls=<sample_id>[,<sample_id>...] or "
+            "negative_controls=none. "
             "Optional: sex (F|M|X|unknown, default unknown), sample_source, "
             "krona_path, nanoplot_unprocessed_path, nanoplot_processed_path. "
             "Optional for controls only: order_date=YYYY-MM-DD (defaults to the "

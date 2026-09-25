@@ -9,53 +9,51 @@ const FILTERS = ["All", "Sample", "Controls"] as const;
 type Filter = (typeof FILTERS)[number];
 
 /**
- * Announce clinical samples whose nucleic acid has no usable negative control.
+ * Announce clinical samples that have no usable negative control.
  *
- * Contaminant flagging compares a sample against NTCs from the same run *and
- * the same nucleic acid* (see `routers/samples.py`), and silently does nothing
- * when there are none — so an analysis with a failed NTC looks exactly like
- * one with a clean NTC. Nucleic acid is part of the check because a DNA-only NTC
- * leaves RNA samples uncovered; a warning that ignored it would be wrong on
- * every mixed-nucleic-acid case.
+ * Contaminant flagging compares a sample against the negative controls declared
+ * for it at ingest (see `sample_controls.py`), and silently does nothing when
+ * there are none — so an uncontrolled sample looks exactly like a clean one.
+ * Checked per sample, not per nucleic acid: a run can hold one control per prep
+ * method, and one prep's control failing leaves only that prep's samples
+ * uncovered.
  */
 export function ntcCoverageWarning(samples: Sample[]): string | null {
-  // Coverage is only decidable per nucleic acid, so a sample without one is left
-  // out rather than described with a nucleic acid name it does not have. The
-  // ingest models make nucleic_acid mandatory, so this cannot happen in practice.
-  const nucleicAcids = new Set(
-    samples
-      .filter((s) => s.sample_type === "sample" && typeof s.nucleic_acid === "string")
-      .map((s) => s.nucleic_acid as string)
-  );
+  const bySampleId = new Map(samples.map((s) => [s.sample_id, s]));
 
-  const missing: string[] = [];
+  const undeclared: string[] = [];
   const empty: string[] = [];
-  // Sorted so the warning names nucleic acids in a stable order; localeCompare
-  // rather than the default sort, which orders by UTF-16 code unit.
-  for (const nucleicAcid of [...nucleicAcids].sort((a, b) => a.localeCompare(b))) {
-    const ntcs = samples.filter(
-      (s) => s.sample_type === "negative_ctrl" && s.nucleic_acid === nucleicAcid
-    );
-    if (ntcs.length === 0) {
-      missing.push(nucleicAcid);
-    } else if (ntcs.every((s) => s.has_profile_data === false)) {
-      // Only claimed when the server said so explicitly — an older response
-      // without the field must not be reported as an empty control.
-      empty.push(nucleicAcid);
+  for (const s of samples) {
+    if (s.sample_type !== "sample") continue;
+    // Ingest always writes the list on a clinical sample; a missing one is
+    // announced like an empty one rather than assumed to be covered.
+    const declared = s.negative_control_sample_ids ?? [];
+    if (declared.length === 0) {
+      undeclared.push(s.sample_id);
+    } else if (declared.every((id) => bySampleId.get(id)?.has_profile_data === false)) {
+      // Only claimed when the server said so explicitly for every declared
+      // control — one that is absent from the list must not be reported as empty.
+      empty.push(s.sample_id);
     }
   }
 
+  // Sorted so the warning names samples in a stable order; localeCompare rather
+  // than the default sort, which orders by UTF-16 code unit.
+  const byName = (a: string, b: string) => a.localeCompare(b);
+  undeclared.sort(byName);
+  empty.sort(byName);
+
   const parts: string[] = [];
-  if (missing.length > 0) {
+  if (undeclared.length > 0) {
     parts.push(
-      `No ${missing.join(" or ")} negative control in this analysis — ` +
-        `contaminant flagging is unavailable for ${missing.join(" and ")} samples.`
+      `No negative control was declared for ${undeclared.join(", ")} — ` +
+        `contaminant flagging is unavailable.`
     );
   }
   if (empty.length > 0) {
     parts.push(
-      `The ${empty.join(" and ")} negative control produced no classifier data — ` +
-        `contaminant flagging is unavailable for ${empty.join(" and ")} samples.`
+      `The negative control of ${empty.join(", ")} produced no classifier ` +
+        `data — contaminant flagging is unavailable.`
     );
   }
   return parts.length > 0 ? parts.join(" ") : null;

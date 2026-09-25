@@ -15,6 +15,7 @@ function sample(overrides: Partial<Sample> & { sample_id: string }): Sample {
     sample_type: "sample",
     nucleic_acid: "DNA",
     total_reads: 1_000_000,
+    negative_control_sample_ids: ["NTC-1"],
     ...overrides,
   } as Sample;
 }
@@ -36,6 +37,7 @@ function ntc(overrides: Partial<Sample> = {}): Sample {
     sample_id: "NTC-1",
     sample_type: "negative_ctrl",
     has_profile_data: true,
+    negative_control_sample_ids: null,
     ...overrides,
   });
 }
@@ -157,42 +159,55 @@ describe("read-delta badges", () => {
 });
 
 describe("negative-control coverage warning", () => {
-  it("warns when the analysis has no negative control at all", () => {
-    renderPanel([sample({ sample_id: "S1" })]);
+  it("warns about a sample ingested without a negative control", () => {
+    renderPanel([sample({ sample_id: "S1", negative_control_sample_ids: [] }), ntc()]);
 
-    expect(screen.getByText(/No DNA negative control in this analysis/)).toBeInTheDocument();
+    expect(screen.getByText(/No negative control was declared for S1/)).toBeInTheDocument();
   });
 
-  it("stays quiet when every nucleic acid has a usable control", () => {
+  it("stays quiet when every sample's declared control has data", () => {
     renderPanel([sample({ sample_id: "S1" }), ntc()]);
 
     expect(screen.queryByText(/negative control/)).not.toBeInTheDocument();
   });
 
-  it("names only the uncovered nucleic acid on a mixed-nucleic-acid case", () => {
-    // Contaminant comparison is nucleic-acid-matched, so a DNA-only NTC leaves the
-    // RNA samples uncontrolled — a warning ignoring nucleic acid would be wrong.
-    const message = ntcCoverageWarning([
-      sample({ sample_id: "S1", nucleic_acid: "DNA" }),
-      sample({ sample_id: "S2", nucleic_acid: "RNA" }),
-      ntc({ nucleic_acid: "DNA" }),
-    ]);
-
-    expect(message).toMatch(/No RNA negative control/);
-    expect(message).not.toMatch(/DNA negative control/);
-  });
-
-  it("distinguishes a control that produced no classifier data from an absent one", () => {
+  it("names only the uncovered samples", () => {
     const message = ntcCoverageWarning([
       sample({ sample_id: "S1" }),
-      ntc({ has_profile_data: false }),
+      sample({ sample_id: "S2", negative_control_sample_ids: [] }),
+      ntc(),
     ]);
 
-    expect(message).toMatch(/produced no classifier data/);
+    expect(message).toMatch(/declared for S2 —/);
+    expect(message).not.toMatch(/S1/);
+  });
+
+  it("names only the prep whose own control produced no data", () => {
+    // Two preps of one nucleic acid, each with its own control. The other
+    // prep's healthy control must not hide that this sample's control failed.
+    const message = ntcCoverageWarning([
+      sample({ sample_id: "S-ELB-DNA", negative_control_sample_ids: ["NTC-ELB-DNA"] }),
+      sample({ sample_id: "S-HLSAN-DNA", negative_control_sample_ids: ["NTC-HLSAN-DNA"] }),
+      ntc({ sample_id: "NTC-ELB-DNA", has_profile_data: false }),
+      ntc({ sample_id: "NTC-HLSAN-DNA" }),
+    ]);
+
+    expect(message).toMatch(/negative control of S-ELB-DNA produced no classifier data/);
+    expect(message).not.toMatch(/S-HLSAN-DNA/);
+  });
+
+  it("stays quiet while one of several declared controls has data", () => {
+    const message = ntcCoverageWarning([
+      sample({ sample_id: "S1", negative_control_sample_ids: ["NTC-1", "NTC-2"] }),
+      ntc({ sample_id: "NTC-1", has_profile_data: false }),
+      ntc({ sample_id: "NTC-2" }),
+    ]);
+
+    expect(message).toBeNull();
   });
 
   it("does not claim an empty control when the server did not say so", () => {
-    // An older response without has_profile_data must not be reported as a
+    // A control whose has_profile_data is absent must not be reported as a
     // failed control.
     const message = ntcCoverageWarning([
       sample({ sample_id: "S1" }),

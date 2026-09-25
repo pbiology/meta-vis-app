@@ -1,6 +1,7 @@
 # app/models/clade.py
 """Response models for the clade view: every taxon under one anchor taxon that
-has signal in a sample or in the negative controls of the same analysis.
+has signal in a sample or in the negative controls it is compared against
+(see ``app.sample_controls``).
 
 Built by ``app.clade``; never stored.
 """
