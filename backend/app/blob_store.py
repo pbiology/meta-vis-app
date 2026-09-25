@@ -26,12 +26,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
+
+logger = logging.getLogger(__name__)
 
 
 class BlobStore(ABC):
@@ -198,10 +201,18 @@ def make_blob_store(db: AsyncIOMotorDatabase) -> BlobStore:
     if settings.object_storage_endpoint:
         access_key = settings.object_storage_access_key or ""
         secret_key = settings.object_storage_secret_key or ""
+        logger.info(
+            "Blob store: S3 at %s (bucket %s)",
+            settings.object_storage_endpoint,
+            settings.object_storage_bucket,
+        )
         return S3BlobStore(
             endpoint=settings.object_storage_endpoint,
             access_key=access_key,
             secret_key=secret_key,
             bucket=settings.object_storage_bucket,
         )
+    logger.info(
+        "Blob store: MongoDB 'blobs' collection (OBJECT_STORAGE_ENDPOINT not set)"
+    )
     return MongoBlobStore(db)
