@@ -80,7 +80,8 @@ taxprofiler ingest
        --multiqc /path/to/multiqc_data.json \
        --pipeline-info /path/to/software_versions.yml \
        --classifier "kraken2 db=k2_pluspf taxpasta=/path/kraken2.tsv krona=/path/kraken2.html" \
-       --sample "sample_id=PE-04-28 subject_id=SUBJ-01 sex=F type=sample nucleic_acid=DNA column_kraken2=PE-04-28_k2_pluspf" \
+       --sample "sample_id=PE-04-28 subject_id=SUBJ-01 sex=F type=sample nucleic_acid=DNA negative_controls=NTC-DNA column_kraken2=PE-04-28_k2_pluspf" \
+       --sample "sample_id=NTC-DNA type=negative_ctrl nucleic_acid=DNA column_kraken2=NTC-DNA_k2_pluspf" \
        --password dev-admin
 
 **Required**
@@ -115,12 +116,17 @@ taxprofiler ingest
    --sample "sample_id=<id> [subject_id=<id>] [sex=<F|M|unknown>] \
              type=<sample|positive_ctrl|negative_ctrl> \
              nucleic_acid=<DNA|RNA> \
+             [negative_controls=<id>[,<id>...]|none] \
              column_<classifier>=<taxpasta-column>"
 
 The ``column_<classifier>=`` mapping is mandatory because taxprofiler
 appends classifier/db suffixes to taxpasta column names, and the CLI
 cannot derive them reliably. Inspect the TSV header to find the exact
 name.
+
+``negative_controls=`` is required on every ``type=sample`` and
+``type=positive_ctrl`` entry, and not allowed on a ``type=negative_ctrl``
+entry — see :ref:`linking-negative-controls`.
 
 .. note::
 
@@ -138,12 +144,58 @@ trana ingest
        --case-id trana-run-001 \
        --pipeline-info /path/to/software_versions.yml \
        --sample "sample_id=S1 subject_id=SUBJ-01 sex=F type=sample nucleic_acid=DNA \
+                 negative_controls=NEG1 \
                  abundance_path=/path/to/S1_rel-abundance.tsv \
                  nanoplot_path=/path/to/S1_NanoStats.txt" \
+       --sample "sample_id=NEG1 type=negative_ctrl nucleic_acid=DNA \
+                 abundance_path=/path/to/NEG1_rel-abundance.tsv" \
        --password dev-admin
 
 The ``--sample`` spec carries file paths inline. ``nanoplot_path=`` is
-optional; ``abundance_path=`` is required.
+optional; ``abundance_path=`` is required. ``negative_controls=`` follows
+the same rules as for taxprofiler.
+
+.. _linking-negative-controls:
+
+Linking samples to their negative controls
+------------------------------------------
+
+Contaminant flagging compares each sample against its negative controls
+(NTCs). Which control belongs to which sample is **declared at ingest,
+never inferred**: a run can hold more than one control per nucleic acid —
+typically one per prep method — and comparing a sample with another
+prep's control flags the wrong contaminants.
+
+Each clinical sample and positive control names its controls by
+``sample_id``. Two DNA and two RNA samples from two prep methods, each
+with its own control, look like this:
+
+.. code-block:: bash
+
+   --sample "sample_id=26CE500037-ELB-DNA   ... nucleic_acid=DNA negative_controls=NTC260916-ELB-DNA ..." \
+   --sample "sample_id=26CE500037-HLSAN-DNA ... nucleic_acid=DNA negative_controls=NTC260916-HLSAN-DNA ..." \
+   --sample "sample_id=26CE500037-ELB-RNA   ... nucleic_acid=RNA negative_controls=NTC260916-ELB-RNA ..." \
+   --sample "sample_id=26CE500037-HLSAN-RNA ... nucleic_acid=RNA negative_controls=NTC260916-HLSAN-RNA ..." \
+   --sample "sample_id=NTC260916-ELB-DNA   type=negative_ctrl nucleic_acid=DNA ..." \
+   --sample "sample_id=NTC260916-HLSAN-DNA type=negative_ctrl nucleic_acid=DNA ..." \
+   --sample "sample_id=NTC260916-ELB-RNA   type=negative_ctrl nucleic_acid=RNA ..." \
+   --sample "sample_id=NTC260916-HLSAN-RNA type=negative_ctrl nucleic_acid=RNA ..."
+
+- Several controls are comma-separated:
+  ``negative_controls=NTC-EXTRACTION,NTC-LIBRARY``. Their reads are summed
+  when flagging contaminants.
+- ``negative_controls=none`` declares a sample with no control. It is
+  accepted, and the case and sample views warn that contaminants cannot be
+  flagged for it. Leaving the key out is an error, so a forgotten control
+  is never mistaken for a deliberate one.
+- Every named control must be a ``type=negative_ctrl`` entry in the same
+  ``ingest.py`` call with the same ``nucleic_acid``, and every
+  ``sample_id`` in one call must be unique. Anything else rejects the
+  whole bundle before any data is stored.
+- A negative control that no sample names is still accepted and still
+  counts towards NTC trends.
+- Viewing a negative control itself compares it with the other negative
+  controls of the same analysis and nucleic acid.
 
 Re-sequencing a case
 --------------------
@@ -204,6 +256,12 @@ Common errors
   typo in the case id; use a different one rather than forcing it.
 - **"Column not found"** — ``column_<classifier>=`` does not match a
   column in the taxpasta TSV. Names are case-sensitive.
+- **"must declare negative_controls"** — a ``type=sample`` or
+  ``type=positive_ctrl`` entry is missing ``negative_controls=``. Name its
+  control, or pass ``negative_controls=none`` if it really has none.
+- **"declares negative control '…', which is not a sample in this
+  bundle"** — a typo in ``negative_controls=``, or the control's
+  ``--sample`` was left out of the call.
 - **"File not found"** — every path passed to the CLI must exist when
   the bundle is built (client-side).
 - **401 / "Invalid or expired token"** — Keycloak credentials cannot

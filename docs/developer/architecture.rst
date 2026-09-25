@@ -218,6 +218,31 @@ and lets analytics restrict themselves to current results with an indexed
 equality rather than an exclusion list that would grow with every
 re-sequencing.
 
+Samples and their negative controls
+-----------------------------------
+
+Every clinical sample and positive control carries
+``negative_control_sample_ids``: the ``sample_id``\ s of the negative
+controls in the same analysis it is compared against. The operator declares
+them at ingest (``negative_controls=`` on ``--sample``) and
+``app/models/ingest.py`` validates them against the bundle — each must be a
+negative control with the same nucleic acid, and ``sample_id``\ s must be
+unique within the bundle so a reference means one thing.
+
+The link is declared rather than inferred because a run can hold several
+controls per nucleic acid, one per prep method; matching on analysis and
+nucleic acid alone compared each sample with every prep's control. An
+empty list is the explicit "no control", which the UI warns about. A
+negative control stores ``null``.
+
+``app/sample_controls.py`` is the single place that resolves the link, used
+by both the NTC-profile and clade endpoints. It raises instead of returning
+fewer controls when a stored link does not resolve: ingest guarantees it
+does, and a silently missing control disables contaminant flagging for the
+taxa it carried. NTC trends are unaffected — they collapse controls by
+``(sample_id, nucleic_acid)`` across cases (``app/ntc_controls.py``) and
+never pair them with samples.
+
 Indexes are created in ``database.py::_ensure_indexes()`` and run at every
 startup — the function is idempotent, so it's safe to point the backend at
 a new database without a separate migration step.

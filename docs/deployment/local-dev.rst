@@ -194,7 +194,7 @@ healthy end-to-end:
    python ingest.py trana \
        --case-id smoke-test \
        --pipeline-info backend/test-data/16S_trana/pipeline_info/software_versions.yml \
-       --sample "sample_id=X1 type=sample nucleic_acid=DNA \
+       --sample "sample_id=X1 subject_id=X1 type=sample nucleic_acid=DNA negative_controls=none \
    abundance_path=backend/test-data/16S_trana/results/1234567890AB_downsampled.fastq_rel-abundance.tsv" \
        --password dev-admin
 
