@@ -40,16 +40,19 @@ export function ntcCoverageWarning(samples: Sample[]): string | null {
   // Sorted so the warning names samples in a stable order; localeCompare rather
   // than the default sort, which orders by UTF-16 code unit.
   const byName = (a: string, b: string) => a.localeCompare(b);
+  undeclared.sort(byName);
+  empty.sort(byName);
+
   const parts: string[] = [];
   if (undeclared.length > 0) {
     parts.push(
-      `No negative control was declared for ${undeclared.sort(byName).join(", ")} — ` +
+      `No negative control was declared for ${undeclared.join(", ")} — ` +
         `contaminant flagging is unavailable.`
     );
   }
   if (empty.length > 0) {
     parts.push(
-      `The negative control of ${empty.sort(byName).join(", ")} produced no classifier ` +
+      `The negative control of ${empty.join(", ")} produced no classifier ` +
         `data — contaminant flagging is unavailable.`
     );
   }
