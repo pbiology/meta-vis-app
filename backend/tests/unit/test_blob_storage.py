@@ -1,6 +1,7 @@
 # tests/unit/test_blob_store.py
 
 import asyncio
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -91,12 +92,29 @@ class TestDeletePrefix:
 
 
 class TestMakeBlobStore:
-    def test_returns_mongo_blob_store_when_no_s3_config(self, db):
+    def test_returns_mongo_blob_store_when_no_s3_config(self, db, caplog):
         from app.config import settings
 
-        with patch.object(settings, "object_storage_endpoint", None):
+        with (
+            patch.object(settings, "object_storage_endpoint", None),
+            caplog.at_level(logging.INFO, logger="app.blob_store"),
+        ):
             store = make_blob_store(db)
         assert isinstance(store, MongoBlobStore)
+        assert "Blob store: MongoDB" in caplog.text
+
+    def test_returns_s3_blob_store_when_endpoint_set(self, db, caplog):
+        from app.config import settings
+
+        with (
+            patch.object(settings, "object_storage_endpoint", "http://minio:9000"),
+            patch.object(settings, "object_storage_bucket", "reports"),
+            patch("boto3.client", return_value=MagicMock()),
+            caplog.at_level(logging.INFO, logger="app.blob_store"),
+        ):
+            store = make_blob_store(db)
+        assert isinstance(store, S3BlobStore)
+        assert "Blob store: S3 at http://minio:9000 (bucket reports)" in caplog.text
 
 
 # ---------------------------------------------------------------------------

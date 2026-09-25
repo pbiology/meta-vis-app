@@ -25,7 +25,6 @@ jobs:
       - name: Run tests
         env:
           MONGODB_DB_NAME: test
-          JWT_SECRET: ci-test-secret
         run: pytest --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=70
 
       - name: Upload coverage report

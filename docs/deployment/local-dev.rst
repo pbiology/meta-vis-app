@@ -32,12 +32,11 @@ First-run setup
 
 .. code-block:: bash
 
-   # Backend secrets (MongoDB passwords + JWT_SECRET)
+   # Backend secrets (MongoDB passwords)
    cp backend/.env.example backend/.env
    # Edit backend/.env and set at minimum:
    #   MONGO_ROOT_PASSWORD=<pick-something>
    #   MONGODB_PASSWORD=<pick-something>
-   #   JWT_SECRET=<python -c "import secrets; print(secrets.token_urlsafe(48))">
    # For bare-metal dev, also set MONGODB_HOST=localhost. In Docker, the
    # compose file overrides this to point at the `mongodb` service.
 

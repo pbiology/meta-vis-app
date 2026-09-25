@@ -126,7 +126,7 @@ Copy the deploy template and fill it in:
 
    cp backend/.env.prod.template backend/.env.prod
    # Edit backend/.env.prod — set MONGODB_URI, KEYCLOAK_ISSUER,
-   # CORS_ORIGINS, JWT_SECRET, and (if using S3) OBJECT_STORAGE_*.
+   # CORS_ORIGINS, and (if using S3) OBJECT_STORAGE_*.
 
 ``backend/.env.prod.template`` is the deploy-time minimum: site-specific
 keys are blank, safe defaults are pre-filled. For the encyclopedic per-key
