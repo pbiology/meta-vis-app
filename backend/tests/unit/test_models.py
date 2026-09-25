@@ -407,8 +407,10 @@ class TestNegativeControlLinks:
     # --- Per sample ---------------------------------------------------------
 
     def test_clinical_sample_must_declare_controls(self):
+        payload = self._sample("S1")
+
         with pytest.raises(ValidationError, match="must declare negative_controls"):
-            TaxprofilerSampleIngestRequest(**self._sample("S1"))
+            TaxprofilerSampleIngestRequest(**payload)
 
     def test_positive_control_must_declare_controls(self):
         payload = self._sample("POS", sample_type="positive_ctrl", subject_id=None)
