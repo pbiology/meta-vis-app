@@ -31,6 +31,7 @@ _SAMPLE_PROJECTION: dict[str, Any] = {
     "sample_type": 1,
     "analysis_id": 1,
     "nucleic_acid": 1,
+    "negative_control_sample_ids": 1,
     "trana": 1,
     "profiles": 1,
 }

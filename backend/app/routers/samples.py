@@ -172,7 +172,7 @@ async def get_profile(
 
 @router.get(
     "/{sample_id}/ntc_profiles",
-    summary="Get negative control profiles matching this sample's nucleic acid",
+    summary="Get the profiles of the negative controls declared for this sample",
 )
 async def get_ntc_profiles(
     sample_id: str,
@@ -181,7 +181,12 @@ async def get_ntc_profiles(
 ):
     sample = await db["samples"].find_one(
         {"_id": _oid(sample_id)},
-        {"analysis_id": 1, "nucleic_acid": 1},
+        {
+            "analysis_id": 1,
+            "nucleic_acid": 1,
+            "sample_type": 1,
+            "negative_control_sample_ids": 1,
+        },
     )
     if not sample:
         raise HTTPException(status_code=404, detail=f"Sample '{sample_id}' not found")

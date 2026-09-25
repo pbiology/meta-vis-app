@@ -8,7 +8,9 @@ from app.models.analysis import CaseAnalysisResponse
 from app.models.case import CaseResponse
 from app.models.common import ReviewStatus
 from app.models.ingest import (
+    TaxprofilerIngestMeta,
     TaxprofilerSampleIngestRequest,
+    TranaIngestMeta,
     TranaSampleIngestRequest,
 )
 from app.models.pipeline import PipelineConfiguration
@@ -320,7 +322,11 @@ class TestSampleOrderDate:
 
     def test_positive_control_may_carry_its_own_order_date(self):
         req = TaxprofilerSampleIngestRequest(
-            **self._taxprofiler(sample_type="positive_ctrl", order_date="2026-03-05")
+            **self._taxprofiler(
+                sample_type="positive_ctrl",
+                order_date="2026-03-05",
+                negative_controls=[],
+            )
         )
 
         assert req.order_date == date(2026, 3, 5)
@@ -340,7 +346,9 @@ class TestSampleOrderDate:
 
     def test_clinical_sample_without_a_date_is_accepted(self):
         req = TaxprofilerSampleIngestRequest(
-            **self._taxprofiler(sample_type="sample", subject_id="26CE100005")
+            **self._taxprofiler(
+                sample_type="sample", subject_id="26CE100005", negative_controls=[]
+            )
         )
 
         assert req.order_date is None
@@ -359,3 +367,163 @@ class TestSampleOrderDate:
 
         with pytest.raises(ValidationError, match="must not set order_date"):
             TranaSampleIngestRequest(**payload)
+
+
+class TestNegativeControlLinks:
+    """Which negative control belongs to which sample is declared, never
+    inferred: a run can hold several controls per nucleic acid (one per prep
+    method), and comparing a sample with another prep's control flags the
+    wrong contaminants."""
+
+    @staticmethod
+    def _sample(sample_id: str, **overrides) -> dict:
+        payload = {
+            "sample_id": sample_id,
+            "subject_id": "26CE500037",
+            "sample_type": "sample",
+            "nucleic_acid": "DNA",
+            "columns": {"kraken2": f"{sample_id}_k2"},
+        }
+        payload.update(overrides)
+        return payload
+
+    @staticmethod
+    def _ntc(sample_id: str, nucleic_acid: str = "DNA") -> dict:
+        return {
+            "sample_id": sample_id,
+            "sample_type": "negative_ctrl",
+            "nucleic_acid": nucleic_acid,
+            "columns": {"kraken2": f"{sample_id}_k2"},
+        }
+
+    @staticmethod
+    def _manifest(*samples: dict) -> dict:
+        return {
+            "case_id": "26CE500037",
+            "classifiers": [{"name": "kraken2", "db": "k2_pluspf"}],
+            "samples": list(samples),
+        }
+
+    # --- Per sample ---------------------------------------------------------
+
+    def test_clinical_sample_must_declare_controls(self):
+        with pytest.raises(ValidationError, match="must declare negative_controls"):
+            TaxprofilerSampleIngestRequest(**self._sample("S1"))
+
+    def test_positive_control_must_declare_controls(self):
+        payload = self._sample("POS", sample_type="positive_ctrl", subject_id=None)
+
+        with pytest.raises(ValidationError, match="must declare negative_controls"):
+            TaxprofilerSampleIngestRequest(**payload)
+
+    def test_empty_list_declares_no_control(self):
+        req = TaxprofilerSampleIngestRequest(**self._sample("S1", negative_controls=[]))
+
+        assert req.negative_controls == []
+
+    def test_negative_control_may_not_declare_controls(self):
+        payload = {**self._ntc("NTC-A"), "negative_controls": ["NTC-B"]}
+
+        with pytest.raises(ValidationError, match="must not declare"):
+            TaxprofilerSampleIngestRequest(**payload)
+
+    def test_repeated_control_is_rejected(self):
+        payload = self._sample("S1", negative_controls=["NTC-A", "NTC-A"])
+
+        with pytest.raises(ValidationError, match="more than once"):
+            TaxprofilerSampleIngestRequest(**payload)
+
+    def test_trana_clinical_sample_must_declare_controls(self):
+        payload = {
+            "sample_id": "S1",
+            "subject_id": "1234567890AB",
+            "sample_type": "sample",
+            "nucleic_acid": "DNA",
+        }
+
+        with pytest.raises(ValidationError, match="must declare negative_controls"):
+            TranaSampleIngestRequest(**payload)
+
+    # --- Across the bundle --------------------------------------------------
+
+    def test_each_prep_links_to_its_own_control(self):
+        meta = TaxprofilerIngestMeta(
+            **self._manifest(
+                self._sample(
+                    "26CE500037-ELB-DNA", negative_controls=["NTC260916-ELB-DNA"]
+                ),
+                self._sample(
+                    "26CE500037-HLSAN-DNA",
+                    negative_controls=["NTC260916-HLSAN-DNA"],
+                ),
+                self._ntc("NTC260916-ELB-DNA"),
+                self._ntc("NTC260916-HLSAN-DNA"),
+            )
+        )
+
+        links = {s.sample_id: s.negative_controls for s in meta.samples}
+        assert links["26CE500037-ELB-DNA"] == ["NTC260916-ELB-DNA"]
+        assert links["26CE500037-HLSAN-DNA"] == ["NTC260916-HLSAN-DNA"]
+
+    def test_unknown_control_is_rejected(self):
+        manifest = self._manifest(
+            self._sample("S1", negative_controls=["NTC-TYPO"]), self._ntc("NTC-A")
+        )
+
+        with pytest.raises(ValidationError, match="not a sample in this bundle"):
+            TaxprofilerIngestMeta(**manifest)
+
+    def test_reference_to_a_clinical_sample_is_rejected(self):
+        manifest = self._manifest(
+            self._sample("S1", negative_controls=["S2"]),
+            self._sample("S2", negative_controls=[]),
+        )
+
+        with pytest.raises(ValidationError, match="sample_type='sample'"):
+            TaxprofilerIngestMeta(**manifest)
+
+    def test_control_of_other_nucleic_acid_is_rejected(self):
+        manifest = self._manifest(
+            self._sample("S1", negative_controls=["NTC-RNA"]),
+            self._ntc("NTC-RNA", nucleic_acid="RNA"),
+        )
+
+        with pytest.raises(ValidationError, match="must match the sample's nucleic"):
+            TaxprofilerIngestMeta(**manifest)
+
+    def test_repeated_sample_id_is_rejected(self):
+        # References are by sample_id, so a repeated id would be ambiguous.
+        manifest = self._manifest(
+            self._sample("S1", negative_controls=[]),
+            self._sample("S1", negative_controls=[]),
+        )
+
+        with pytest.raises(ValidationError, match="unique within a bundle"):
+            TaxprofilerIngestMeta(**manifest)
+
+    def test_unreferenced_control_is_accepted(self):
+        # A control sequenced for trend monitoring alone is legitimate.
+        meta = TaxprofilerIngestMeta(
+            **self._manifest(
+                self._sample("S1", negative_controls=[]), self._ntc("NTC-A")
+            )
+        )
+
+        assert len(meta.samples) == 2
+
+    def test_trana_bundle_checks_references(self):
+        manifest = {
+            "case_id": "trana-case",
+            "samples": [
+                {
+                    "sample_id": "S1",
+                    "subject_id": "1234567890AB",
+                    "sample_type": "sample",
+                    "nucleic_acid": "DNA",
+                    "negative_controls": ["NEG-MISSING"],
+                }
+            ],
+        }
+
+        with pytest.raises(ValidationError, match="not a sample in this bundle"):
+            TranaIngestMeta(**manifest)

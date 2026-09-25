@@ -446,6 +446,7 @@ def _sample(subject_id: str, subject_sex: str = "unknown"):
         sample_id=f"S-{subject_id}",
         sample_type="sample",
         nucleic_acid="DNA",
+        negative_controls=[],
         columns={"kraken2": f"S-{subject_id}_k2"},
     )
 
@@ -475,6 +476,7 @@ def _ctrl(sample_id: str, sample_type: str = "negative_ctrl"):
         sample_id=sample_id,
         sample_type=sample_type,
         nucleic_acid="DNA",
+        negative_controls=None if sample_type == "negative_ctrl" else [],
         columns={"kraken2": f"{sample_id}_k2"},
     )
 
