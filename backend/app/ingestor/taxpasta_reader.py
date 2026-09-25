@@ -122,13 +122,3 @@ def extract_sample_profile(df: pd.DataFrame, sample_column: str) -> list[TaxonEn
         )
 
     return records
-
-
-def read_taxpasta(file_path: str, sample_column: str) -> list[TaxonEntry]:
-    """Convenience wrapper: load file and extract one sample profile.
-
-    Kept for backward compatibility and tests.  When ingesting multiple samples
-    from the same file, prefer calling ``load_taxpasta`` once and then
-    ``extract_sample_profile`` for each sample.
-    """
-    return extract_sample_profile(load_taxpasta(file_path), sample_column)

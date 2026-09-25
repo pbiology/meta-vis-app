@@ -57,8 +57,8 @@ from app.models.pipeline import PipelineInfo
 
 
 # ---------------------------------------------------------------------------
-# Arcname constants — shared with the CLI (it imports these so the two ends
-# cannot drift). Keep this section as the canonical layout reference.
+# Arcname constants — the canonical bundle layout. The CLI (ingest.py) keeps
+# its own copy of these values; change both together.
 # ---------------------------------------------------------------------------
 
 MANIFEST_ARC = "manifest.json"
@@ -70,24 +70,12 @@ METAVAL_DIR = "metaval"
 SAMPLES_DIR = "samples"
 
 
-def classifier_taxpasta_arcname(name: str, basename: str) -> str:
-    return f"{CLASSIFIERS_DIR}/{name}/taxpasta/{basename}"
-
-
-def classifier_krona_arcname(name: str, basename: str) -> str:
-    return f"{CLASSIFIERS_DIR}/{name}/krona/{basename}"
-
-
 def classifier_taxpasta_dir(name: str) -> str:
     return f"{CLASSIFIERS_DIR}/{name}/taxpasta"
 
 
 def classifier_krona_dir(name: str) -> str:
     return f"{CLASSIFIERS_DIR}/{name}/krona"
-
-
-def sample_dir(sample_id: str) -> str:
-    return f"{SAMPLES_DIR}/{sample_id}"
 
 
 # ---------------------------------------------------------------------------

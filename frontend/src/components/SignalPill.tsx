@@ -26,18 +26,3 @@ export default function SignalPill({ kind, big = false }: Readonly<SignalPillPro
     </span>
   );
 }
-
-interface SignalDotProps {
-  kind: SignalKind;
-  title?: string;
-}
-
-export function SignalDot({ kind, title }: Readonly<SignalDotProps>) {
-  const t = TONE[SIGNALS[kind].tone];
-  return (
-    <span
-      title={title ?? SIGNALS[kind].label}
-      className={`inline-block w-1.5 h-1.5 rounded-full ${t.dot}`}
-    />
-  );
-}

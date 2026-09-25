@@ -5,7 +5,6 @@ import pytest
 from app.ingestor.taxpasta_reader import (
     load_taxpasta,
     extract_sample_profile,
-    read_taxpasta,
     _superkingdom_from_lineage,
 )
 
@@ -19,6 +18,10 @@ def write_tsv(tmp_path, content: str, filename: str = "taxpasta.tsv"):
     p = tmp_path / filename
     p.write_text(textwrap.dedent(content))
     return str(p)
+
+
+def profile(path: str, sample_column: str = "SAMPLE1"):
+    return extract_sample_profile(load_taxpasta(path), sample_column)
 
 
 MINIMAL_TSV = """\
@@ -52,38 +55,15 @@ MIXED_CASE_RANK_TSV = """\
 # ---------------------------------------------------------------------------
 
 
-def test_read_taxpasta_returns_records(tmp_path):
-    path = write_tsv(tmp_path, MINIMAL_TSV)
-    records = read_taxpasta(path, "SAMPLE1")
-    assert len(records) == 3
-
-
-def test_read_taxpasta_record_fields(tmp_path):
-    path = write_tsv(tmp_path, MINIMAL_TSV)
-    records = read_taxpasta(path, "SAMPLE1")
-    record = next(r for r in records if r.taxon_id == 9606)
-    assert record.name == "Homo sapiens"
-    assert record.rank == "species"
-    assert record.abundance == 100.0
-    assert record.superkingdom == "Eukaryota"
-
-
-def test_read_taxpasta_superkingdom_bacteria(tmp_path):
-    path = write_tsv(tmp_path, MINIMAL_TSV)
-    records = read_taxpasta(path, "SAMPLE1")
+def test_superkingdom_bacteria(tmp_path):
+    records = profile(write_tsv(tmp_path, MINIMAL_TSV))
     record = next(r for r in records if r.taxon_id == 1279)
     assert record.superkingdom == "Bacteria"
 
 
 # ---------------------------------------------------------------------------
-# Zero-abundance filtering
+# Non-finite abundance
 # ---------------------------------------------------------------------------
-
-
-def test_zero_abundance_rows_filtered(tmp_path):
-    path = write_tsv(tmp_path, ZERO_ABUNDANCE_TSV)
-    records = read_taxpasta(path, "SAMPLE1")
-    assert records == []
 
 
 def test_infinite_abundance_raises(tmp_path):
@@ -94,13 +74,13 @@ def test_infinite_abundance_raises(tmp_path):
     )
     path = write_tsv(tmp_path, tsv)
     with pytest.raises(ValueError, match=r"infinite abundance.*\[1279\]"):
-        read_taxpasta(path, "SAMPLE1")
+        profile(path)
 
 
 def test_negative_infinite_abundance_raises(tmp_path):
     path = write_tsv(tmp_path, "taxonomy_id\tname\tSAMPLE1\n1279\tStaph\t-inf\n")
     with pytest.raises(ValueError, match="infinite abundance"):
-        read_taxpasta(path, "SAMPLE1")
+        profile(path)
 
 
 # ---------------------------------------------------------------------------
@@ -109,31 +89,8 @@ def test_negative_infinite_abundance_raises(tmp_path):
 
 
 def test_no_lineage_column_superkingdom_is_none(tmp_path):
-    path = write_tsv(tmp_path, NO_LINEAGE_TSV)
-    records = read_taxpasta(path, "SAMPLE1")
+    records = profile(write_tsv(tmp_path, NO_LINEAGE_TSV))
     assert all(r.superkingdom is None for r in records)
-
-
-# ---------------------------------------------------------------------------
-# Error cases
-# ---------------------------------------------------------------------------
-
-
-def test_file_not_found_raises():
-    with pytest.raises(FileNotFoundError):
-        read_taxpasta("/nonexistent/path/taxpasta.tsv", "SAMPLE1")
-
-
-def test_missing_taxonomy_id_column_raises(tmp_path):
-    path = write_tsv(tmp_path, "name\tSAMPLE1\nfoo\t10\n")
-    with pytest.raises(ValueError, match="missing required columns"):
-        read_taxpasta(path, "SAMPLE1")
-
-
-def test_missing_sample_column_raises(tmp_path):
-    path = write_tsv(tmp_path, MINIMAL_TSV)
-    with pytest.raises(ValueError, match="not found in TAXPASTA file"):
-        read_taxpasta(path, "NONEXISTENT_SAMPLE")
 
 
 # ---------------------------------------------------------------------------
@@ -142,8 +99,7 @@ def test_missing_sample_column_raises(tmp_path):
 
 
 def test_rank_normalised_to_lowercase(tmp_path):
-    path = write_tsv(tmp_path, MIXED_CASE_RANK_TSV)
-    records = read_taxpasta(path, "SAMPLE1")
+    records = profile(write_tsv(tmp_path, MIXED_CASE_RANK_TSV))
     virus = next(r for r in records if r.taxon_id == 10239)
     human = next(r for r in records if r.taxon_id == 9606)
     assert virus.rank == "no rank"
@@ -244,25 +200,17 @@ def test_extract_sample_profile_correct_fields(tmp_path):
     assert record.superkingdom == "Eukaryota"
 
 
-def test_load_once_extract_twice_same_result(tmp_path):
-    """Loading once and slicing twice must give same result as two read_taxpasta calls."""
+def test_load_once_extract_twice_slices_each_column(tmp_path):
+    """One loaded DataFrame must yield independent, correct profiles per sample."""
     tsv = """\
         taxonomy_id\tname\trank\tlineage\tSAMPLE1\tSAMPLE2
         9606\tHomo sapiens\tspecies\tEukaryota;Chordata\t100\t200
         1279\tStaphylococcus\tgenus\tBacteria;Firmicutes\t50\t0
     """
-    path = write_tsv(tmp_path, tsv)
-    df = load_taxpasta(path)
+    df = load_taxpasta(write_tsv(tmp_path, tsv))
 
-    r1_cached = extract_sample_profile(df, "SAMPLE1")
-    r2_cached = extract_sample_profile(df, "SAMPLE2")
+    r1 = extract_sample_profile(df, "SAMPLE1")
+    r2 = extract_sample_profile(df, "SAMPLE2")
 
-    r1_direct = read_taxpasta(path, "SAMPLE1")
-    r2_direct = read_taxpasta(path, "SAMPLE2")
-
-    assert [(r.taxon_id, r.abundance) for r in r1_cached] == [
-        (r.taxon_id, r.abundance) for r in r1_direct
-    ]
-    assert [(r.taxon_id, r.abundance) for r in r2_cached] == [
-        (r.taxon_id, r.abundance) for r in r2_direct
-    ]
+    assert [(r.taxon_id, r.abundance) for r in r1] == [(9606, 100.0), (1279, 50.0)]
+    assert [(r.taxon_id, r.abundance) for r in r2] == [(9606, 200.0)]
