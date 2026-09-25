@@ -12,29 +12,6 @@ from app.models.qc import TaxprofilerStats, TranaStats
 from app.models.taxonomy import ClassifierProfile
 
 
-class SampleMetadata(_Base):
-    sample_id: str
-    sample_source: Optional[str] = None
-    nucleic_acid: Optional[str] = None
-    sample_type: Optional[str] = None
-    subject_id: Optional[str] = None
-    biopsy_id: Optional[str] = None
-
-
-class LibraryPreparation(_Base):
-    library_name: Optional[str] = None
-    batch_id: Optional[str] = None
-    sample_type: Optional[str] = None
-
-
-class SequencingMetadata(_Base):
-    platform: Optional[str] = None
-    flowcell_id: Optional[str] = None
-    date: Optional[str] = None
-    barcode_index: Optional[str] = None
-    num_reads: Optional[int] = None
-
-
 # "unknown" exists so a missing read count on either side cannot be mistaken
 # for "unchanged" — the two are very different clinically.
 ReadDeltaStatus = Literal["new", "increased", "unchanged", "decreased", "unknown"]
