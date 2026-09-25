@@ -88,10 +88,16 @@ def _assert_control_references(samples: Sequence[_SampleEntry]) -> None:
     """Check that every declared negative control resolves within the bundle.
 
     Samples reference their controls by sample_id, so sample_ids must be unique
-    in the bundle for a reference to mean one thing. Each reference must name a
-    negative control of the same nucleic acid: DNA and RNA controls are not
-    comparable, and pointing at a clinical sample is always an operator error.
+    in the bundle for a reference to mean one thing.
     """
+    _assert_unique_sample_ids(samples)
+    by_id = {s.sample_id: s for s in samples}
+    for s in samples:
+        for ref in s.negative_controls or []:
+            _assert_valid_control_reference(s, ref, by_id.get(ref))
+
+
+def _assert_unique_sample_ids(samples: Sequence[_SampleEntry]) -> None:
     seen: set[str] = set()
     duplicate_ids: set[str] = set()
     for s in samples:
@@ -102,26 +108,31 @@ def _assert_control_references(samples: Sequence[_SampleEntry]) -> None:
             f"{sorted(duplicate_ids)}"
         )
 
-    by_id = {s.sample_id: s for s in samples}
-    for s in samples:
-        for ref in s.negative_controls or []:
-            control = by_id.get(ref)
-            if control is None:
-                raise ValueError(
-                    f"Sample '{s.sample_id}' declares negative control '{ref}', "
-                    "which is not a sample in this bundle."
-                )
-            if control.sample_type != "negative_ctrl":
-                raise ValueError(
-                    f"Sample '{s.sample_id}' declares '{ref}' as a negative "
-                    f"control, but it has sample_type='{control.sample_type}'."
-                )
-            if control.nucleic_acid != s.nucleic_acid:
-                raise ValueError(
-                    f"Sample '{s.sample_id}' ({s.nucleic_acid}) declares "
-                    f"negative control '{ref}' ({control.nucleic_acid}); a "
-                    "control must match the sample's nucleic acid."
-                )
+
+def _assert_valid_control_reference(
+    sample: _SampleEntry, ref: str, control: Optional[_SampleEntry]
+) -> None:
+    """One reference must name a negative control of the sample's nucleic acid.
+
+    DNA and RNA controls are not comparable, and pointing at a clinical sample
+    is always an operator error.
+    """
+    if control is None:
+        raise ValueError(
+            f"Sample '{sample.sample_id}' declares negative control '{ref}', "
+            "which is not a sample in this bundle."
+        )
+    if control.sample_type != "negative_ctrl":
+        raise ValueError(
+            f"Sample '{sample.sample_id}' declares '{ref}' as a negative "
+            f"control, but it has sample_type='{control.sample_type}'."
+        )
+    if control.nucleic_acid != sample.nucleic_acid:
+        raise ValueError(
+            f"Sample '{sample.sample_id}' ({sample.nucleic_acid}) declares "
+            f"negative control '{ref}' ({control.nucleic_acid}); a "
+            "control must match the sample's nucleic acid."
+        )
 
 
 # ---------------------------------------------------------------------------
