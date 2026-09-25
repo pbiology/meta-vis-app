@@ -139,8 +139,11 @@ Two rules are enforced through ``[tool.uv]`` in ``pyproject.toml``:
 - **The app is not installed as a package** (``package = false``). ``app/`` is
   imported from the ``backend/`` working directory.
 
-Dependabot opens weekly update PRs for the lock (and for npm, Docker base
-images and GitHub Actions); review and merge them like any other change.
+Dependency versions are updated manually — there are no automated update PRs.
+CI's ``pip-audit`` / ``npm audit`` jobs and GitHub's Dependabot alerts flag
+known vulnerabilities; update the affected package with
+``uv lock --upgrade-package <pkg>`` (backend) or ``npm update <pkg>``
+(frontend) and open a PR.
 
 Authentication: pick a Keycloak
 ================================

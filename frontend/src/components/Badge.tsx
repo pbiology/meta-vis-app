@@ -1,10 +1,5 @@
 export type BadgeType =
-  | "reviewed"
-  | "pending"
-  | "sample"
-  | "negative_ctrl"
-  | "positive_ctrl"
-  | (string & {});
+  "reviewed" | "pending" | "sample" | "negative_ctrl" | "positive_ctrl" | (string & {});
 
 interface BadgeProps {
   type: BadgeType;

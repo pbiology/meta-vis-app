@@ -85,8 +85,7 @@ export default function CaseView() {
   const currentAnalysis = caseData?.analysis ?? null;
   const isSuperseded = currentAnalysis ? !currentAnalysis.is_latest : false;
   const review = currentAnalysis?.review as
-    | { reviewed?: boolean; reviewed_by?: string }
-    | undefined;
+    { reviewed?: boolean; reviewed_by?: string } | undefined;
   const reviewed = review?.reviewed ?? false;
   const notes = (merged?.notes as CaseNote[] | undefined) ?? [];
   const classifiers = (currentAnalysis?.classifiers as Classifier[] | undefined) ?? [];

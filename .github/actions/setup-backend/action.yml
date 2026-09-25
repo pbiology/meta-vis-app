@@ -14,7 +14,7 @@ runs:
 
     - name: Set up uv
       # Pinned to a commit SHA: setup-uv publishes no floating major tag (e.g.
-      # v10) after v7, and a SHA cannot be re-pointed. Dependabot bumps both.
+      # v10) after v7, and a SHA cannot be re-pointed. Bump both by hand.
       uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       with:
         # Keep in step with the uv image tag in backend/Dockerfile*.
