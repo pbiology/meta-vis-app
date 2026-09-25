@@ -123,8 +123,7 @@ export default function SampleList() {
             <tbody>
               {samples.map((s) => {
                 const trana = s.trana as
-                  | { nanoplot_processed?: { number_of_reads?: number } }
-                  | undefined;
+                  { nanoplot_processed?: { number_of_reads?: number } } | undefined;
                 const kraken2 = (
                   s.taxprofiler as
                     | {
