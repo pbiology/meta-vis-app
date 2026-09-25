@@ -98,8 +98,7 @@ Auth (Keycloak / OIDC)
 ----------------------
 
 The backend validates incoming Bearer tokens against a Keycloak realm. Tokens
-are signed by Keycloak — ``JWT_SECRET`` is a legacy field that ``Settings``
-still demands but no longer signs anything.
+are signed by Keycloak; the backend holds no signing secret of its own.
 
 ============================  ==========  ==============================================================
 Variable                      Required    Description
@@ -118,8 +117,6 @@ Variable                      Required    Description
 ``KEYCLOAK_JWKS_URL``         optional    Override for the JWKS endpoint. Use when the backend pod
                                           can't reach the public KC hostname. ``iss`` is still
                                           validated against ``KEYCLOAK_ISSUER``.
-``JWT_SECRET``                yes         32+ random chars. Legacy. Generate with
-                                          ``python -c "import secrets; print(secrets.token_urlsafe(48))"``.
 ============================  ==========  ==============================================================
 
 CORS
@@ -191,7 +188,7 @@ Generating secrets
 
 .. code-block:: bash
 
-   # JWT_SECRET, MongoDB passwords, anything else random
+   # MongoDB passwords, anything else random
    python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 Best practices

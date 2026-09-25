@@ -40,7 +40,6 @@ _CONFIG_ENV_VARS = (
     "MONGODB_DB_NAME",
     "KEYCLOAK_ISSUER",
     "CORS_ORIGINS",
-    "JWT_SECRET",
 )
 
 
@@ -73,7 +72,6 @@ def test_mongo_config_validator(monkeypatch):
         "_env_file": None,
         "keycloak_issuer": "https://kc.example/realms/x",
         "cors_origins": "https://app.example",
-        "jwt_secret": "x" * 32,
     }
 
     # URI alone (with db_name) — OK.
