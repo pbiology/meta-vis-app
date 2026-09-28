@@ -197,6 +197,20 @@ with its own control, look like this:
 - Viewing a negative control itself compares it with the other negative
   controls of the same analysis and nucleic acid.
 
+**Naming controls.** A batch's controls are uploaded with every case in
+that batch, so the same control appears in several cases. The NTC trends
+page recognises it as one control **by its name** — the app records no
+batch. Every batch's control therefore needs a name unique to that batch,
+such as ``NTC260916-ELB-DNA``. Reusing a generic name (``NTC``,
+``neg control``) merges every batch's control into one: the trend charts
+collapse to a single point and every taxon seen in any control is reported
+as recurring.
+
+A control takes the order date of the case it is uploaded with, like every
+other sample; there is no per-sample order date. When the same control
+appears in cases with different order dates, the trends page plots it once,
+at the earliest.
+
 Re-sequencing a case
 --------------------
 
