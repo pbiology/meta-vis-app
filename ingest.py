@@ -75,7 +75,6 @@ the K8s-deployed backend.
 from __future__ import annotations
 
 import argparse
-import datetime
 import ipaddress
 import json
 import os
@@ -288,23 +287,18 @@ def _parse_subject_sex(parts: dict, sample_id: str) -> str:
     return sex
 
 
-def _parse_sample_order_date(parts: dict, sample_id: str) -> str | None:
-    """Validate the optional order_date= token on a --sample.
+def _reject_sample_order_date(parts: dict, sample_id: str) -> None:
+    """Reject an order_date= token on a --sample.
 
-    A control is prepared once and sequenced alongside every case in its run, so
-    it carries its own order date; a clinical sample inherits the case's and the
-    backend rejects the token outright. Checked here so a malformed date fails
-    before the bundle is uploaded rather than as a server-side 422.
+    The order date is when the analysis was ordered, so it belongs to the case
+    and every sample — controls included — takes it from --order-date. Controls
+    once accepted a date of their own; failing here, rather than ignoring the
+    token, tells whoever still passes it that it no longer does anything.
     """
-    raw = parts.get("order_date")
-    if raw is None:
-        return None
-    try:
-        return datetime.date.fromisoformat(raw).isoformat()
-    except ValueError:
+    if "order_date" in parts:
         _fail(
-            f"Sample '{sample_id}' has an invalid order_date '{raw}' — "
-            "expected YYYY-MM-DD."
+            f"Sample '{sample_id}' sets order_date=, but the order date belongs "
+            "to the case — use --order-date."
         )
 
 
@@ -717,7 +711,6 @@ def _resolve_trana_sample(s: dict[str, Any]) -> dict[str, Any]:
             "sample_type": s["sample_type"],
             "nucleic_acid": s["nucleic_acid"],
             "sample_source": s.get("sample_source", "N/A"),
-            "order_date": s.get("order_date"),
             "negative_controls": s.get("negative_controls"),
             "has_krona": krona is not None,
             "has_nanoplot_unprocessed": np_unproc is not None,
@@ -881,6 +874,7 @@ def parse_sample(raw: str, classifier_names: list) -> dict:
             f"Sample '{sample_id}' has no classifier columns "
             f"(expected one column_<name>=... per --classifier)."
         )
+    _reject_sample_order_date(parts, sample_id)
 
     return {
         "subject_id": parts.get("subject_id"),
@@ -889,7 +883,6 @@ def parse_sample(raw: str, classifier_names: list) -> dict:
         "sample_type": parts["type"],
         "nucleic_acid": parts["nucleic_acid"],
         "sample_source": parts.get("sample_source", "N/A"),
-        "order_date": _parse_sample_order_date(parts, sample_id),
         "negative_controls": _parse_negative_controls(parts, sample_id),
         "columns": columns,
     }
@@ -991,9 +984,7 @@ def _add_taxprofiler_args(parser: argparse.ArgumentParser) -> None:
             "negative_controls=<sample_id>[,<sample_id>...] naming the "
             "negative controls in this bundle the sample is compared against, "
             "or negative_controls=none. "
-            "Optional for controls only: order_date=YYYY-MM-DD, the date the "
-            "control itself was ordered — omit it and the sample takes the "
-            "case's order date."
+            "Every sample takes the case's --order-date."
         ),
     )
     parser.add_argument(
@@ -1035,6 +1026,7 @@ def parse_trana_sample(raw: str) -> dict:
         _fail(
             f"Sample '{parts['sample_id']}' has type=sample and must provide subject_id."
         )
+    _reject_sample_order_date(parts, parts["sample_id"])
 
     return {
         "subject_id": parts.get("subject_id"),
@@ -1043,7 +1035,6 @@ def parse_trana_sample(raw: str) -> dict:
         "sample_type": parts["type"],
         "nucleic_acid": parts["nucleic_acid"],
         "sample_source": parts.get("sample_source", "N/A"),
-        "order_date": _parse_sample_order_date(parts, parts["sample_id"]),
         "negative_controls": _parse_negative_controls(parts, parts["sample_id"]),
         "abundance_path": parts["abundance_path"],
         "krona_path": parts.get("krona_path"),
@@ -1134,8 +1125,7 @@ def _add_trana_args(parser: argparse.ArgumentParser) -> None:
             "negative_controls=none. "
             "Optional: sex (F|M|X|unknown, default unknown), sample_source, "
             "krona_path, nanoplot_unprocessed_path, nanoplot_processed_path. "
-            "Optional for controls only: order_date=YYYY-MM-DD (defaults to the "
-            "case's order date). "
+            "Every sample takes the case's --order-date. "
             "Repeat for each sample."
         ),
     )
