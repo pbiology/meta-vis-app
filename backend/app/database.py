@@ -62,6 +62,10 @@ async def connect_db():
     logger.info("Connecting to MongoDB at %s", _redact_mongo_url(url))
     client = AsyncIOMotorClient(url)
     await _ensure_indexes()
+    # After the indexes, so the unique list_id index backs the upserts.
+    from app.taxon_lists.store import seed_system_lists
+
+    await seed_system_lists(client[settings.mongodb_db_name])
     from app.blob_store import make_blob_store
 
     _blob_store = make_blob_store(client[settings.mongodb_db_name])
@@ -178,9 +182,19 @@ async def _ensure_indexes():
     await db["metaval_results"].create_index([("analysis_id", 1), ("sample_id", 1)])
     await db["metaval_results"].create_index("case_id")
 
-    # outbreak_ignorelist — fast lookup by taxon_id and filtering by superkingdom
-    await db["outbreak_ignorelist"].create_index("taxon_id", unique=True)
-    await db["outbreak_ignorelist"].create_index("superkingdom")
+    # taxon_lists — one doc per curated list; list_id is what entries reference
+    await db["taxon_lists"].create_index("list_id", unique=True)
+    await db["taxon_lists"].create_index("kind")
+
+    # taxon_list_entries — one doc per (list, taxon). The unique pair is what
+    # rejects a duplicate on one list while letting a taxon sit on several;
+    # added_at serves the newest-first listing; taxon_id serves the cross-list
+    # exclusivity check.
+    await db["taxon_list_entries"].create_index(
+        [("list_id", 1), ("taxon_id", 1)], unique=True
+    )
+    await db["taxon_list_entries"].create_index([("list_id", 1), ("added_at", -1)])
+    await db["taxon_list_entries"].create_index("taxon_id")
 
     # samples — fast lookup of outbreak_taxa for queries
     await db["samples"].create_index("outbreak_taxa.superkingdom")
@@ -188,12 +202,6 @@ async def _ensure_indexes():
 
     # samples — fast pathogen detection using pre-computed flat taxon ID array
     await db["samples"].create_index("all_taxon_ids")
-
-    # known_pathogens — fast lookup by taxon_id
-    await db["known_pathogens"].create_index("taxon_id", unique=True)
-
-    # ntc_ignorelist — fast lookup by taxon_id
-    await db["ntc_ignorelist"].create_index("taxon_id", unique=True)
 
     # samples — NTC trends query, restricted to the latest analyses.
     # Deliberately left auto-named: the legacy `ntc_trends_lookup` index has a
@@ -211,9 +219,6 @@ async def _ensure_indexes():
             ("order_date", -1),
         ]
     )
-
-    # ntc_known_contaminants — fast lookup by taxon_id
-    await db["ntc_known_contaminants"].create_index("taxon_id", unique=True)
 
     # subjects — fast lookup by subject_id
     await db["subjects"].create_index("subject_id", unique=True)

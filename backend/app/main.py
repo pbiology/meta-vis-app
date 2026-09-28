@@ -24,6 +24,7 @@ from app.routers import (  # noqa: E402
     alerts,
     taxa,
     ntc,
+    taxon_lists,
     config,
     health,
 )
@@ -71,6 +72,7 @@ app.include_router(metaval.router, prefix="/api/v1")
 app.include_router(alerts.router, prefix="/api/v1")
 app.include_router(taxa.router, prefix="/api/v1")
 app.include_router(ntc.router, prefix="/api/v1")
+app.include_router(taxon_lists.router, prefix="/api/v1")
 app.include_router(config.router, prefix="/api/v1")
 
 # Health endpoints live at root (not /api/v1) per K8s/Prometheus convention.

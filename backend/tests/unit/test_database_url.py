@@ -105,8 +105,14 @@ async def test_connect_db_prefers_mongodb_uri(monkeypatch):
     # _ensure_indexes is awaited inside connect_db — AsyncMock gives an
     # awaitable without a bare no-await `async def` helper.
     monkeypatch.setattr(database, "_ensure_indexes", AsyncMock(return_value=None))
-    # blob_store import is local inside connect_db — patch at module level.
+    # seed_system_lists and blob_store are imported locally inside connect_db —
+    # patch them at their source modules.
+    import app.taxon_lists.store as taxon_list_store
     import app.blob_store as blob_store
+
+    monkeypatch.setattr(
+        taxon_list_store, "seed_system_lists", AsyncMock(return_value=None)
+    )
 
     monkeypatch.setattr(blob_store, "make_blob_store", fake_make_blob_store)
 
