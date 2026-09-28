@@ -47,14 +47,14 @@ describe("Alerts", () => {
     await waitFor(() => expect(lastWindow).toBe(30));
   });
 
-  it("Ignore button posts to ignorelist and disables the button", async () => {
-    let posted = false;
+  it("Ignore button posts only the taxon id to the outbreak ignorelist", async () => {
+    let posted: unknown = null;
     server.use(
       http.get(`${API}/alerts/outbreaks`, () =>
         HttpResponse.json({ window_days: 14, outbreaks: [outbreak(99, "TestVirus")] })
       ),
-      http.post(`${API}/alerts/ignorelist`, () => {
-        posted = true;
+      http.post(`${API}/taxon-lists/outbreak_ignorelist/entries`, async ({ request }) => {
+        posted = await request.json();
         return HttpResponse.json({
           taxon_id: 99,
           taxon_name: "TestVirus",
@@ -69,7 +69,8 @@ describe("Alerts", () => {
     renderWithProviders(<Alerts />, { route: "/alerts" });
     const ignore = await screen.findByRole("button", { name: "Ignore" });
     await userEvent.click(ignore);
-    await waitFor(() => expect(posted).toBe(true));
+    // Name and kingdom are resolved by the backend, never sent by the client.
+    await waitFor(() => expect(posted).toEqual({ taxon_id: 99 }));
   });
 
   it("renders the all-clear empty state when no outbreaks", async () => {

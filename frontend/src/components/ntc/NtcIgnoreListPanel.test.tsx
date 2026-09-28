@@ -23,7 +23,7 @@ function ignoreItem(id: number, name: string, extra: Record<string, unknown> = {
 describe("NtcIgnoreListPanel", () => {
   it("renders rows returned by the API", async () => {
     server.use(
-      http.get(`${API}/ntc/ignorelist`, () =>
+      http.get(`${API}/taxon-lists/ntc_ignorelist/entries`, () =>
         HttpResponse.json([ignoreItem(1, "E-coli"), ignoreItem(2, "S-aureus")])
       )
     );
@@ -36,7 +36,12 @@ describe("NtcIgnoreListPanel", () => {
   });
 
   it("renders an inline error when the ignorelist endpoint 500s", async () => {
-    server.use(http.get(`${API}/ntc/ignorelist`, () => new HttpResponse(null, { status: 500 })));
+    server.use(
+      http.get(
+        `${API}/taxon-lists/ntc_ignorelist/entries`,
+        () => new HttpResponse(null, { status: 500 })
+      )
+    );
     renderWithProviders(<NtcIgnoreListPanel canEdit canDelete />);
     expect(await screen.findByText(/failed to load ntc ignorelist/i)).toBeInTheDocument();
   });
@@ -44,8 +49,10 @@ describe("NtcIgnoreListPanel", () => {
   it("Remove button confirms then deletes via the mutation", async () => {
     let deleted = false;
     server.use(
-      http.get(`${API}/ntc/ignorelist`, () => HttpResponse.json([ignoreItem(42, "Foo")])),
-      http.delete(`${API}/ntc/ignorelist/42`, () => {
+      http.get(`${API}/taxon-lists/ntc_ignorelist/entries`, () =>
+        HttpResponse.json([ignoreItem(42, "Foo")])
+      ),
+      http.delete(`${API}/taxon-lists/ntc_ignorelist/entries/42`, () => {
         deleted = true;
         return HttpResponse.json({});
       })

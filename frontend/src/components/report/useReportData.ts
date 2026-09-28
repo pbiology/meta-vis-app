@@ -1,9 +1,10 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
+import { useTaxonListEntries } from "../../hooks/queries/useTaxonLists";
+import { TAXON_LIST_IDS } from "../../lib/taxonLists";
 import { getProfile } from "../../api/samples";
 import { getSubject, type Subject } from "../../api/subjects";
 import type { Version } from "../../api/cases";
 import { useCase, useCaseSamples } from "../../hooks/queries/useCases";
-import { usePathogens } from "../../hooks/queries/useAlerts";
 import { sampleKeys } from "../../hooks/queries/useSamples";
 import { subjectKeys } from "../../hooks/queries/useSubjects";
 import type { CaseAtAnalysis, CaseNote, Sample, SampleProfile } from "../../api/types";
@@ -227,7 +228,7 @@ export function useReportData(
 ): UseReportDataResult {
   const caseQ = useCase(caseId, version);
   const samplesQ = useCaseSamples(caseId, null, version);
-  const pathogensQ = usePathogens();
+  const pathogensQ = useTaxonListEntries(TAXON_LIST_IDS.knownPathogens);
 
   const samples = samplesQ.data ?? [];
 

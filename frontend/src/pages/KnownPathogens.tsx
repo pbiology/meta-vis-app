@@ -1,34 +1,23 @@
 import { useState } from "react";
 import {
-  useAddToPathogens,
-  usePathogens,
-  useRemoveFromPathogens,
-} from "../hooks/queries/useAlerts";
+  useAddTaxonListEntry,
+  useRemoveTaxonListEntry,
+  useTaxonListEntries,
+} from "../hooks/queries/useTaxonLists";
 import { useAuth } from "../context/AuthContext";
-import type { PathogenItem } from "../api/types";
+import type { TaxonListEntry } from "../api/types";
+import { TAXON_LIST_IDS } from "../lib/taxonLists";
 import AddTaxonModal from "../components/AddTaxonModal";
+
+const LIST_ID = TAXON_LIST_IDS.knownPathogens;
 
 export default function KnownPathogens() {
   const { role } = useAuth();
-  const { data: items = [], isLoading, isError } = usePathogens();
-  const addMutation = useAddToPathogens();
-  const removeMutation = useRemoveFromPathogens();
-  const [removeTarget, setRemoveTarget] = useState<PathogenItem | null>(null);
+  const { data: items = [], isLoading, isError } = useTaxonListEntries(LIST_ID);
+  const addMutation = useAddTaxonListEntry(LIST_ID);
+  const removeMutation = useRemoveTaxonListEntry(LIST_ID);
+  const [removeTarget, setRemoveTarget] = useState<TaxonListEntry | null>(null);
   const [addOpen, setAddOpen] = useState(false);
-
-  async function handleAdd(
-    id: number,
-    name: string,
-    superkingdom: string | null,
-    notes: string | null
-  ) {
-    await addMutation.mutateAsync({
-      taxonId: id,
-      taxonName: name,
-      superkingdom: superkingdom ?? "Viruses",
-      notes,
-    });
-  }
 
   async function handleRemove() {
     if (!removeTarget) return;
@@ -132,8 +121,8 @@ export default function KnownPathogens() {
         <AddTaxonModal
           title="Add known pathogen"
           showMinReads={false}
-          onAdd={async (id, name, superkingdom, notes) => {
-            await handleAdd(id, name, superkingdom, notes);
+          onAdd={async (taxonId, reason) => {
+            await addMutation.mutateAsync({ taxonId, reason });
           }}
           onClose={() => setAddOpen(false)}
         />

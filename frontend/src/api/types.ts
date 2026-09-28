@@ -286,25 +286,33 @@ export interface Taxon {
   [key: string]: unknown;
 }
 
-export interface TaxonListItem {
+export type TaxonListKind =
+  "outbreak_ignore" | "known_pathogens" | "ntc_ignore" | "ntc_contaminants";
+
+export interface TaxonList {
+  list_id: string;
+  kind: TaxonListKind;
+  name: string;
+  description: string | null;
+  system: boolean;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/** One taxon on one list. Name and superkingdom are resolved by the backend. */
+export interface TaxonListEntry {
+  list_id: string;
   taxon_id: number;
   taxon_name: string;
   superkingdom: string | null;
+  reason: string | null;
+  /** Set only on lists whose kind uses it (NTC known contaminants). */
+  min_reads: number | null;
   added_by: string;
   added_at: string;
-}
-
-export interface IgnorelistItem extends TaxonListItem {
-  reason: string | null;
-}
-
-export interface PathogenItem extends TaxonListItem {
-  reason: string | null;
-}
-
-export interface NtcContaminantItem extends TaxonListItem {
-  min_reads: number;
-  notes: string | null;
+  updated_by: string | null;
+  updated_at: string | null;
 }
 
 export interface NtcContaminantAlert {

@@ -21,13 +21,11 @@ const EMPTY_FORM: FormState = {
 export interface AddTaxonModalProps {
   title: string;
   showMinReads: boolean;
-  onAdd: (
-    id: number,
-    name: string,
-    superkingdom: string | null,
-    notes: string | null,
-    minReads: number
-  ) => Promise<void>;
+  /**
+   * The looked-up name is shown for confirmation only: the backend resolves
+   * name and kingdom from its own taxonomy, so they are not passed on.
+   */
+  onAdd: (id: number, reason: string | null, minReads: number) => Promise<void>;
   onClose: () => void;
 }
 
@@ -66,13 +64,7 @@ export default function AddTaxonModal({ title, showMinReads, onAdd, onClose }: A
     setAdding(true);
     setAddError(null);
     try {
-      await onAdd(
-        id,
-        form.taxon_name.trim(),
-        form.superkingdom,
-        form.notes.trim() || null,
-        form.min_reads
-      );
+      await onAdd(id, form.notes.trim() || null, form.min_reads);
       onClose();
     } catch (e) {
       setAddError(axiosErrorDetail(e, "Failed to add taxon."));

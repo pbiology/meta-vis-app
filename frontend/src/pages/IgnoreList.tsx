@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  useIgnorelist,
-  useRemoveFromIgnorelist,
-  useUpdateIgnorelistNote,
-} from "../hooks/queries/useAlerts";
+  useRemoveTaxonListEntry,
+  useTaxonListEntries,
+  useUpdateTaxonListEntry,
+} from "../hooks/queries/useTaxonLists";
 import { useAuth } from "../context/AuthContext";
-import type { IgnorelistItem } from "../api/types";
+import type { TaxonListEntry } from "../api/types";
+import { TAXON_LIST_IDS } from "../lib/taxonLists";
+
+const LIST_ID = TAXON_LIST_IDS.outbreakIgnorelist;
 
 export default function IgnoreList() {
   const navigate = useNavigate();
@@ -15,9 +18,9 @@ export default function IgnoreList() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
 
-  const ignorelistQ = useIgnorelist(filter);
-  const removeMutation = useRemoveFromIgnorelist();
-  const updateNoteMutation = useUpdateIgnorelistNote();
+  const ignorelistQ = useTaxonListEntries(LIST_ID, filter);
+  const removeMutation = useRemoveTaxonListEntry(LIST_ID);
+  const updateNoteMutation = useUpdateTaxonListEntry(LIST_ID);
 
   const items = ignorelistQ.data ?? [];
 
@@ -29,7 +32,7 @@ export default function IgnoreList() {
     }
   }
 
-  function startEdit(item: IgnorelistItem) {
+  function startEdit(item: TaxonListEntry) {
     setEditingId(item.taxon_id);
     setEditText(item.reason ?? "");
   }
@@ -38,7 +41,7 @@ export default function IgnoreList() {
     try {
       await updateNoteMutation.mutateAsync({
         taxonId,
-        reason: editText.trim() || null,
+        changes: { reason: editText.trim() || null },
       });
       setEditingId(null);
     } catch {

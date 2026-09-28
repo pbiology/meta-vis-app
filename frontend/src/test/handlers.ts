@@ -177,13 +177,16 @@ export const defaultHandlers = [
 
   // alerts
   http.get(`${API}/alerts/outbreaks`, () => HttpResponse.json({ window_days: 14, outbreaks: [] })),
-  http.get(`${API}/alerts/ignorelist`, () => HttpResponse.json([])),
-  http.post(`${API}/alerts/ignorelist`, () => HttpResponse.json({})),
-  http.delete(`${API}/alerts/ignorelist/:taxonId`, () => HttpResponse.json({})),
-  http.patch(`${API}/alerts/ignorelist/:taxonId`, () => HttpResponse.json({})),
-  http.get(`${API}/alerts/pathogens`, () => HttpResponse.json([])),
-  http.post(`${API}/alerts/pathogens`, () => HttpResponse.json({})),
-  http.delete(`${API}/alerts/pathogens/:taxonId`, () => HttpResponse.json({})),
+
+  // taxon lists
+  http.get(`${API}/taxon-lists`, () => HttpResponse.json([])),
+  http.get(`${API}/taxon-lists/:listId/entries`, () => HttpResponse.json([])),
+  http.post(`${API}/taxon-lists/:listId/entries`, () => HttpResponse.json({}, { status: 201 })),
+  http.patch(`${API}/taxon-lists/:listId/entries/:taxonId`, () => HttpResponse.json({})),
+  http.delete(
+    `${API}/taxon-lists/:listId/entries/:taxonId`,
+    () => new HttpResponse(null, { status: 204 })
+  ),
 
   // ntc
   http.get(`${API}/ntc/trends`, () =>
@@ -195,14 +198,6 @@ export const defaultHandlers = [
       recurring_taxa: [],
     })
   ),
-  http.get(`${API}/ntc/ignorelist`, () => HttpResponse.json([])),
-  http.post(`${API}/ntc/ignorelist`, () => HttpResponse.json({})),
-  http.patch(`${API}/ntc/ignorelist/:taxonId`, () => HttpResponse.json({})),
-  http.delete(`${API}/ntc/ignorelist/:taxonId`, () => HttpResponse.json({})),
-  http.get(`${API}/ntc/contaminants`, () => HttpResponse.json([])),
-  http.post(`${API}/ntc/contaminants`, () => HttpResponse.json({})),
-  http.patch(`${API}/ntc/contaminants/:taxonId`, () => HttpResponse.json({})),
-  http.delete(`${API}/ntc/contaminants/:taxonId`, () => HttpResponse.json({})),
   http.get(`${API}/ntc/contaminant-alerts`, () =>
     HttpResponse.json({ contaminant_case_ids: [], alerts: [] })
   ),

@@ -1,4 +1,4 @@
-import type { Case, CaseNote, PathogenItem, Sample } from "../../../api/types";
+import type { Case, CaseNote, TaxonListEntry, Sample } from "../../../api/types";
 import SignalPill, { type SignalKind } from "../../SignalPill";
 import KnownPathogensPanel from "../../KnownPathogensPanel";
 import CaseSamplesPanel from "./CaseSamplesPanel";
@@ -8,7 +8,7 @@ interface CaseOverviewProps {
   samples: Sample[];
   notes: CaseNote[];
   signals: SignalKind[];
-  pathogenMap: Record<number, PathogenItem>;
+  pathogenMap: Record<number, TaxonListEntry>;
   onJumpToComments: () => void;
   onSelectSample: (sampleId: string) => void;
 }

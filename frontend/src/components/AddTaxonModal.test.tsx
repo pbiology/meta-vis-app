@@ -68,7 +68,7 @@ describe("AddTaxonModal", () => {
     await userEvent.click(addBtn);
 
     await waitFor(() => {
-      expect(onAdd).toHaveBeenCalledWith(562, "Escherichia coli", "Bacteria", null, 3);
+      expect(onAdd).toHaveBeenCalledWith(562, null, 3);
       expect(onClose).toHaveBeenCalled();
     });
   });
