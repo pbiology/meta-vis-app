@@ -15,6 +15,14 @@ from app.config import settings
 ALGORITHMS = ["RS256"]
 ROLE_PRIORITY = ["admin", "writer", "reader"]
 
+# Tolerance for clock skew between Keycloak and this server, applied to the
+# iat, nbf and exp checks. pyjwt defaults to none, and iat is in whole seconds,
+# so a Keycloak clock even slightly ahead rejects a token used right after it
+# is issued ("not yet valid (iat)") — the CLI's first request, or the SPA's
+# first call after login. RFC 7519 allows "a few minutes"; 30 s is at the
+# conservative end. The cost is that an expired token stays usable this long.
+CLOCK_SKEW_LEEWAY_SECONDS = 30
+
 
 def _jwks_url() -> str:
     if settings.keycloak_jwks_url:
@@ -57,6 +65,7 @@ def verify_access_token(token: str) -> dict:
             signing_key,
             algorithms=ALGORITHMS,
             issuer=settings.keycloak_issuer,
+            leeway=CLOCK_SKEW_LEEWAY_SECONDS,
             options={"require": ["exp", "iss", "sub", "azp"], "verify_aud": False},
         )
     except jwt.PyJWTError as exc:
