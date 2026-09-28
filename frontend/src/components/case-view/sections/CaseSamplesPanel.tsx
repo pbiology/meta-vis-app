@@ -8,6 +8,15 @@ import { fmt } from "../../../utils/format";
 const FILTERS = ["All", "Sample", "Controls"] as const;
 type Filter = (typeof FILTERS)[number];
 
+const COLUMNS = [
+  "Sample ID",
+  "Nucleic acid",
+  "Type",
+  "Negative control",
+  "Source",
+  "Total reads",
+] as const;
+
 /**
  * Announce clinical samples that have no usable negative control.
  *
@@ -57,6 +66,22 @@ export function ntcCoverageWarning(samples: Sample[]): string | null {
     );
   }
   return parts.length > 0 ? parts.join(" ") : null;
+}
+
+/**
+ * The negative controls a row is compared against, so the pairing declared at
+ * ingest can be checked by eye — a run can hold one control per prep method.
+ */
+function controlCell(sample: Sample) {
+  // A negative control has no control of its own.
+  if (sample.sample_type === "negative_ctrl") {
+    return <span className="text-xs text-gray-400">—</span>;
+  }
+  const declared = sample.negative_control_sample_ids ?? [];
+  if (declared.length === 0) {
+    return <span className="text-xs text-amber-600">None declared</span>;
+  }
+  return <span className="font-mono text-xs text-gray-700">{declared.join(", ")}</span>;
 }
 
 interface CaseSamplesPanelProps {
@@ -113,7 +138,7 @@ export default function CaseSamplesPanel({
       <table className="w-full text-left border-collapse">
         <thead>
           <tr>
-            {["Sample ID", "Nucleic acid", "Type", "Source", "Total reads"].map((h) => (
+            {COLUMNS.map((h) => (
               <th
                 key={h}
                 className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 border-b border-gray-100 whitespace-nowrap"
@@ -157,6 +182,7 @@ export default function CaseSamplesPanel({
                 <td className="px-4 py-3">
                   <Badge type={(s.sample_type as string | undefined) ?? "sample"} />
                 </td>
+                <td className="px-4 py-3">{controlCell(s)}</td>
                 <td className="px-4 py-3 text-xs text-gray-500">
                   {(s.sample_source as string | undefined) ?? "—"}
                 </td>
@@ -171,7 +197,7 @@ export default function CaseSamplesPanel({
           })}
           {filtered.length === 0 && (
             <tr>
-              <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-400">
+              <td colSpan={COLUMNS.length} className="px-4 py-10 text-center text-sm text-gray-400">
                 No samples match this filter.
               </td>
             </tr>

@@ -221,3 +221,35 @@ describe("negative-control coverage warning", () => {
     expect(ntcCoverageWarning([ntc()])).toBeNull();
   });
 });
+
+describe("negative control column", () => {
+  // Lets the reviewer check the pairing declared at ingest: a run can hold one
+  // control per prep method, and each sample must show its own.
+
+  it("names each sample's declared control", () => {
+    renderPanel([
+      sample({ sample_id: "S-ELB-DNA", negative_control_sample_ids: ["NTC-ELB-DNA"] }),
+      sample({ sample_id: "S-HLSAN-DNA", negative_control_sample_ids: ["NTC-HLSAN-DNA"] }),
+      ntc({ sample_id: "NTC-ELB-DNA" }),
+      ntc({ sample_id: "NTC-HLSAN-DNA" }),
+    ]);
+
+    expect(within(rowFor("S-ELB-DNA")).getByText("NTC-ELB-DNA")).toBeInTheDocument();
+    expect(within(rowFor("S-HLSAN-DNA")).getByText("NTC-HLSAN-DNA")).toBeInTheDocument();
+  });
+
+  it("marks a sample ingested without a control", () => {
+    renderPanel([sample({ sample_id: "S1", negative_control_sample_ids: [] })]);
+
+    expect(within(rowFor("S1")).getByText("None declared")).toBeInTheDocument();
+  });
+
+  it("shows no control on a negative control", () => {
+    // Rendered alone: a sample declaring it would repeat its name in that
+    // sample's row.
+    renderPanel([ntc({ sample_id: "NTC-1" })]);
+
+    const cells = within(rowFor("NTC-1")).getAllByRole("cell");
+    expect(cells[3]).toHaveTextContent("—");
+  });
+});
