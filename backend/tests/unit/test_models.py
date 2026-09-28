@@ -1,7 +1,7 @@
 # tests/unit/test_models.py
 
 import pytest
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pydantic import ValidationError
 
 from app.models.analysis import CaseAnalysisResponse
@@ -289,84 +289,47 @@ class TestReviewStatus:
         assert r.reviewed is True
 
 
-class TestSampleOrderDate:
-    """Only a control carries its own order date. A clinical sample is ordered
-    as part of its case, so a per-sample date there could only disagree with
-    the case — which is the drift this field exists to remove, not to add."""
+class TestUnknownSampleKeysRejected:
+    """A manifest key the model does not know is an error, not dropped: a
+    misspelt or retired key would otherwise vanish from clinical data. The
+    per-sample order_date is the retired key that motivated this — every sample,
+    controls included, takes its case's order date."""
 
-    def _taxprofiler(self, **overrides) -> dict:
+    def test_taxprofiler_sample_rejects_order_date(self):
         payload = {
             "sample_id": "NTC-260305-DNA",
             "sample_type": "negative_ctrl",
             "nucleic_acid": "DNA",
+            "order_date": "2026-03-05",
             "columns": {"kraken2": "NTC-260305-DNA_k2_pluspf"},
         }
-        payload.update(overrides)
-        return payload
 
-    def _trana(self, **overrides) -> dict:
+        with pytest.raises(ValidationError, match="order_date"):
+            TaxprofilerSampleIngestRequest(**payload)
+
+    def test_trana_sample_rejects_order_date(self):
         payload = {
             "sample_id": "16SNEGABC123",
             "sample_type": "negative_ctrl",
             "nucleic_acid": "DNA",
+            "order_date": "2026-03-05",
         }
-        payload.update(overrides)
-        return payload
 
-    def test_control_may_carry_its_own_order_date(self):
-        req = TaxprofilerSampleIngestRequest(
-            **self._taxprofiler(order_date="2026-03-05")
-        )
-
-        assert req.order_date == date(2026, 3, 5)
-
-    def test_positive_control_may_carry_its_own_order_date(self):
-        req = TaxprofilerSampleIngestRequest(
-            **self._taxprofiler(
-                sample_type="positive_ctrl",
-                order_date="2026-03-05",
-                negative_controls=[],
-            )
-        )
-
-        assert req.order_date == date(2026, 3, 5)
-
-    def test_order_date_defaults_to_none(self):
-        assert TaxprofilerSampleIngestRequest(**self._taxprofiler()).order_date is None
-
-    def test_clinical_sample_may_not_carry_its_own_order_date(self):
-        payload = self._taxprofiler(
-            sample_type="sample",
-            subject_id="26CE100005",
-            order_date="2026-03-05",
-        )
-
-        with pytest.raises(ValidationError, match="must not set order_date"):
-            TaxprofilerSampleIngestRequest(**payload)
-
-    def test_clinical_sample_without_a_date_is_accepted(self):
-        req = TaxprofilerSampleIngestRequest(
-            **self._taxprofiler(
-                sample_type="sample", subject_id="26CE100005", negative_controls=[]
-            )
-        )
-
-        assert req.order_date is None
-
-    def test_trana_control_may_carry_its_own_order_date(self):
-        req = TranaSampleIngestRequest(**self._trana(order_date="2026-03-05"))
-
-        assert req.order_date == date(2026, 3, 5)
-
-    def test_trana_clinical_sample_may_not_carry_its_own_order_date(self):
-        payload = self._trana(
-            sample_type="sample",
-            subject_id="1234567890AB",
-            order_date="2026-03-05",
-        )
-
-        with pytest.raises(ValidationError, match="must not set order_date"):
+        with pytest.raises(ValidationError, match="order_date"):
             TranaSampleIngestRequest(**payload)
+
+    def test_misspelt_key_is_rejected(self):
+        payload = {
+            "sample_id": "S1",
+            "subject_id": "26CE100005",
+            "sample_type": "sample",
+            "nucleic_acid": "DNA",
+            "negative_control": ["NTC-A"],
+            "columns": {"kraken2": "S1_k2"},
+        }
+
+        with pytest.raises(ValidationError, match="negative_control"):
+            TaxprofilerSampleIngestRequest(**payload)
 
 
 class TestNegativeControlLinks:

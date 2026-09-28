@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from datetime import date
 from typing import List, Literal, Optional, Protocol
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.common import AnalysisType, SequencingPlatform
 
@@ -17,24 +17,6 @@ from app.models.common import AnalysisType, SequencingPlatform
 # ---------------------------------------------------------------------------
 # Shared sample-entry rules
 # ---------------------------------------------------------------------------
-
-
-def _assert_order_date_is_control_only(
-    sample_id: str, sample_type: str, order_date: Optional[date]
-) -> None:
-    """Reject a per-sample order date on a clinical sample.
-
-    A control is prepared once and sequenced alongside every case in its run, so
-    its order date belongs to the control. A clinical sample is ordered as part
-    of its case, so a date of its own could only disagree with the case's — the
-    drift this field exists to remove, not to introduce.
-    """
-    if sample_type == "sample" and order_date is not None:
-        raise ValueError(
-            f"Sample '{sample_id}' has sample_type='sample' and must not set "
-            "order_date: a clinical sample is ordered as part of its case and "
-            "takes the case's order date. Only controls carry their own."
-        )
 
 
 def _assert_negative_controls_declared(
@@ -148,21 +130,22 @@ class TaxprofilerClassifierMeta(BaseModel):
 
 
 class TaxprofilerSampleIngestRequest(BaseModel):
+    # An unknown key is an error rather than dropped: a misspelt or retired key
+    # (such as the per-sample order_date controls once carried) would otherwise
+    # vanish from clinical data without anyone noticing.
+    model_config = ConfigDict(extra="forbid")
+
     # subject_id is required for clinical samples but not for controls (NTC /
     # positive control) — controls have no clinical subject. The validator
     # below enforces this. subject_sex is only persisted when a subject_id is
-    # present.
+    # present. There is no per-sample order date: every sample, controls
+    # included, takes the order date of its case.
     subject_id: Optional[str] = None
     subject_sex: Literal["F", "M", "X", "unknown"] = "unknown"
     sample_id: str
     sample_type: Literal["sample", "positive_ctrl", "negative_ctrl"]
     nucleic_acid: Literal["DNA", "RNA"]
     sample_source: str = "N/A"
-    # A control is prepared once and sequenced alongside every case in its run,
-    # so its order date is a property of the control, not of any one case. Left
-    # unset, the sample inherits the case's order date — always right for a
-    # clinical sample, which is why the validator below rejects it there.
-    order_date: Optional[date] = None
     # sample_ids of the negative controls in this bundle that this sample is
     # compared against. Required on everything but a negative control; an empty
     # list declares "no control". See _assert_negative_controls_declared.
@@ -177,13 +160,6 @@ class TaxprofilerSampleIngestRequest(BaseModel):
                 f"Sample '{self.sample_id}' has sample_type='sample' and must "
                 "provide a subject_id."
             )
-        return self
-
-    @model_validator(mode="after")
-    def _reject_order_date_on_clinical_samples(self):
-        _assert_order_date_is_control_only(
-            self.sample_id, self.sample_type, self.order_date
-        )
         return self
 
     @model_validator(mode="after")
@@ -227,15 +203,17 @@ class TranaSampleIngestRequest(BaseModel):
     optional nanoplot_unprocessed/NanoStats.txt, optional
     nanoplot_processed/NanoStats.txt)."""
 
+    # See TaxprofilerSampleIngestRequest for why unknown keys are rejected.
+    model_config = ConfigDict(extra="forbid")
+
     # See TaxprofilerSampleIngestRequest for the subject_id / sample_type,
-    # order_date and negative_controls rules.
+    # order date and negative_controls rules.
     subject_id: Optional[str] = None
     subject_sex: Literal["F", "M", "X", "unknown"] = "unknown"
     sample_id: str
     sample_type: Literal["sample", "positive_ctrl", "negative_ctrl"]
     nucleic_acid: Literal["DNA", "RNA"]
     sample_source: str = "N/A"
-    order_date: Optional[date] = None
     negative_controls: Optional[List[str]] = None
     has_krona: bool = False
     has_nanoplot_unprocessed: bool = False
@@ -248,13 +226,6 @@ class TranaSampleIngestRequest(BaseModel):
                 f"Sample '{self.sample_id}' has sample_type='sample' and must "
                 "provide a subject_id."
             )
-        return self
-
-    @model_validator(mode="after")
-    def _reject_order_date_on_clinical_samples(self):
-        _assert_order_date_is_control_only(
-            self.sample_id, self.sample_type, self.order_date
-        )
         return self
 
     @model_validator(mode="after")

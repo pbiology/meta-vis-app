@@ -946,9 +946,9 @@ class TestControlDateIsStable:
         assert counts[0]["order_date"] == DAY_2
 
     async def test_date_does_not_move_when_copies_disagree(self, fake_db):
-        # Data ingested before a control could carry its own date inherited each
-        # case's. The earliest is served: it is the only choice that cannot
-        # shift as analyses are added.
+        # A control that ended up in two orders carries a different case order
+        # date per copy. The earliest is served: it is the only choice that
+        # cannot shift as analyses are added.
         await fake_db["samples"].insert_many(
             [
                 make_ntc_doc("NTC-A", "case-late", "DNA", DAY_3, classified_reads=5),

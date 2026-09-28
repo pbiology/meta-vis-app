@@ -108,9 +108,9 @@ class TestResolveControls:
         assert len(controls) == 1
 
     def test_date_is_the_earliest_across_copies(self):
-        # Copies agree once a control carries its own date. On older data they
-        # do not, and the earliest is the only date that cannot shift as
-        # further analyses arrive.
+        # Each copy carries its case's order date. Cases of one batch share it,
+        # but a control can end up in two orders; the earliest is the only date
+        # that cannot shift as further analyses arrive.
         controls = resolve_controls(
             group_documents_by_control(
                 [
