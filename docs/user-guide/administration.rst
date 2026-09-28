@@ -40,11 +40,11 @@ Role capability matrix
      - ✗
      - ✓
      - ✓
-   * - Add to ignorelists / known-contaminants
+   * - Add to ignorelists / known pathogens / known contaminants
      - ✗
      - ✓
      - ✓
-   * - Remove from ignorelists / known-contaminants
+   * - Remove from ignorelists / known pathogens / known contaminants
      - ✗
      - ✗
      - ✓
@@ -148,16 +148,12 @@ What is audited
 **Data ingestion**
    ``ingest`` — success or failure.
 
-**Outbreak ignorelist**
-   ``ignorelist_add``, ``ignorelist_update``, ``ignorelist_remove``.
-
-**Known pathogens**
-   ``pathogen_add``, ``pathogen_remove``.
-
-**NTC ignorelist and contaminants**
-   ``ntc_ignorelist_add``, ``ntc_ignorelist_update``,
-   ``ntc_ignorelist_remove``, ``ntc_contaminant_add``,
-   ``ntc_contaminant_update``, ``ntc_contaminant_remove``.
+**Taxon lists** (outbreak ignorelist, known pathogens, NTC ignorelist, NTC known contaminants)
+   ``taxon_list_entry_add``, ``taxon_list_entry_update``,
+   ``taxon_list_entry_remove``. ``resource_type`` is
+   ``taxon_list_entry`` and ``resource_id`` is ``<list_id>:<taxon_id>``
+   (e.g. ``ntc_ignorelist:1743``); ``detail`` carries the list id, its
+   kind, and the fields added or changed.
 
 Event structure
 ---------------
@@ -230,7 +226,7 @@ resource_id)``, so the queries below stay fast as the log grows.
 
    // Deletions in the past 30 days
    db.audit_log.find({
-     action: { $in: ["delete_case", "ignorelist_remove", "pathogen_remove"] },
+     action: { $in: ["delete_case", "taxon_list_entry_remove"] },
      timestamp: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
    }).sort({ timestamp: -1 })
 
