@@ -9,6 +9,7 @@
 # Auth is bypassed via dependency_overrides, following the same pattern as
 # the rest of the test suite.
 
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 from fastapi.testclient import TestClient
@@ -802,3 +803,48 @@ class TestGetBvbrcSpecialtyGenes:
 
             # Only 2 httpx calls (sg + amr) for the first request; second hits cache
             assert mock_client.get.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# GET /taxa/{taxon_id}/occurrences
+# ---------------------------------------------------------------------------
+
+
+class TestGetTaxonOccurrences:
+    @staticmethod
+    def _sample_doc(sample_id, sample_type, order_date, reads):
+        return {
+            "case_id": "case-1",
+            "sample_id": sample_id,
+            "sample_type": sample_type,
+            "order_date": order_date,
+            "is_latest_analysis": True,
+            "all_taxon_ids": [562],
+            "profiles": [
+                {
+                    "classifier": "kraken2",
+                    "profile": [{"taxon_id": 562, "abundance": reads}],
+                }
+            ],
+        }
+
+    async def test_case_with_its_negative_control_is_one_row(self, fake_db):
+        # Rows are grouped by (case_id, order_date). Every sample of a case,
+        # its controls included, carries the case's order date; a control with
+        # a date of its own used to split its case into two rows.
+        today = date.today().isoformat()
+        await fake_db["samples"].insert_many(
+            [
+                self._sample_doc("S1", "sample", today, 120),
+                self._sample_doc("NTC-A", "negative_ctrl", today, 4),
+            ]
+        )
+        app, _ = make_app(fake_db)
+
+        body = TestClient(app).get("/api/v1/taxa/562/occurrences").json()
+
+        assert body["total_cases"] == 1
+        case = body["cases"][0]
+        assert case["order_date"] == today
+        assert case["sample_count"] == 2
+        assert [s["sample_id"] for s in case["samples"]] == ["NTC-A", "S1"]

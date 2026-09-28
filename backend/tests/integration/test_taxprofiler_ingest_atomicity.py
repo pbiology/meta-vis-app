@@ -61,6 +61,7 @@ def make_meta(**overrides) -> TaxprofilerIngestMeta:
                 sample_id="SRR001",
                 sample_type="sample",
                 nucleic_acid="DNA",
+                negative_controls=[],
                 columns={"kraken2": "SRR001_kraken2"},
             )
         ],
@@ -119,6 +120,41 @@ def make_inputs(**overrides) -> TaxprofilerIngestInputs:
     }
     defaults.update(overrides)
     return TaxprofilerIngestInputs(**defaults)
+
+
+async def _ingest_sample_with_ntc(db) -> None:
+    """Ingest one clinical sample linked to one negative control."""
+    meta = make_meta(
+        samples=[
+            TaxprofilerSampleIngestRequest(
+                subject_id="SUBJ-1",
+                sample_id="SRR001",
+                sample_type="sample",
+                nucleic_acid="DNA",
+                negative_controls=["NTC001"],
+                columns={"kraken2": "SRR001_kraken2"},
+            ),
+            TaxprofilerSampleIngestRequest(
+                sample_id="NTC001",
+                sample_type="negative_ctrl",
+                nucleic_acid="DNA",
+                columns={"kraken2": "NTC001_kraken2"},
+            ),
+        ]
+    )
+    taxpasta = pd.DataFrame(
+        {
+            "taxon_id": [2],
+            "name": ["Bacteria"],
+            "rank": ["superkingdom"],
+            "lineage": ["Bacteria"],
+            "SRR001_kraken2": [1200],
+            "NTC001_kraken2": [3],
+        }
+    )
+    await orchestrator.ingest_taxprofiler_case(
+        meta, make_inputs(taxpasta={"kraken2": taxpasta}), db
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -239,6 +275,28 @@ class TestIngestAtomicity:
         assert analysis["sample_count"] == 1
         assert analysis["sample_names"] == ["SRR001"]
         assert "sample_ids" not in analysis
+
+    async def test_persists_declared_negative_controls(self, fake_db):
+        """The declared link is stored on the sample; a control carries none."""
+        await _ingest_sample_with_ntc(fake_db)
+
+        sample = await fake_db["samples"].find_one({"sample_id": "SRR001"})
+        ntc = await fake_db["samples"].find_one({"sample_id": "NTC001"})
+        assert sample["negative_control_sample_ids"] == ["NTC001"]
+        assert ntc["negative_control_sample_ids"] is None
+
+    async def test_negative_control_takes_the_case_order_date(self, fake_db):
+        """The order date is when the analysis was ordered; a control has no
+        order of its own, so it carries its case's date like every sample."""
+        await _ingest_sample_with_ntc(fake_db)
+
+        dates = {
+            doc["sample_id"]: doc["order_date"]
+            async for doc in fake_db["samples"].find(
+                {}, {"sample_id": 1, "order_date": 1}
+            )
+        }
+        assert dates == {"SRR001": "2026-01-01", "NTC001": "2026-01-01"}
 
     async def test_blob_uploaded_only_after_db_commit(self, fake_db, fake_blob):
         """Krona blob is stored under the analysis version and referenced."""

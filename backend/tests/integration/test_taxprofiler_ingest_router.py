@@ -47,6 +47,7 @@ def _meta_stub(case_id: str = "testcase"):
                 sample_id="S1",
                 sample_type="sample",
                 nucleic_acid="DNA",
+                negative_controls=[],
                 columns={"kraken2": "S1_kraken2"},
             )
         ],

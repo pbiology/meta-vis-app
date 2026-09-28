@@ -1,20 +1,27 @@
 # app/ntc_controls.py
 """Collapse NTC sample documents into the physical controls they describe.
 
-One negative control is prepared once and sequenced alongside every case in its
-run, so it reaches the database as one `samples` document per case, all sharing
-a `sample_id`. Anything that counts or plots controls — the NTC trends page —
-must count the control, not the documents; otherwise a control shared by seven
-cases is reported as seven controls and inflates both sides of the recurring-
-taxon threshold.
+A negative control belongs to a batch, and a case is one patient's samples plus
+the controls of their batch. So one control reaches the database as one
+`samples` document per case in its batch, all sharing a `sample_id`. Anything
+that counts or plots controls — the NTC trends page — must count the control,
+not the documents; otherwise a control shared by seven cases is reported as
+seven controls and inflates both sides of the recurring-taxon threshold.
+
+The `sample_id` is the only thing that identifies the control across cases: the
+app records no batch. A lab that reuses one name for every batch's control
+therefore merges all of them into a single control here, which collapses the
+trend charts and makes every taxon look recurrent. Unique control names per
+batch are an ingest convention (see docs/user-guide/loading-data.rst).
 
 Two rules decide what a collapsed control looks like:
 
-* **Its date never moves.** A control carries its own order date (see
-  ``app.models.ingest``), so every copy agrees and the minimum is simply that
-  date. Taking the minimum rather than the winning document's date also keeps
-  the date stable on data ingested before controls could carry one, and stops
-  it jumping when a new analysis arrives.
+* **Its date is the earliest order date of its cases.** A control has no order
+  of its own; each copy carries the order date of the case it was uploaded
+  with. Cases of one batch share that date, so copies normally agree. When a
+  control ends up in two orders, the earliest date is used — and taking the
+  minimum rather than the winning document's date stops the point jumping when
+  a new analysis arrives.
 * **Its values come from the newest sequencing.** Where copies could disagree,
   the document from the highest analysis version wins. Documents are ranked
   rather than merged, so a caller can fall back down the ranking for a value
@@ -25,10 +32,10 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-# (sample_id, nucleic_acid). The sample_id alone identifies a control in
-# practice — the ids encode the nucleic acid — but pairing them costs nothing
-# and keeps a control that does not follow that convention from merging its
-# DNA and RNA aliquots into one point.
+# (sample_id, nucleic_acid). The sample_id is the control's identity — see the
+# module docstring for what a name reused across batches does. Pairing it with
+# the nucleic acid costs nothing and keeps a control whose name does not encode
+# it from merging its DNA and RNA aliquots into one point.
 ControlKey = tuple[str, str]
 
 

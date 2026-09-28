@@ -578,8 +578,8 @@ def _collapse_occurrences(
 
     The aggregation emits a row per (control, case), so a control shared by
     seven cases contributed seven identical points to the chart. The control's
-    own order date is used rather than the row's, so the point sits exactly
-    where the read-count and kingdom charts put that control.
+    collapsed order date is used rather than the row's, so the point sits
+    exactly where the read-count and kingdom charts put that control.
     """
     by_sample: dict[str, dict[str, dict]] = {}
     for occurrence in occurrences:
@@ -809,7 +809,7 @@ async def _compute_ntc_trends(
         }
 
     # Controls in date order: one point per control on every chart, at the
-    # control's own date.
+    # control's collapsed date.
     ordered_controls = sorted(
         controls.values(), key=lambda c: (c.order_date or "", c.sample_id)
     )

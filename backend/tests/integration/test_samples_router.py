@@ -58,6 +58,11 @@ async def insert_sample(
             "sample_source": "blood",
             "sample_type": sample_type,
             "nucleic_acid": nucleic_acid,
+            # Ingested without a control unless the test declares one; a
+            # negative control never carries a value.
+            "negative_control_sample_ids": (
+                None if sample_type == "negative_ctrl" else []
+            ),
             "has_krona": has_krona,
             "taxprofiler": {"fastp": None, "bowtie2": None, "classifiers": {}},
             "profiles": profiles or [],
@@ -151,6 +156,13 @@ class TestGetSample:
         assert resp.status_code == 200
         assert resp.json()["sample_id"] == "SRR001"
 
+    async def test_exposes_declared_negative_controls(self, client, fake_db):
+        # The UI warns on an empty list, so [] must survive serialisation
+        # rather than collapse into null.
+        oid, _ = await insert_sample(fake_db, "SRR001")
+        resp = client.get(f"/api/v1/samples/{oid}")
+        assert resp.json()["negative_control_sample_ids"] == []
+
     async def test_unknown_sample_returns_404(self, client, fake_db):
         resp = client.get(f"/api/v1/samples/{ObjectId()}")
         assert resp.status_code == 404
@@ -206,7 +218,7 @@ class TestGetProfile:
 
 
 class TestGetNtcProfiles:
-    async def test_returns_empty_when_no_ntcs(self, client, fake_db):
+    async def test_returns_empty_when_declared_without_control(self, client, fake_db):
         oid, _ = await insert_sample(fake_db, "SRR001", nucleic_acid="DNA")
         resp = client.get(f"/api/v1/samples/{oid}/ntc_profiles")
         assert resp.status_code == 200
@@ -215,8 +227,7 @@ class TestGetNtcProfiles:
         assert body["contaminant_config"]["threshold"] == 5
         assert "species" in body["contaminant_config"]["eligible_ranks"]
 
-    async def test_returns_ntc_in_same_analysis(self, client, fake_db):
-        # Insert a sample and an NTC produced by the same analysis
+    async def test_returns_declared_ntc(self, client, fake_db):
         analysis_id = await seed_case(fake_db, "testcase")
         sample_result = await fake_db["samples"].insert_one(
             {
@@ -225,6 +236,7 @@ class TestGetNtcProfiles:
                 "sample_id": "SRR001",
                 "sample_type": "sample",
                 "nucleic_acid": "DNA",
+                "negative_control_sample_ids": ["CTRL01"],
                 "has_krona": False,
                 "profiles": [],
                 "review": {"reviewed": False},
@@ -250,56 +262,44 @@ class TestGetNtcProfiles:
         assert len(body["profiles"]) == 1
         assert body["profiles"][0]["sample_id"] == "CTRL01"
 
-    async def test_excludes_ntcs_of_other_nucleic_acid(self, client, fake_db):
-        # A DNA sample must never receive RNA NTCs in its contaminant baseline —
-        # the two are technically incomparable. Invariant guards the
-        # contaminant-pill logic downstream.
+    async def test_excludes_other_preps_control(self, client, fake_db):
+        # Two preps of the same nucleic acid in one run, each with its own
+        # control. The other prep's control matches on analysis and nucleic
+        # acid; including it would flag its contaminants in this sample.
         analysis_id = await seed_case(fake_db, "testcase")
         sample_result = await fake_db["samples"].insert_one(
             {
                 "analysis_id": analysis_id,
                 "case_id": "testcase",
-                "sample_id": "SRR001",
+                "sample_id": "26CE500037-ELB-DNA",
                 "sample_type": "sample",
                 "nucleic_acid": "DNA",
+                "negative_control_sample_ids": ["NTC260916-ELB-DNA"],
                 "has_krona": False,
                 "profiles": [],
                 "review": {"reviewed": False},
                 "ingested_at": datetime.now(timezone.utc),
             }
         )
-        # RNA NTC — must be filtered out
-        await fake_db["samples"].insert_one(
-            {
-                "analysis_id": analysis_id,
-                "case_id": "testcase",
-                "sample_id": "CTRL_RNA",
-                "sample_type": "negative_ctrl",
-                "nucleic_acid": "RNA",
-                "has_krona": False,
-                "profiles": [{"classifier": "kraken2", "profile": []}],
-                "review": {"reviewed": False},
-                "ingested_at": datetime.now(timezone.utc),
-            }
-        )
-        # DNA NTC — must be included
-        await fake_db["samples"].insert_one(
-            {
-                "analysis_id": analysis_id,
-                "case_id": "testcase",
-                "sample_id": "CTRL_DNA",
-                "sample_type": "negative_ctrl",
-                "nucleic_acid": "DNA",
-                "has_krona": False,
-                "profiles": [{"classifier": "kraken2", "profile": []}],
-                "review": {"reviewed": False},
-                "ingested_at": datetime.now(timezone.utc),
-            }
-        )
+        for ntc in ("NTC260916-ELB-DNA", "NTC260916-HLSAN-DNA"):
+            await fake_db["samples"].insert_one(
+                {
+                    "analysis_id": analysis_id,
+                    "case_id": "testcase",
+                    "sample_id": ntc,
+                    "sample_type": "negative_ctrl",
+                    "nucleic_acid": "DNA",
+                    "negative_control_sample_ids": None,
+                    "has_krona": False,
+                    "profiles": [{"classifier": "kraken2", "profile": []}],
+                    "review": {"reviewed": False},
+                    "ingested_at": datetime.now(timezone.utc),
+                }
+            )
         resp = client.get(f"/api/v1/samples/{sample_result.inserted_id}/ntc_profiles")
         assert resp.status_code == 200
         profiles = resp.json()["profiles"]
-        assert [p["sample_id"] for p in profiles] == ["CTRL_DNA"]
+        assert [p["sample_id"] for p in profiles] == ["NTC260916-ELB-DNA"]
 
     async def test_negative_control_is_not_its_own_ntc(self, client, fake_db):
         analysis_id = await seed_case(fake_db, "testcase")

@@ -14,7 +14,7 @@ interface CladeSectionProps {
 }
 
 /**
- * Related taxa in this sample and the negative controls of the same run.
+ * Related taxa in this sample and the negative controls declared for it.
  *
  * Matching on exact taxon ID misses the same organism classified as a sibling
  * strain or species, or left at a higher rank. This lays the whole genus out

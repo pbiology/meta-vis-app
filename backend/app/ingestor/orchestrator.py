@@ -4,7 +4,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
@@ -321,10 +321,16 @@ def _build_sample_docs_and_profiles(
                 "is_latest_analysis": True,
                 "sample_id": s.sample_id,
                 "sample_source": s.sample_source,
-                "order_date": _resolve_sample_order_date(s.order_date, meta.order_date),
+                # Every sample takes the case's order date, controls included:
+                # the date is when the analysis was ordered, and a control
+                # has no order of its own.
+                "order_date": meta.order_date.isoformat() if meta.order_date else None,
                 "subject_id": None,
                 "sample_type": s.sample_type,
                 "nucleic_acid": s.nucleic_acid,
+                # Validated against the bundle by the manifest model; null only
+                # on a negative control.
+                "negative_control_sample_ids": s.negative_controls,
                 "taxprofiler": {
                     **base_qc,
                     "classifiers": classifier_qc,
@@ -860,10 +866,11 @@ def _prepare_trana_ingest(
                 "is_latest_analysis": True,
                 "sample_id": s.sample_id,
                 "sample_source": s.sample_source,
-                "order_date": _resolve_sample_order_date(s.order_date, meta.order_date),
+                "order_date": meta.order_date.isoformat() if meta.order_date else None,
                 "subject_id": None,
                 "sample_type": s.sample_type,
                 "nucleic_acid": s.nucleic_acid,
+                "negative_control_sample_ids": s.negative_controls,
                 "trana": trana_qc,
                 "profiles": profiles,
                 "outbreak_taxa": outbreak_taxa,
@@ -1008,20 +1015,6 @@ def _extract_classifier_qc(qc_data: MultiQCRaw, classifier_name: str, col: str) 
         "num_species": num_species or None,
         "num_genera": num_genera or None,
     }
-
-
-def _resolve_sample_order_date(
-    sample_order_date: date | None, case_order_date: date | None
-) -> str | None:
-    """Resolve the order date stored on a sample document.
-
-    A control is prepared once and sequenced alongside every case in its run, so
-    it carries its own order date and every copy of it agrees. Everything else
-    is ordered as part of the case and inherits the case's date — the manifest
-    models reject a per-sample date on a clinical sample outright.
-    """
-    resolved = sample_order_date or case_order_date
-    return resolved.isoformat() if resolved else None
 
 
 def _extract_base_qc(qc_data: MultiQCRaw, sample_id: str) -> dict:

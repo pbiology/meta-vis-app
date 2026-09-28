@@ -55,6 +55,11 @@ class SampleResponse(_Base):
     sample_source: Optional[str] = None
     sample_type: Literal["sample", "positive_ctrl", "negative_ctrl"]
     nucleic_acid: Literal["DNA", "RNA"]
+    # sample_ids of the negative controls this sample is compared against, as
+    # declared at ingest (app.models.ingest). An empty list means the sample
+    # was explicitly ingested without a control, which the UI warns about.
+    # None on a negative control, which has no control of its own.
+    negative_control_sample_ids: Optional[List[str]] = None
     subject_id: Optional[str] = None
     taxprofiler: Optional[TaxprofilerStats] = None
     trana: Optional[TranaStats] = None

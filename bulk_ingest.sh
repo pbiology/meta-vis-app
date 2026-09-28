@@ -27,10 +27,12 @@
 # is ordered once, and re-sequencing it does not re-order it. The analyses are
 # told apart by their version and ingest date, which the UI shows per analysis.
 #
-# Negative controls declare their own order_date= on --sample. One physical
-# control is sequenced alongside every case in its run, so it appears once per
-# case with the same sample_id; a control that inherited each case's order date
-# instead would show up as one control scattered across the whole window.
+# Every sample takes its case's --order-date, negative controls included: the
+# order date is when the analysis was ordered, and a control has no order of
+# its own. A control shared by several cases (all slowowl cases share one) is
+# collapsed into one point on the NTC trends page, at the earliest order date
+# among its cases. Real cases of one batch share an order date; the random
+# dates here only mean each dataset's control lands early in the window.
 #
 # --reingest N creates N such cases, independent of the taxprofiler count.
 # It cannot append to the cases the taxprofiler pass creates: those are
@@ -46,11 +48,16 @@
 # 26CE500026 and the run's negative controls are declared here. The undeclared
 # columns are inert — both taxpasta and MultiQC are read per declared sample.
 #
+# Every clinical sample names its negative control with negative_controls=.
+# The link is never inferred by the backend: a run can hold one control per
+# prep method, so only the operator knows which control belongs to which
+# sample. The datasets here have one control per nucleic acid.
+#
 # --ntc N ingests N negative-control-only cases whose kraken2 profiles carry
 # planted recurring contaminants, which is what the NTC trends page looks for.
 # Fixtures are generated on demand by backend/test-data/generate_ntc_test_data.py.
-# Each of those cases has a control of its own rather than sharing one, so the
-# case's order date already is the control's and no order_date= is needed.
+# Each of those cases has a control of its own rather than sharing one, so
+# each control is its own point on the trends page.
 #
 # Prerequisites (cg env):
 #   KEYCLOAK_CLIENT_SECRET is read from .env in the repo root automatically.
@@ -321,27 +328,6 @@ random_date() {
   return
 }
 
-# Order date for one of the shared negative controls, $1 days before today.
-#
-# A control is prepared once and sequenced alongside every case in its run, so
-# its order date belongs to the control and every case that carries it must
-# report the same one — that is what makes the NTC trends page able to collapse
-# a control's copies into a single point. Offsets are fixed rather than drawn
-# from random_date so the page looks the same across re-runs of this script.
-control_order_date() {
-  local offset_days="$1"
-  date -j -r $(( end_epoch - offset_days * 86400 )) "+%Y-%m-%d"
-  return
-}
-
-# The three datasets' controls, spread across the window so the trends charts
-# have a time axis. Each case's own order date is still drawn at random and is
-# unrelated to these: the cases a run holds were ordered independently of the
-# control that run was sequenced with.
-SLOWOWL_NTC_DATE=$(control_order_date $(( range_days * 3 / 4 )))
-FULLCAMEL_NTC_DATE=$(control_order_date $(( range_days / 2 )))
-TRANA_NTC_DATE=$(control_order_date $(( range_days / 4 )))
-
 ms() { python3 -c "import time; print(int(time.time()*1000))"; return; }
 
 # ---------------------------------------------------------------------------
@@ -367,10 +353,10 @@ ingest_taxprofiler_case() {
     --classifier "kraken2 db=k2_pluspf taxpasta=$TD/taxprofiler/taxpasta/kraken2_k2_pluspf.tsv krona=$TD/taxprofiler/krona/kraken2_k2_pluspf.html" \
     --classifier "centrifuge db=p_compressed+h+v taxpasta=$TD/taxprofiler/taxpasta/centrifuge_p_compressed+h+v.tsv krona=$TD/taxprofiler/krona/centrifuge_p_compressed+h+v.html" \
     --classifier "diamond db=diamond taxpasta=$TD/taxprofiler/taxpasta/diamond_diamond.tsv" \
-    --sample "sample_id=26CE100005-DNA subject_id=26CE100005 type=sample nucleic_acid=DNA column_kraken2=26CE100005-DNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=26CE100005-DNA_p_compressed+h+v.centrifuge column_diamond=26CE100005-DNA_diamond.diamond" \
-    --sample "sample_id=26CE100005-RNA subject_id=26CE100005 type=sample nucleic_acid=RNA column_kraken2=26CE100005-RNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=26CE100005-RNA_p_compressed+h+v.centrifuge column_diamond=26CE100005-RNA_diamond.diamond" \
-    --sample "sample_id=NTC-260305-DNA type=negative_ctrl nucleic_acid=DNA order_date=$SLOWOWL_NTC_DATE column_kraken2=NTC-260305-DNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=NTC-260305-DNA_p_compressed+h+v.centrifuge column_diamond=NTC-260305-DNA_diamond.diamond" \
-    --sample "sample_id=NTC-260305-RNA type=negative_ctrl nucleic_acid=RNA order_date=$SLOWOWL_NTC_DATE column_kraken2=NTC-260305-RNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=NTC-260305-RNA_p_compressed+h+v.centrifuge column_diamond=NTC-260305-RNA_diamond.diamond" \
+    --sample "sample_id=26CE100005-DNA subject_id=26CE100005 type=sample nucleic_acid=DNA negative_controls=NTC-260305-DNA column_kraken2=26CE100005-DNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=26CE100005-DNA_p_compressed+h+v.centrifuge column_diamond=26CE100005-DNA_diamond.diamond" \
+    --sample "sample_id=26CE100005-RNA subject_id=26CE100005 type=sample nucleic_acid=RNA negative_controls=NTC-260305-RNA column_kraken2=26CE100005-RNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=26CE100005-RNA_p_compressed+h+v.centrifuge column_diamond=26CE100005-RNA_diamond.diamond" \
+    --sample "sample_id=NTC-260305-DNA type=negative_ctrl nucleic_acid=DNA column_kraken2=NTC-260305-DNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=NTC-260305-DNA_p_compressed+h+v.centrifuge column_diamond=NTC-260305-DNA_diamond.diamond" \
+    --sample "sample_id=NTC-260305-RNA type=negative_ctrl nucleic_acid=RNA column_kraken2=NTC-260305-RNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=NTC-260305-RNA_p_compressed+h+v.centrifuge column_diamond=NTC-260305-RNA_diamond.diamond" \
     --metaval "$TD/metaval" \
     --yes \
     --url "$URL" \
@@ -408,10 +394,10 @@ ingest_fullcamel_run() {
     --sequencing-platform "illumina" \
     --classifier "kraken2 db=k2_pluspf taxpasta=$run_dir/kraken2_k2_pluspf.tsv krona=$run_dir/kraken2_k2_pluspf.html" \
     --classifier "centrifuge db=p_compressed+h+v taxpasta=$run_dir/centrifuge_p_compressed+h+v.tsv krona=$run_dir/centrifuge_p_compressed+h+v.html" \
-    --sample "sample_id=26CE500026-DNA subject_id=26CE500026 type=sample nucleic_acid=DNA column_kraken2=26CE500026-DNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=26CE500026-DNA_p_compressed+h+v.centrifuge" \
-    --sample "sample_id=26CE500026-RNA subject_id=26CE500026 type=sample nucleic_acid=RNA column_kraken2=26CE500026-RNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=26CE500026-RNA_p_compressed+h+v.centrifuge" \
-    --sample "sample_id=NTC260707-DNA type=negative_ctrl nucleic_acid=DNA order_date=$FULLCAMEL_NTC_DATE column_kraken2=NTC260707-DNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=NTC260707-DNA_p_compressed+h+v.centrifuge" \
-    --sample "sample_id=NTC260707-RNA type=negative_ctrl nucleic_acid=RNA order_date=$FULLCAMEL_NTC_DATE column_kraken2=NTC260707-RNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=NTC260707-RNA_p_compressed+h+v.centrifuge" \
+    --sample "sample_id=26CE500026-DNA subject_id=26CE500026 type=sample nucleic_acid=DNA negative_controls=NTC260707-DNA column_kraken2=26CE500026-DNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=26CE500026-DNA_p_compressed+h+v.centrifuge" \
+    --sample "sample_id=26CE500026-RNA subject_id=26CE500026 type=sample nucleic_acid=RNA negative_controls=NTC260707-RNA column_kraken2=26CE500026-RNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=26CE500026-RNA_p_compressed+h+v.centrifuge" \
+    --sample "sample_id=NTC260707-DNA type=negative_ctrl nucleic_acid=DNA column_kraken2=NTC260707-DNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=NTC260707-DNA_p_compressed+h+v.centrifuge" \
+    --sample "sample_id=NTC260707-RNA type=negative_ctrl nucleic_acid=RNA column_kraken2=NTC260707-RNA_k2_pluspf.kraken2.kraken2.report column_centrifuge=NTC260707-RNA_p_compressed+h+v.centrifuge" \
     --yes \
     --url "$URL" \
     "${KC_ARGS[@]}" 2>&1
@@ -473,8 +459,8 @@ if [[ "$TRANA_COUNT" -gt 0 ]]; then
       --pipeline-info     "$TD_TRANA/pipeline_info/software_versions.yml" \
       --analysis-type     "amplicon" \
       --sequencing-platform "nanopore" \
-      --sample "sample_id=1234567890AB subject_id=1234567890AB type=sample nucleic_acid=DNA abundance_path=$TD_TRANA/results/1234567890AB_downsampled.fastq_rel-abundance.tsv krona_path=$TD_TRANA/krona/1234567890AB_krona.html nanoplot_unprocessed_path=$TD_TRANA/nanoplot_unprocessed/1234567890AB_nanoplot_unprocessed_NanoStats.txt nanoplot_processed_path=$TD_TRANA/nanoplot_processed/1234567890AB_nanoplot_processed_NanoStats.txt" \
-      --sample "sample_id=16SNEGABC123 type=negative_ctrl nucleic_acid=DNA order_date=$TRANA_NTC_DATE abundance_path=$TD_TRANA/results/16SNEGABC123_downsampled.fastq_rel-abundance.tsv krona_path=$TD_TRANA/krona/16SNEGABC123_krona.html nanoplot_unprocessed_path=$TD_TRANA/nanoplot_unprocessed/16SNEGABC123_nanoplot_unprocessed_NanoStats.txt nanoplot_processed_path=$TD_TRANA/nanoplot_processed/16SNEGABC123_nanoplot_processed_NanoStats.txt" \
+      --sample "sample_id=1234567890AB subject_id=1234567890AB type=sample nucleic_acid=DNA negative_controls=16SNEGABC123 abundance_path=$TD_TRANA/results/1234567890AB_downsampled.fastq_rel-abundance.tsv krona_path=$TD_TRANA/krona/1234567890AB_krona.html nanoplot_unprocessed_path=$TD_TRANA/nanoplot_unprocessed/1234567890AB_nanoplot_unprocessed_NanoStats.txt nanoplot_processed_path=$TD_TRANA/nanoplot_processed/1234567890AB_nanoplot_processed_NanoStats.txt" \
+      --sample "sample_id=16SNEGABC123 type=negative_ctrl nucleic_acid=DNA abundance_path=$TD_TRANA/results/16SNEGABC123_downsampled.fastq_rel-abundance.tsv krona_path=$TD_TRANA/krona/16SNEGABC123_krona.html nanoplot_unprocessed_path=$TD_TRANA/nanoplot_unprocessed/16SNEGABC123_nanoplot_unprocessed_NanoStats.txt nanoplot_processed_path=$TD_TRANA/nanoplot_processed/16SNEGABC123_nanoplot_processed_NanoStats.txt" \
       --yes \
       --url "$URL" \
       "${KC_ARGS[@]}" 2>&1) && rc=0 || rc=$?

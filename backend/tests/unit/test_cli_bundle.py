@@ -86,6 +86,7 @@ async def test_cli_bundle_round_trips_through_loader(tmp_path, cli):
                 "sample_type": "sample",
                 "nucleic_acid": "DNA",
                 "sample_source": "N/A",
+                "negative_controls": [],
                 "columns": {"kraken2": "S1_kraken2"},
             }
         ],
@@ -133,62 +134,89 @@ class TestDeprecatedMaterialAlias:
         assert exc.value.code == 1
 
 
-class TestControlOrderDate:
-    """A control is prepared once and sequenced alongside every case in its
-    run, so the CLI lets it declare its own order date. The token is validated
-    here rather than server-side: a malformed date should fail before anything
-    is uploaded, and a dropped one would silently reintroduce the case's date."""
+class TestSampleOrderDateRejected:
+    """The order date is when the analysis was ordered, so it belongs to the
+    case. Controls once accepted a date of their own; the token now fails
+    rather than being ignored, so a stale command line is noticed."""
 
-    def test_valid_date_is_normalised(self, cli):
-        parts = {"sample_id": "NTC-260305-DNA", "order_date": "2026-03-05"}
-
-        assert cli._parse_sample_order_date(parts, "NTC-260305-DNA") == "2026-03-05"
-
-    def test_absent_token_is_none(self, cli):
-        assert cli._parse_sample_order_date({}, "NTC-260305-DNA") is None
-
-    def test_malformed_date_exits(self, cli):
-        parts = {"order_date": "05/03/2026"}
-
+    def test_parse_sample_rejects_the_token(self, cli):
         with pytest.raises(SystemExit) as exc:
-            cli._parse_sample_order_date(parts, "NTC-260305-DNA")
+            cli.parse_sample(
+                "sample_id=NTC-260305-DNA type=negative_ctrl nucleic_acid=DNA "
+                "order_date=2026-03-05 column_kraken2=NTC-260305-DNA_k2_pluspf",
+                ["kraken2"],
+            )
 
         assert exc.value.code == 1
 
-    def test_impossible_date_exits(self, cli):
-        parts = {"order_date": "2026-02-30"}
+    def test_parse_trana_sample_rejects_the_token(self, cli, tmp_path):
+        abundance = tmp_path / "abundance.tsv"
+        abundance.write_text("tax_id\tabundance\n")
 
         with pytest.raises(SystemExit) as exc:
-            cli._parse_sample_order_date(parts, "NTC-260305-DNA")
+            cli.parse_trana_sample(
+                "sample_id=16SNEGABC123 type=negative_ctrl nucleic_acid=DNA "
+                f"order_date=2026-03-05 abundance_path={abundance}"
+            )
+
+        assert exc.value.code == 1
+
+
+class TestNegativeControlsToken:
+    """negative_controls= names the controls a sample is compared against.
+    The CLI only parses it; whether it is required and whether the names
+    resolve is the backend's call, since only the manifest sees every sample."""
+
+    def test_comma_separated_names_become_a_list(self, cli):
+        parts = {"negative_controls": "NTC-ELB-DNA,NTC-EXTR-DNA"}
+
+        assert cli._parse_negative_controls(parts, "S1") == [
+            "NTC-ELB-DNA",
+            "NTC-EXTR-DNA",
+        ]
+
+    def test_none_declares_no_control(self, cli):
+        assert cli._parse_negative_controls({"negative_controls": "none"}, "S1") == []
+
+    def test_absent_token_is_none(self, cli):
+        # Left to the backend to reject on a clinical sample; a negative
+        # control must not carry it at all.
+        assert cli._parse_negative_controls({}, "S1") is None
+
+    @pytest.mark.parametrize("raw", ["", "NTC-A,", ",NTC-A", "NTC-A,,NTC-B"])
+    def test_empty_entry_exits(self, cli, raw):
+        with pytest.raises(SystemExit) as exc:
+            cli._parse_negative_controls({"negative_controls": raw}, "S1")
 
         assert exc.value.code == 1
 
     def test_parse_sample_carries_the_token(self, cli):
         parsed = cli.parse_sample(
-            "sample_id=NTC-260305-DNA type=negative_ctrl nucleic_acid=DNA "
-            "order_date=2026-03-05 column_kraken2=NTC-260305-DNA_k2_pluspf",
+            "sample_id=S1 subject_id=SUBJ-1 type=sample nucleic_acid=DNA "
+            "negative_controls=NTC-DNA column_kraken2=S1_k2_pluspf",
             ["kraken2"],
         )
 
-        assert parsed["order_date"] == "2026-03-05"
+        assert parsed["negative_controls"] == ["NTC-DNA"]
 
-    def test_parse_trana_sample_carries_the_token(self, cli, tmp_path):
+    def test_trana_manifest_entry_carries_the_token(self, cli, tmp_path):
+        # The trana builder rebuilds each manifest entry field by field, so a
+        # key it does not list is silently dropped from the bundle.
         abundance = tmp_path / "abundance.tsv"
         abundance.write_text("tax_id\tabundance\n")
-
         parsed = cli.parse_trana_sample(
-            "sample_id=16SNEGABC123 type=negative_ctrl nucleic_acid=DNA "
-            f"order_date=2026-03-05 abundance_path={abundance}"
+            "sample_id=S1 subject_id=SUBJ-1 type=sample nucleic_acid=DNA "
+            f"negative_controls=16SNEG abundance_path={abundance}"
         )
 
-        assert parsed["order_date"] == "2026-03-05"
+        resolved = cli._resolve_trana_sample(parsed)
+
+        assert resolved["meta"]["negative_controls"] == ["16SNEG"]
 
 
-async def test_control_order_date_survives_the_bundle(tmp_path, cli):
-    """The control's date must reach the manifest the backend validates. The
-    taxprofiler builder passes samples through verbatim, but the trana builder
-    rebuilds each manifest entry field by field — where a new key is dropped
-    unless it is listed."""
+async def test_negative_controls_survive_the_bundle(tmp_path, cli):
+    """The declared link must reach the manifest the backend validates, and a
+    manifest the CLI builds must pass the backend's unknown-key check."""
     src = _write_minimal_inputs(tmp_path)
     bundle = tmp_path / "bundle.tar.gz"
     extracted = tmp_path / "extracted"
@@ -196,7 +224,7 @@ async def test_control_order_date_survives_the_bundle(tmp_path, cli):
 
     cli.build_taxprofiler_bundle(
         bundle,
-        case_id="control-own-date",
+        case_id="control-link",
         ticket_id=None,
         order_date="2026-09-03",
         multiqc_path=src["multiqc"],
@@ -219,7 +247,7 @@ async def test_control_order_date_survives_the_bundle(tmp_path, cli):
                 "sample_type": "sample",
                 "nucleic_acid": "DNA",
                 "sample_source": "N/A",
-                "order_date": None,
+                "negative_controls": ["NTC-260305-DNA"],
                 "columns": {"kraken2": "S1_kraken2"},
             },
             {
@@ -229,7 +257,6 @@ async def test_control_order_date_survives_the_bundle(tmp_path, cli):
                 "sample_type": "negative_ctrl",
                 "nucleic_acid": "DNA",
                 "sample_source": "N/A",
-                "order_date": "2026-03-05",
                 "columns": {"kraken2": "S1_kraken2"},
             },
         ],
@@ -240,7 +267,6 @@ async def test_control_order_date_survives_the_bundle(tmp_path, cli):
     meta, _ = await load_taxprofiler_bundle(bundle, extracted)
 
     by_id = {s.sample_id: s for s in meta.samples}
-    assert by_id["NTC-260305-DNA"].order_date == date(2026, 3, 5)
-    # The clinical sample keeps inheriting the case's date.
-    assert by_id["S1"].order_date is None
+    assert by_id["S1"].negative_controls == ["NTC-260305-DNA"]
+    assert by_id["NTC-260305-DNA"].negative_controls is None
     assert meta.order_date == date(2026, 9, 3)

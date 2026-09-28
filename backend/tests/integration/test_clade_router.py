@@ -58,9 +58,15 @@ async def insert_sample(
     *,
     sample_type="sample",
     nucleic_acid="DNA",
+    negative_controls=(),
     kraken2=None,
     extra=None,
 ):
+    """Insert a sample doc as ingest writes it.
+
+    *negative_controls* defaults to none declared; a negative control never
+    carries the field's value, matching what ingest stores.
+    """
     profiles = (
         [{"classifier": "kraken2", "classifier_db": "db", "profile": kraken2}]
         if kraken2 is not None
@@ -74,6 +80,9 @@ async def insert_sample(
             "sample_id": sample_id,
             "sample_type": sample_type,
             "nucleic_acid": nucleic_acid,
+            "negative_control_sample_ids": (
+                None if sample_type == "negative_ctrl" else list(negative_controls)
+            ),
             "profiles": profiles,
             "ingested_at": datetime.now(timezone.utc),
             **(extra or {}),
@@ -132,7 +141,11 @@ class TestGetClade:
         await seed_taxa(fake_db)
         analysis_id = await seed_case(fake_db, "testcase")
         oid = await insert_sample(
-            fake_db, analysis_id, "S1", kraken2=[entry(83334, 100)]
+            fake_db,
+            analysis_id,
+            "S1",
+            negative_controls=["NTC1"],
+            kraken2=[entry(83334, 100)],
         )
         await insert_sample(
             fake_db,
@@ -161,26 +174,34 @@ class TestGetClade:
         assert find(body["root"], 620) is None
         assert body["unplaced"] == []
 
-    async def test_compares_only_matching_negative_controls(self, client, fake_db):
+    async def test_compares_only_declared_negative_controls(self, client, fake_db):
+        # Two preps of one nucleic acid in one run, each with its own control:
+        # the other prep's control matches on analysis and nucleic acid but was
+        # not declared, so it must not appear.
         await seed_taxa(fake_db)
         analysis_id = await seed_case(fake_db, "testcase")
-        other_analysis = await seed_case(fake_db, "othercase")
-        oid = await insert_sample(fake_db, analysis_id, "S1", kraken2=[entry(562, 1)])
-        await insert_sample(
+        oid = await insert_sample(
             fake_db,
             analysis_id,
-            "NTC_DNA",
-            sample_type="negative_ctrl",
+            "S1-ELB-DNA",
+            negative_controls=["NTC-ELB-DNA"],
             kraken2=[entry(562, 1)],
         )
         await insert_sample(
             fake_db,
             analysis_id,
-            "NTC_RNA",
-            sample_type="negative_ctrl",
-            nucleic_acid="RNA",
+            "S1-HLSAN-DNA",
+            negative_controls=["NTC-HLSAN-DNA"],
             kraken2=[entry(562, 1)],
         )
+        for ntc in ("NTC-ELB-DNA", "NTC-HLSAN-DNA"):
+            await insert_sample(
+                fake_db,
+                analysis_id,
+                ntc,
+                sample_type="negative_ctrl",
+                kraken2=[entry(562, 1)],
+            )
         await insert_sample(
             fake_db,
             analysis_id,
@@ -188,17 +209,49 @@ class TestGetClade:
             sample_type="positive_ctrl",
             kraken2=[entry(562, 1)],
         )
-        await insert_sample(
-            fake_db,
-            other_analysis,
-            "NTC_OTHER_RUN",
-            sample_type="negative_ctrl",
-            kraken2=[entry(562, 1)],
-        )
 
         body = get_clade(client, oid, 562).json()
 
-        assert [c["sample_id"] for c in body["columns"]] == ["S1", "NTC_DNA"]
+        assert [c["sample_id"] for c in body["columns"]] == [
+            "S1-ELB-DNA",
+            "NTC-ELB-DNA",
+        ]
+
+    async def test_negative_control_is_compared_with_other_run_controls(
+        self, client, fake_db
+    ):
+        # A control has no declared controls; it sees the other negative
+        # controls of its analysis and nucleic acid, whatever their prep.
+        await seed_taxa(fake_db)
+        analysis_id = await seed_case(fake_db, "testcase")
+        other_analysis = await seed_case(fake_db, "othercase")
+        ntc = await insert_sample(
+            fake_db,
+            analysis_id,
+            "NTC-ELB-DNA",
+            sample_type="negative_ctrl",
+            kraken2=[entry(562, 1)],
+        )
+        for sample_id, analysis, nucleic_acid in (
+            ("NTC-HLSAN-DNA", analysis_id, "DNA"),
+            ("NTC-ELB-RNA", analysis_id, "RNA"),
+            ("NTC-OTHER-RUN", other_analysis, "DNA"),
+        ):
+            await insert_sample(
+                fake_db,
+                analysis,
+                sample_id,
+                sample_type="negative_ctrl",
+                nucleic_acid=nucleic_acid,
+                kraken2=[entry(562, 1)],
+            )
+
+        body = get_clade(client, ntc, 562).json()
+
+        assert [c["sample_id"] for c in body["columns"]] == [
+            "NTC-ELB-DNA",
+            "NTC-HLSAN-DNA",
+        ]
 
     async def test_negative_control_is_not_compared_with_itself(self, client, fake_db):
         await seed_taxa(fake_db)
@@ -220,7 +273,13 @@ class TestGetClade:
     ):
         await seed_taxa(fake_db)
         analysis_id = await seed_case(fake_db, "testcase")
-        oid = await insert_sample(fake_db, analysis_id, "S1", kraken2=[entry(562, 1)])
+        oid = await insert_sample(
+            fake_db,
+            analysis_id,
+            "S1",
+            negative_controls=["NTC1"],
+            kraken2=[entry(562, 1)],
+        )
         await insert_sample(fake_db, analysis_id, "NTC1", sample_type="negative_ctrl")
 
         body = get_clade(client, oid, 562).json()

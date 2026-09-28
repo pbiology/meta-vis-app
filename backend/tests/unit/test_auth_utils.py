@@ -47,8 +47,11 @@ def _make_token(
     aud: str | None = None,
     iss: str | None = None,
     expires_in: int = 300,
+    issued_in: int = 0,
 ) -> str:
-    now = int(time.time())
+    # issued_in shifts iat, simulating a Keycloak clock ahead of (or behind)
+    # ours; exp stays relative to iat, as Keycloak issues it.
+    now = int(time.time()) + issued_in
     payload = {
         "sub": sub,
         "preferred_username": preferred_username,
@@ -81,10 +84,36 @@ def test_valid_token_returns_claims(rsa_keypair, patched_jwks):
 
 
 def test_expired_token_rejected(rsa_keypair, patched_jwks):
-    token = _make_token(rsa_keypair, expires_in=-10)
+    token = _make_token(
+        rsa_keypair, expires_in=-(auth_utils.CLOCK_SKEW_LEEWAY_SECONDS + 10)
+    )
     with pytest.raises(HTTPException) as exc:
         auth_utils.verify_access_token(token)
     assert exc.value.status_code == 401
+
+
+def test_token_expired_within_leeway_accepted(rsa_keypair, patched_jwks):
+    # The accepted cost of the clock-skew leeway: a token stays usable this
+    # briefly past exp. Pinned so the window cannot grow unnoticed.
+    token = _make_token(rsa_keypair, expires_in=-10)
+    assert auth_utils.verify_access_token(token)["sub"] == "user-uuid"
+
+
+def test_token_issued_slightly_in_the_future_accepted(rsa_keypair, patched_jwks):
+    # Keycloak's clock running a few seconds ahead of ours must not reject a
+    # token used right after it was issued.
+    token = _make_token(rsa_keypair, issued_in=5)
+    assert auth_utils.verify_access_token(token)["sub"] == "user-uuid"
+
+
+def test_token_issued_beyond_leeway_rejected(rsa_keypair, patched_jwks):
+    token = _make_token(
+        rsa_keypair, issued_in=auth_utils.CLOCK_SKEW_LEEWAY_SECONDS + 90
+    )
+    with pytest.raises(HTTPException) as exc:
+        auth_utils.verify_access_token(token)
+    assert exc.value.status_code == 401
+    assert "not yet valid" in exc.value.detail
 
 
 def test_wrong_azp_rejected(rsa_keypair, patched_jwks):
