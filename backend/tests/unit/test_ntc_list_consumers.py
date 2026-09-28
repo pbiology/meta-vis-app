@@ -1,7 +1,8 @@
-# tests/unit/test_ntc_lists_router.py
+# tests/unit/test_ntc_list_consumers.py
 #
-# Tests for the NTC ignorelist and known contaminants CRUD endpoints,
-# plus the contaminant-alerts endpoint.
+# How the NTC ignorelist and known-contaminants lists drive the NTC
+# analytics: contaminant alerts and trend exclusion. CRUD on the lists
+# themselves is covered in tests/integration/test_taxon_lists_router.py.
 
 from datetime import date, timedelta
 
@@ -17,6 +18,8 @@ from app.routers.ntc import (
 )
 from app.database import get_db
 from app.auth.utils import get_current_user, require_role
+from app.taxon_lists.kinds import NTC_IGNORELIST, NTC_KNOWN_CONTAMINANTS
+from tests.helpers import seed_list_entries
 
 
 # ---------------------------------------------------------------------------
@@ -111,411 +114,6 @@ def make_taxon(
 
 
 # ---------------------------------------------------------------------------
-# NTC ignorelist — GET
-# ---------------------------------------------------------------------------
-
-
-class TestNtcIgnorelistGet:
-    async def test_returns_empty_list_when_no_entries(self, fake_db):
-        app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/ignorelist")
-        assert resp.status_code == 200
-        assert resp.json() == []
-
-    async def test_returns_existing_entries(self, fake_db):
-        await fake_db["ntc_ignorelist"].insert_one(
-            {
-                "taxon_id": 1743,
-                "taxon_name": "Cutibacterium acnes",
-                "superkingdom": "Bacteria",
-                "reason": None,
-                "added_by": "alice",
-                "added_at": "2026-01-01T00:00:00",
-            }
-        )
-        app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/ignorelist")
-        data = resp.json()
-        assert len(data) == 1
-        assert data[0]["taxon_id"] == 1743
-        assert "_id" in data[0]
-
-
-# ---------------------------------------------------------------------------
-# NTC ignorelist — POST
-# ---------------------------------------------------------------------------
-
-
-class TestNtcIgnorelistPost:
-    async def test_add_new_taxon_succeeds(self, fake_db):
-        app = make_app(fake_db)
-        resp = TestClient(app).post(
-            "/api/v1/ntc/ignorelist",
-            json={
-                "taxon_id": 1743,
-                "taxon_name": "Cutibacterium acnes",
-                "superkingdom": "Bacteria",
-            },
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["taxon_id"] == 1743
-        assert data["added_by"] == "testuser"
-
-    async def test_duplicate_taxon_returns_409(self, fake_db):
-        await fake_db["ntc_ignorelist"].insert_one(
-            {"taxon_id": 1743, "taxon_name": "x"}
-        )
-        app = make_app(fake_db)
-        resp = TestClient(app).post(
-            "/api/v1/ntc/ignorelist",
-            json={
-                "taxon_id": 1743,
-                "taxon_name": "Cutibacterium acnes",
-            },
-        )
-        assert resp.status_code == 409
-
-    async def test_reader_cannot_add(self, fake_db):
-        app = make_app(fake_db, role="reader")
-        # Remove the writer/admin override to test real role enforcement
-        from app.auth.utils import require_role as rr
-
-        app.dependency_overrides.pop(rr("writer", "admin"), None)
-        resp = TestClient(app).post(
-            "/api/v1/ntc/ignorelist",
-            json={
-                "taxon_id": 9999,
-                "taxon_name": "Test taxon",
-            },
-        )
-        assert resp.status_code in (401, 403)
-
-    async def test_add_invalidates_contaminant_cache(self, fake_db):
-        import app.routers.ntc as ntc_module
-
-        ntc_module._contaminant_alert_cache = {
-            90: {"alerts": [], "contaminant_case_ids": []}
-        }
-        app_ = make_app(fake_db)
-        TestClient(app_).post(
-            "/api/v1/ntc/ignorelist",
-            json={
-                "taxon_id": 1743,
-                "taxon_name": "Cutibacterium acnes",
-            },
-        )
-        assert ntc_module._contaminant_alert_cache == {}
-
-    async def test_cannot_add_to_ignorelist_if_on_contaminants(self, fake_db):
-        await fake_db["ntc_known_contaminants"].insert_one(
-            {
-                "taxon_id": 1743,
-                "taxon_name": "Cutibacterium acnes",
-                "min_reads": 3,
-            }
-        )
-        app = make_app(fake_db)
-        resp = TestClient(app).post(
-            "/api/v1/ntc/ignorelist",
-            json={
-                "taxon_id": 1743,
-                "taxon_name": "Cutibacterium acnes",
-            },
-        )
-        assert resp.status_code == 409
-        assert "known contaminants" in resp.json()["detail"]
-
-
-# ---------------------------------------------------------------------------
-# NTC ignorelist — PATCH
-# ---------------------------------------------------------------------------
-
-
-class TestNtcIgnorelistPatch:
-    async def test_update_reason_succeeds(self, fake_db):
-        await fake_db["ntc_ignorelist"].insert_one(
-            {"taxon_id": 1743, "taxon_name": "x", "reason": None}
-        )
-        app = make_app(fake_db)
-        resp = TestClient(app).patch(
-            "/api/v1/ntc/ignorelist/1743", json={"reason": "Skin flora"}
-        )
-        assert resp.status_code == 200
-        assert resp.json()["updated"] is True
-
-    async def test_update_nonexistent_taxon_returns_404(self, fake_db):
-        app = make_app(fake_db)
-        resp = TestClient(app).patch(
-            "/api/v1/ntc/ignorelist/99999", json={"reason": "x"}
-        )
-        assert resp.status_code == 404
-
-
-# ---------------------------------------------------------------------------
-# NTC ignorelist — DELETE
-# ---------------------------------------------------------------------------
-
-
-class TestNtcIgnorelistDelete:
-    async def test_delete_existing_taxon_succeeds(self, fake_db):
-        await fake_db["ntc_ignorelist"].insert_one(
-            {"taxon_id": 1743, "taxon_name": "x"}
-        )
-        app = make_app(fake_db)
-        resp = TestClient(app).delete("/api/v1/ntc/ignorelist/1743")
-        assert resp.status_code == 200
-        assert resp.json()["deleted"] is True
-
-    async def test_delete_nonexistent_taxon_returns_404(self, fake_db):
-        app = make_app(fake_db)
-        resp = TestClient(app).delete("/api/v1/ntc/ignorelist/99999")
-        assert resp.status_code == 404
-
-    async def test_delete_invalidates_contaminant_cache(self, fake_db):
-        import app.routers.ntc as ntc_module
-
-        await fake_db["ntc_ignorelist"].insert_one(
-            {"taxon_id": 1743, "taxon_name": "x"}
-        )
-        ntc_module._contaminant_alert_cache = {
-            90: {"alerts": [], "contaminant_case_ids": []}
-        }
-        app_ = make_app(fake_db)
-        TestClient(app_).delete("/api/v1/ntc/ignorelist/1743")
-        assert ntc_module._contaminant_alert_cache == {}
-
-
-# ---------------------------------------------------------------------------
-# NTC known contaminants — GET
-# ---------------------------------------------------------------------------
-
-
-class TestNtcContaminantsGet:
-    async def test_returns_empty_list_when_no_entries(self, fake_db):
-        app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/contaminants")
-        assert resp.status_code == 200
-        assert resp.json() == []
-
-    async def test_returns_existing_entries(self, fake_db):
-        await fake_db["ntc_known_contaminants"].insert_one(
-            {
-                "taxon_id": 329,
-                "taxon_name": "Ralstonia pickettii",
-                "superkingdom": "Bacteria",
-                "min_reads": 5,
-                "notes": None,
-                "added_by": "alice",
-                "added_at": "2026-01-01T00:00:00",
-            }
-        )
-        app = make_app(fake_db)
-        resp = TestClient(app).get("/api/v1/ntc/contaminants")
-        data = resp.json()
-        assert len(data) == 1
-        assert data[0]["taxon_id"] == 329
-        assert data[0]["min_reads"] == 5
-
-
-# ---------------------------------------------------------------------------
-# NTC known contaminants — POST
-# ---------------------------------------------------------------------------
-
-
-class TestNtcContaminantsPost:
-    async def test_add_new_contaminant_succeeds(self, fake_db):
-        app = make_app(fake_db)
-        resp = TestClient(app).post(
-            "/api/v1/ntc/contaminants",
-            json={
-                "taxon_id": 329,
-                "taxon_name": "Ralstonia pickettii",
-                "superkingdom": "Bacteria",
-                "min_reads": 5,
-            },
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["taxon_id"] == 329
-        assert data["min_reads"] == 5
-        assert data["added_by"] == "testuser"
-
-    async def test_default_min_reads_is_3(self, fake_db):
-        app = make_app(fake_db)
-        resp = TestClient(app).post(
-            "/api/v1/ntc/contaminants",
-            json={
-                "taxon_id": 329,
-                "taxon_name": "Ralstonia pickettii",
-            },
-        )
-        assert resp.json()["min_reads"] == 3
-
-    async def test_duplicate_taxon_returns_409(self, fake_db):
-        await fake_db["ntc_known_contaminants"].insert_one(
-            {
-                "taxon_id": 329,
-                "taxon_name": "x",
-                "min_reads": 3,
-            }
-        )
-        app = make_app(fake_db)
-        resp = TestClient(app).post(
-            "/api/v1/ntc/contaminants",
-            json={
-                "taxon_id": 329,
-                "taxon_name": "Ralstonia pickettii",
-            },
-        )
-        assert resp.status_code == 409
-
-    async def test_add_invalidates_contaminant_cache(self, fake_db):
-        import app.routers.ntc as ntc_module
-
-        ntc_module._contaminant_alert_cache = {
-            90: {"alerts": [], "contaminant_case_ids": []}
-        }
-        app_ = make_app(fake_db)
-        TestClient(app_).post(
-            "/api/v1/ntc/contaminants",
-            json={
-                "taxon_id": 329,
-                "taxon_name": "Ralstonia pickettii",
-            },
-        )
-        assert ntc_module._contaminant_alert_cache == {}
-
-    async def test_cannot_add_to_contaminants_if_on_ignorelist(self, fake_db):
-        await fake_db["ntc_ignorelist"].insert_one(
-            {
-                "taxon_id": 1743,
-                "taxon_name": "Cutibacterium acnes",
-            }
-        )
-        app = make_app(fake_db)
-        resp = TestClient(app).post(
-            "/api/v1/ntc/contaminants",
-            json={
-                "taxon_id": 1743,
-                "taxon_name": "Cutibacterium acnes",
-            },
-        )
-        assert resp.status_code == 409
-        assert "ignorelist" in resp.json()["detail"]
-
-
-# ---------------------------------------------------------------------------
-# NTC known contaminants — PATCH
-# ---------------------------------------------------------------------------
-
-
-class TestNtcContaminantsPatch:
-    async def test_update_min_reads_succeeds(self, fake_db):
-        await fake_db["ntc_known_contaminants"].insert_one(
-            {
-                "taxon_id": 329,
-                "taxon_name": "x",
-                "min_reads": 3,
-                "notes": None,
-            }
-        )
-        app = make_app(fake_db)
-        resp = TestClient(app).patch(
-            "/api/v1/ntc/contaminants/329", json={"min_reads": 10}
-        )
-        assert resp.status_code == 200
-        assert resp.json()["updated"] is True
-
-    async def test_update_notes_succeeds(self, fake_db):
-        await fake_db["ntc_known_contaminants"].insert_one(
-            {
-                "taxon_id": 329,
-                "taxon_name": "x",
-                "min_reads": 3,
-                "notes": None,
-            }
-        )
-        app = make_app(fake_db)
-        resp = TestClient(app).patch(
-            "/api/v1/ntc/contaminants/329", json={"notes": "Water contaminant"}
-        )
-        assert resp.status_code == 200
-
-    async def test_empty_patch_body_returns_422(self, fake_db):
-        app = make_app(fake_db)
-        resp = TestClient(app).patch("/api/v1/ntc/contaminants/329", json={})
-        assert resp.status_code == 422
-
-    async def test_update_nonexistent_taxon_returns_404(self, fake_db):
-        app = make_app(fake_db)
-        resp = TestClient(app).patch(
-            "/api/v1/ntc/contaminants/99999", json={"min_reads": 5}
-        )
-        assert resp.status_code == 404
-
-    async def test_patch_invalidates_contaminant_cache(self, fake_db):
-        import app.routers.ntc as ntc_module
-
-        await fake_db["ntc_known_contaminants"].insert_one(
-            {
-                "taxon_id": 329,
-                "taxon_name": "x",
-                "min_reads": 3,
-                "notes": None,
-            }
-        )
-        ntc_module._contaminant_alert_cache = {
-            90: {"alerts": [], "contaminant_case_ids": []}
-        }
-        app_ = make_app(fake_db)
-        TestClient(app_).patch("/api/v1/ntc/contaminants/329", json={"min_reads": 10})
-        assert ntc_module._contaminant_alert_cache == {}
-
-
-# ---------------------------------------------------------------------------
-# NTC known contaminants — DELETE
-# ---------------------------------------------------------------------------
-
-
-class TestNtcContaminantsDelete:
-    async def test_delete_existing_contaminant_succeeds(self, fake_db):
-        await fake_db["ntc_known_contaminants"].insert_one(
-            {
-                "taxon_id": 329,
-                "taxon_name": "x",
-                "min_reads": 3,
-            }
-        )
-        app = make_app(fake_db)
-        resp = TestClient(app).delete("/api/v1/ntc/contaminants/329")
-        assert resp.status_code == 200
-        assert resp.json()["deleted"] is True
-
-    async def test_delete_nonexistent_contaminant_returns_404(self, fake_db):
-        app = make_app(fake_db)
-        resp = TestClient(app).delete("/api/v1/ntc/contaminants/99999")
-        assert resp.status_code == 404
-
-    async def test_delete_invalidates_contaminant_cache(self, fake_db):
-        import app.routers.ntc as ntc_module
-
-        await fake_db["ntc_known_contaminants"].insert_one(
-            {
-                "taxon_id": 329,
-                "taxon_name": "x",
-                "min_reads": 3,
-            }
-        )
-        ntc_module._contaminant_alert_cache = {
-            90: {"alerts": [], "contaminant_case_ids": []}
-        }
-        app_ = make_app(fake_db)
-        TestClient(app_).delete("/api/v1/ntc/contaminants/329")
-        assert ntc_module._contaminant_alert_cache == {}
-
-
-# ---------------------------------------------------------------------------
 # Contaminant alerts endpoint
 # ---------------------------------------------------------------------------
 
@@ -530,13 +128,15 @@ class TestContaminantAlerts:
         assert data["contaminant_case_ids"] == []
 
     async def test_detects_contaminant_above_min_reads(self, fake_db):
-        await fake_db["ntc_known_contaminants"].insert_one(
+        await seed_list_entries(
+            fake_db,
+            NTC_KNOWN_CONTAMINANTS,
             {
                 "taxon_id": 329,
                 "taxon_name": "Ralstonia pickettii",
                 "superkingdom": "Bacteria",
                 "min_reads": 5,
-            }
+            },
         )
         result = await fake_db["samples"].insert_one(
             make_ntc_doc(
@@ -558,13 +158,15 @@ class TestContaminantAlerts:
         assert expected_case_id in data["contaminant_case_ids"]
 
     async def test_contaminant_at_or_below_min_reads_not_detected(self, fake_db):
-        await fake_db["ntc_known_contaminants"].insert_one(
+        await seed_list_entries(
+            fake_db,
+            NTC_KNOWN_CONTAMINANTS,
             {
                 "taxon_id": 329,
                 "taxon_name": "Ralstonia pickettii",
                 "superkingdom": "Bacteria",
                 "min_reads": 5,
-            }
+            },
         )
         # abundance=5, min_reads=5 — must be strictly greater than
         await fake_db["samples"].insert_one(
@@ -581,8 +183,10 @@ class TestContaminantAlerts:
 
     async def test_per_contaminant_min_reads_threshold_respected(self, fake_db):
         # Two contaminants with different thresholds
-        await fake_db["ntc_known_contaminants"].insert_many(
-            [
+        await seed_list_entries(
+            fake_db,
+            NTC_KNOWN_CONTAMINANTS,
+            *[
                 {
                     "taxon_id": 329,
                     "taxon_name": "Taxon-A",
@@ -595,7 +199,7 @@ class TestContaminantAlerts:
                     "superkingdom": "Bacteria",
                     "min_reads": 20,
                 },
-            ]
+            ],
         )
         # Both present, but only Taxon-A is above its threshold
         await fake_db["samples"].insert_one(
@@ -616,13 +220,15 @@ class TestContaminantAlerts:
         assert 1743 not in alert_ids
 
     async def test_multiple_cases_counted_correctly(self, fake_db):
-        await fake_db["ntc_known_contaminants"].insert_one(
+        await seed_list_entries(
+            fake_db,
+            NTC_KNOWN_CONTAMINANTS,
             {
                 "taxon_id": 329,
                 "taxon_name": "Ralstonia pickettii",
                 "superkingdom": "Bacteria",
                 "min_reads": 3,
-            }
+            },
         )
         await fake_db["samples"].insert_many(
             [
@@ -653,13 +259,15 @@ class TestContaminantAlerts:
         assert len(resp.json()["contaminant_case_ids"]) == 2
 
     async def test_only_kraken2_profiles_checked(self, fake_db):
-        await fake_db["ntc_known_contaminants"].insert_one(
+        await seed_list_entries(
+            fake_db,
+            NTC_KNOWN_CONTAMINANTS,
             {
                 "taxon_id": 329,
                 "taxon_name": "Ralstonia pickettii",
                 "superkingdom": "Bacteria",
                 "min_reads": 3,
-            }
+            },
         )
         # Contaminant only in centrifuge profile — must not trigger
         doc = {
@@ -683,8 +291,10 @@ class TestContaminantAlerts:
         assert resp.json()["alerts"] == []
 
     async def test_alerts_sorted_by_case_count_descending(self, fake_db):
-        await fake_db["ntc_known_contaminants"].insert_many(
-            [
+        await seed_list_entries(
+            fake_db,
+            NTC_KNOWN_CONTAMINANTS,
+            *[
                 {
                     "taxon_id": 329,
                     "taxon_name": "Taxon-A",
@@ -697,7 +307,7 @@ class TestContaminantAlerts:
                     "superkingdom": "Bacteria",
                     "min_reads": 3,
                 },
-            ]
+            ],
         )
         # Taxon-B in 3 cases, Taxon-A in 1
         await fake_db["samples"].insert_many(
@@ -760,11 +370,13 @@ class TestContaminantAlerts:
 
 class TestIgnorelistExclusionInTrends:
     async def test_ignored_taxon_excluded_from_recurring_taxa(self, fake_db):
-        await fake_db["ntc_ignorelist"].insert_one(
+        await seed_list_entries(
+            fake_db,
+            NTC_IGNORELIST,
             {
                 "taxon_id": 1743,
                 "taxon_name": "Cutibacterium acnes",
-            }
+            },
         )
         taxon = {
             "taxon_id": 1743,
@@ -787,11 +399,13 @@ class TestIgnorelistExclusionInTrends:
         assert 1743 not in taxon_ids
 
     async def test_ignored_taxon_excluded_from_kingdom_breakdown(self, fake_db):
-        await fake_db["ntc_ignorelist"].insert_one(
+        await seed_list_entries(
+            fake_db,
+            NTC_IGNORELIST,
             {
                 "taxon_id": 1743,
                 "taxon_name": "Cutibacterium acnes",
-            }
+            },
         )
         profile = [
             {
@@ -819,11 +433,13 @@ class TestIgnorelistExclusionInTrends:
         assert entry["Bacteria"] == 10
 
     async def test_non_ignored_taxon_still_appears(self, fake_db):
-        await fake_db["ntc_ignorelist"].insert_one(
+        await seed_list_entries(
+            fake_db,
+            NTC_IGNORELIST,
             {
                 "taxon_id": 1743,
                 "taxon_name": "Cutibacterium acnes",
-            }
+            },
         )
         other = {
             "taxon_id": 329,
@@ -878,13 +494,15 @@ class TestIgnorelistExclusionInTrends:
 
 class TestSharedControlAlerts:
     async def _contaminant(self, fake_db, taxon_id: int = 329, min_reads: int = 3):
-        await fake_db["ntc_known_contaminants"].insert_one(
+        await seed_list_entries(
+            fake_db,
+            NTC_KNOWN_CONTAMINANTS,
             {
                 "taxon_id": taxon_id,
                 "taxon_name": "Ralstonia pickettii",
                 "superkingdom": "Bacteria",
                 "min_reads": min_reads,
-            }
+            },
         )
 
     async def _shared_control(self, fake_db, cases=("case-1", "case-2", "case-3")):
@@ -972,8 +590,10 @@ class TestSharedControlAlerts:
         # Taxon-A: two distinct controls, two cases. Taxon-B: one control
         # spread over five cases. Sorting on cases alone put B first and made a
         # single bad run look like the wider problem.
-        await fake_db["ntc_known_contaminants"].insert_many(
-            [
+        await seed_list_entries(
+            fake_db,
+            NTC_KNOWN_CONTAMINANTS,
+            *[
                 {
                     "taxon_id": 329,
                     "taxon_name": "Taxon-A",
@@ -986,7 +606,7 @@ class TestSharedControlAlerts:
                     "superkingdom": "Bacteria",
                     "min_reads": 3,
                 },
-            ]
+            ],
         )
         await fake_db["samples"].insert_many(
             [

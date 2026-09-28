@@ -23,10 +23,8 @@ _REPORTED_COLLECTIONS = (
     "users",
     "metaval_results",
     "taxa",
-    "known_pathogens",
-    "outbreak_ignorelist",
-    "ntc_ignorelist",
-    "ntc_known_contaminants",
+    "taxon_lists",
+    "taxon_list_entries",
 )
 
 

@@ -26,6 +26,8 @@ from app.config import settings
 from app.database import get_client, get_db, maybe_transaction
 from app.auth.utils import get_current_user, require_role
 from app.models.case import CaseDetail, CaseListItem
+from app.taxon_lists import store as taxon_lists
+from app.taxon_lists.kinds import KNOWN_PATHOGENS
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 
@@ -85,8 +87,7 @@ async def pathogen_cases(
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
 ):
-    pathogen_docs = await db["known_pathogens"].find({}, {"taxon_id": 1}).to_list(None)
-    pathogen_ids = [d["taxon_id"] for d in pathogen_docs]
+    pathogen_ids = list(await taxon_lists.taxon_ids(db, KNOWN_PATHOGENS))
     if not pathogen_ids:
         return {"case_ids": []}
 
