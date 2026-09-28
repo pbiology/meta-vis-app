@@ -1227,6 +1227,54 @@ def _fail(message: str) -> NoReturn:
     sys.exit(1)
 
 
+def _describe_request_error(
+    exc: requests.exceptions.RequestException, host: str
+) -> tuple[str, str]:
+    """What went wrong, and where to look: ``(summary, hint)``; hint may be empty."""
+    # SSLError, ProxyError and ConnectTimeout all subclass ConnectionError,
+    # so the specific cases must be matched first.
+    if isinstance(exc, requests.exceptions.SSLError):
+        return (
+            f"TLS/certificate error talking to {host}",
+            "Check the URL, or whether a proxy intercepts HTTPS.",
+        )
+    if isinstance(exc, requests.exceptions.ProxyError):
+        return (
+            f"proxy refused the connection to {host}",
+            "Check the HTTPS_PROXY / NO_PROXY environment variables.",
+        )
+    if isinstance(exc, requests.exceptions.ConnectionError):
+        if _connection_was_established(exc):
+            # The host was reachable — a network/VPN hint would send the
+            # reader the wrong way.
+            return (
+                f"connection to {host} broke during the request",
+                _broken_connection_hint(_root_cause(exc)),
+            )
+        return (
+            f"cannot reach {host}",
+            "Check network, VPN and firewall access to the host. Compute nodes "
+            "often have no outbound access — try from a login node.",
+        )
+    if isinstance(exc, requests.exceptions.ReadTimeout):
+        return (
+            f"{host} accepted the connection but did not respond in time",
+            "The server may be overloaded or unhealthy.",
+        )
+    return f"request to {host} failed", ""
+
+
+def _broken_connection_hint(root: BaseException) -> str:
+    if isinstance(root, TimeoutError):
+        cause = "The server stopped reading the request and the send timed out."
+    else:
+        cause = "The server closed the connection."
+    return (
+        f"{cause} It may be overloaded, restarting or out of disk; "
+        "check the backend logs."
+    )
+
+
 def _exit_on_request_error(exc: requests.exceptions.RequestException) -> NoReturn:
     """Print a short diagnosis of a request that got no response, then exit.
 
@@ -1238,42 +1286,7 @@ def _exit_on_request_error(exc: requests.exceptions.RequestException) -> NoRetur
     method = (request.method if request is not None else None) or "request"
     url = (request.url if request is not None else None) or "<unknown URL>"
     host = urlsplit(url).hostname or url
-
-    # SSLError, ProxyError and ConnectTimeout all subclass ConnectionError,
-    # so the specific cases must be matched first.
-    if isinstance(exc, requests.exceptions.SSLError):
-        summary = f"TLS/certificate error talking to {host}"
-        hint = "Check the URL, or whether a proxy intercepts HTTPS."
-    elif isinstance(exc, requests.exceptions.ProxyError):
-        summary = f"proxy refused the connection to {host}"
-        hint = "Check the HTTPS_PROXY / NO_PROXY environment variables."
-    elif isinstance(
-        exc, requests.exceptions.ConnectionError
-    ) and _connection_was_established(exc):
-        # The host was reachable — a network/VPN hint would send the reader
-        # the wrong way.
-        summary = f"connection to {host} broke during the request"
-        stalled = (
-            "The server stopped reading the request and the send timed out. "
-            if isinstance(_root_cause(exc), TimeoutError)
-            else "The server closed the connection. "
-        )
-        hint = (
-            stalled + "It may be overloaded, restarting or out of disk; "
-            "check the backend logs."
-        )
-    elif isinstance(exc, requests.exceptions.ConnectionError):
-        summary = f"cannot reach {host}"
-        hint = (
-            "Check network, VPN and firewall access to the host. Compute nodes "
-            "often have no outbound access — try from a login node."
-        )
-    elif isinstance(exc, requests.exceptions.ReadTimeout):
-        summary = f"{host} accepted the connection but did not respond in time"
-        hint = "The server may be overloaded or unhealthy."
-    else:
-        summary = f"request to {host} failed"
-        hint = ""
+    summary, hint = _describe_request_error(exc, host)
 
     print(f"Error: {summary} ({method} {url}).", file=sys.stderr)
     print(f"  Cause: {_root_cause(exc)}", file=sys.stderr)
