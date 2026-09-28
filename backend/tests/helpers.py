@@ -72,6 +72,21 @@ def make_test_app(
 # ---------------------------------------------------------------------------
 
 
+async def seed_list_entries(db: Any, list_id: str, *entries: dict) -> None:
+    """Put entries straight onto a taxon list.
+
+    Bypasses the API — and with it the `taxa` lookup — for tests of the
+    analytics that consume the lists rather than of the lists themselves.
+    """
+    now = datetime.now(timezone.utc)
+    await db["taxon_list_entries"].insert_many(
+        [
+            {"list_id": list_id, "added_by": "test", "added_at": now, **entry}
+            for entry in entries
+        ]
+    )
+
+
 def make_review(reviewed: bool = False, reviewed_by: str | None = "alice") -> dict:
     return {
         "reviewed": reviewed,

@@ -111,7 +111,7 @@ function seedTwoSampleCase() {
         ],
       })
     ),
-    http.get(`${API}/alerts/pathogens`, () =>
+    http.get(`${API}/taxon-lists/known_pathogens/entries`, () =>
       HttpResponse.json([{ taxon_id: 11676, taxon_name: "HIV-1", reason: null }])
     ),
     http.get(`${API}/subjects/subj-1`, () => HttpResponse.json({ subject_id: "subj-1", sex: "F" }))

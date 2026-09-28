@@ -124,17 +124,23 @@ Sidebar → **NTC Lists**. Two side-by-side lists.
    exceeding it in any NTC fires the contaminant banner.
 
 For both lists each entry stores taxon name, kingdom, NCBI taxon id,
-who added it, when, and either a reason (ignored) or notes + threshold
-(known contaminants).
+who added it, when, an optional reason, and — for known contaminants —
+the threshold. A taxon cannot be on both lists at once.
 
 Adding by NCBI taxon id:
 
 1. **+ Add taxon**.
 2. Enter the taxon id (e.g. ``562`` for *E. coli*).
-3. **Look up** populates name and kingdom.
+3. **Look up** shows the NCBI name and kingdom so you can confirm the id.
 4. For known contaminants, set the threshold.
-5. Optional notes/reason.
+5. Optional reason.
 6. **Add**.
+
+The stored name and kingdom come from Meta-vis's own taxonomy
+reference, not from the lookup. A taxon id that is not in it — never
+seen in an ingested sample and not loaded by ``load_taxonomy.py`` — is
+rejected, as is an id NCBI has merged (the error names the id to use
+instead) or deleted.
 
 Inline edit: hover the *Reason* or *Alert threshold* cell, click the
 pencil, edit, Enter to save.

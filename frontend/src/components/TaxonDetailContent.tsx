@@ -1,5 +1,6 @@
 import { useTaxon } from "../hooks/queries/useTaxa";
-import { usePathogens } from "../hooks/queries/useAlerts";
+import { useTaxonListEntries } from "../hooks/queries/useTaxonLists";
+import { TAXON_LIST_IDS } from "../lib/taxonLists";
 import { useAuth } from "../context/AuthContext";
 import { useReportBuilder } from "../context/ReportBuilderContext";
 import LineageRow from "./taxon-detail/LineageRow";
@@ -38,7 +39,7 @@ export default function TaxonDetailContent({
   const taxonQ = useTaxon(Number(taxonId));
   const taxon = taxonQ.data as TaxonDoc | undefined;
 
-  const { data: pathogenList = [] } = usePathogens();
+  const { data: pathogenList = [] } = useTaxonListEntries(TAXON_LIST_IDS.knownPathogens);
 
   const canEdit = role === "writer" || role === "admin";
 

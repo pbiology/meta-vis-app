@@ -174,10 +174,8 @@ Collection                  Purpose
 ``users``                   App-side user metadata, keyed by Keycloak ``sub``
 ``taxa``                    NCBI taxonomy reference (populated by ``load_taxonomy.py``)
 ``taxa_retired``            Merged / deleted NCBI ids (replaced by ``load_taxonomy.py``)
-``outbreak_ignorelist``     Taxa excluded from outbreak alerts
-``known_pathogens``         Curated pathogen reference list
-``ntc_ignorelist``          Taxa excluded from NTC tracking
-``ntc_known_contaminants``  Known contaminants tracked in NTC QC
+``taxon_lists``             Curated taxon lists — one doc per list (see below)
+``taxon_list_entries``      One doc per taxon per list
 ``audit_log``               Append-only event log (see :doc:`../user-guide/administration`)
 ==========================  ========================================================
 
@@ -252,6 +250,39 @@ multi-document transactions (used by the ingest orchestrator for
 case-level atomicity) work. With ``MONGODB_USE_TRANSACTIONS=false`` a
 mid-ingest failure can leave partial writes behind. See
 :doc:`../deployment/production`.
+
+Curated taxon lists
+-------------------
+
+The outbreak ignorelist, known pathogens, NTC ignorelist and NTC known
+contaminants are one mechanism rather than four. ``taxon_lists`` holds
+one document per list — its ``list_id``, ``kind``, name and provenance —
+and ``taxon_list_entries`` one document per taxon per list, so a taxon
+on two lists has two entries with their own author, date and reason. A
+unique ``(list_id, taxon_id)`` index rejects a duplicate on one list.
+
+``app/taxon_lists/`` is split like the clade view:
+
+``kinds.py``
+   The kind registry. Each kind declares its extra entry fields with
+   defaults (``min_reads`` for contaminants), whether a change must
+   bump the analytics cache version, and which kinds exclude each other
+   (NTC ignore vs. known contaminant). A new kind of list is one enum
+   member and one spec — no new router, collection or frontend module.
+``rules.py``
+   Pure validation of an entry against its kind.
+``store.py``
+   The only code that reads or writes the two collections. Consumers
+   call ``taxon_ids(db, list_id)`` or ``list_entries(..., model=...)``.
+``service.py``
+   One write end to end: resolve the taxon, validate, persist, bump the
+   cache version when the kind affects analytics, audit.
+
+The four lists are *system* lists, seeded idempotently at startup and
+referenced by id from the analytics. Entry names and kingdoms are
+resolved server-side — ``taxa_retired`` first, then ``taxa`` (ingest
+placeholders count) — never taken from the client. All kinds share one
+API under ``/taxon-lists/{list_id}/entries``.
 
 Blob storage
 ============

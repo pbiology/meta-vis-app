@@ -1,13 +1,13 @@
-import type { PathogenItem, Sample } from "../api/types";
+import type { TaxonListEntry, Sample } from "../api/types";
 
 interface Props {
   samples: Sample[];
-  pathogenMap: Record<number, PathogenItem>;
+  pathogenMap: Record<number, TaxonListEntry>;
 }
 
 interface PathogenHit {
   taxonId: number;
-  pathogen: PathogenItem;
+  pathogen: TaxonListEntry;
   samples: Sample[];
 }
 

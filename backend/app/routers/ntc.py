@@ -3,20 +3,20 @@
 import asyncio
 import logging
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from bson import ObjectId
 from bson.errors import InvalidId
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
-from pydantic import BaseModel
-from typing import Literal, Optional
+from typing import Literal
 
-from app.audit import log_audit_event
-from app.cache import get_cache_version, bump_cache_version
+from app.cache import get_cache_version
 from app.database import get_db
-from app.db_utils import fetch_capped
-from app.auth.utils import get_current_user, require_role
+from app.auth.utils import get_current_user
 from app.constants import HOST_TAXON_IDS, TAXON_ID_UNCLASSIFIED
+from app.models.taxon_list import ContaminantEntry
+from app.taxon_lists import store as taxon_lists
+from app.taxon_lists.kinds import NTC_IGNORELIST, NTC_KNOWN_CONTAMINANTS
 from app.ntc_controls import (
     NtcControl,
     duplicated_analysis_ids,
@@ -68,281 +68,6 @@ def invalidate_ntc_trends_cache() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Pydantic models
-# ---------------------------------------------------------------------------
-
-
-class IgnorePayload(BaseModel):
-    taxon_id: int
-    taxon_name: str
-    superkingdom: Optional[str] = None
-    reason: Optional[str] = None
-
-
-class IgnoreNotePayload(BaseModel):
-    reason: Optional[str] = None
-
-
-class ContaminantPayload(BaseModel):
-    taxon_id: int
-    taxon_name: str
-    superkingdom: Optional[str] = None
-    min_reads: int = 3
-    notes: Optional[str] = None
-
-
-class ContaminantUpdatePayload(BaseModel):
-    min_reads: Optional[int] = None
-    notes: Optional[str] = None
-
-
-# ---------------------------------------------------------------------------
-# NTC ignorelist endpoints
-# ---------------------------------------------------------------------------
-
-
-@router.get("/ignorelist", summary="List NTC ignored taxa")
-async def get_ntc_ignorelist(
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(get_current_user),
-) -> list:
-    docs = await fetch_capped(
-        db["ntc_ignorelist"].find().sort("added_at", -1), "ntc_ignorelist"
-    )
-    for doc in docs:
-        doc["_id"] = str(doc["_id"])
-    return docs
-
-
-@router.post("/ignorelist", summary="Add a taxon to the NTC ignorelist")
-async def add_to_ntc_ignorelist(
-    payload: IgnorePayload,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(require_role("writer", "admin")),
-) -> dict:
-    existing = await db["ntc_ignorelist"].find_one({"taxon_id": payload.taxon_id})
-    if existing:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Taxon {payload.taxon_id} is already on the NTC ignorelist",
-        )
-    on_contaminants = await db["ntc_known_contaminants"].find_one(
-        {"taxon_id": payload.taxon_id}
-    )
-    if on_contaminants:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Taxon {payload.taxon_id} is already on the known contaminants list. "
-            f"Remove it from there before adding it to the ignorelist.",
-        )
-    doc = {
-        "taxon_id": payload.taxon_id,
-        "taxon_name": payload.taxon_name,
-        "superkingdom": payload.superkingdom,
-        "reason": payload.reason,
-        "added_by": current_user["username"],
-        "added_at": datetime.now(timezone.utc),
-    }
-    result = await db["ntc_ignorelist"].insert_one(doc)
-    doc["_id"] = str(result.inserted_id)
-    # Ignoring a taxon affects trend calculations — invalidate caches
-    invalidate_contaminant_cache()
-    invalidate_ntc_trends_cache()
-    await bump_cache_version(db)
-    await log_audit_event(
-        db,
-        action="ntc_ignorelist_add",
-        actor=current_user["username"],
-        resource_type="ntc_ignorelist_entry",
-        resource_id=str(payload.taxon_id),
-        outcome="success",
-    )
-    return doc
-
-
-@router.patch("/ignorelist/{taxon_id}", summary="Update reason for an ignored taxon")
-async def update_ntc_ignorelist_note(
-    taxon_id: int,
-    payload: IgnoreNotePayload,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(require_role("writer", "admin")),
-) -> dict:
-    result = await db["ntc_ignorelist"].update_one(
-        {"taxon_id": taxon_id},
-        {"$set": {"reason": payload.reason}},
-    )
-    if result.matched_count == 0:
-        raise HTTPException(
-            status_code=404, detail=f"Taxon {taxon_id} not found in NTC ignorelist"
-        )
-    await log_audit_event(
-        db,
-        action="ntc_ignorelist_update",
-        actor=current_user["username"],
-        resource_type="ntc_ignorelist_entry",
-        resource_id=str(taxon_id),
-        outcome="success",
-    )
-    return {"updated": True, "taxon_id": taxon_id}
-
-
-@router.delete(
-    "/ignorelist/{taxon_id}", summary="Remove a taxon from the NTC ignorelist"
-)
-async def remove_from_ntc_ignorelist(
-    taxon_id: int,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(require_role("admin")),
-) -> dict:
-    result = await db["ntc_ignorelist"].delete_one({"taxon_id": taxon_id})
-    if result.deleted_count == 0:
-        raise HTTPException(
-            status_code=404, detail=f"Taxon {taxon_id} not found in NTC ignorelist"
-        )
-    invalidate_contaminant_cache()
-    invalidate_ntc_trends_cache()
-    await bump_cache_version(db)
-    await log_audit_event(
-        db,
-        action="ntc_ignorelist_remove",
-        actor=current_user["username"],
-        resource_type="ntc_ignorelist_entry",
-        resource_id=str(taxon_id),
-        outcome="success",
-    )
-    return {"deleted": True, "taxon_id": taxon_id}
-
-
-# ---------------------------------------------------------------------------
-# NTC known contaminants endpoints
-# ---------------------------------------------------------------------------
-
-
-@router.get("/contaminants", summary="List NTC known contaminants")
-async def get_ntc_contaminants(
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(get_current_user),
-) -> list:
-    docs = await fetch_capped(
-        db["ntc_known_contaminants"].find().sort("added_at", -1),
-        "ntc_known_contaminants",
-    )
-    for doc in docs:
-        doc["_id"] = str(doc["_id"])
-    return docs
-
-
-@router.post("/contaminants", summary="Add a taxon to the NTC known contaminants list")
-async def add_ntc_contaminant(
-    payload: ContaminantPayload,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(require_role("writer", "admin")),
-) -> dict:
-    existing = await db["ntc_known_contaminants"].find_one(
-        {"taxon_id": payload.taxon_id}
-    )
-    if existing:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Taxon {payload.taxon_id} is already on the known contaminants list",
-        )
-    on_ignorelist = await db["ntc_ignorelist"].find_one({"taxon_id": payload.taxon_id})
-    if on_ignorelist:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Taxon {payload.taxon_id} is already on the NTC ignorelist. "
-            f"Remove it from there before adding it to the known contaminants list.",
-        )
-    doc = {
-        "taxon_id": payload.taxon_id,
-        "taxon_name": payload.taxon_name,
-        "superkingdom": payload.superkingdom,
-        "min_reads": payload.min_reads,
-        "notes": payload.notes,
-        "added_by": current_user["username"],
-        "added_at": datetime.now(timezone.utc),
-    }
-    result = await db["ntc_known_contaminants"].insert_one(doc)
-    doc["_id"] = str(result.inserted_id)
-    invalidate_contaminant_cache()
-    await bump_cache_version(db)
-    await log_audit_event(
-        db,
-        action="ntc_contaminant_add",
-        actor=current_user["username"],
-        resource_type="ntc_contaminant",
-        resource_id=str(payload.taxon_id),
-        outcome="success",
-    )
-    return doc
-
-
-@router.patch(
-    "/contaminants/{taxon_id}", summary="Update min_reads or notes for a contaminant"
-)
-async def update_ntc_contaminant(
-    taxon_id: int,
-    payload: ContaminantUpdatePayload,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(require_role("writer", "admin")),
-) -> dict:
-    updates: dict = {}
-    if payload.min_reads is not None:
-        updates["min_reads"] = payload.min_reads
-    if payload.notes is not None:
-        updates["notes"] = payload.notes
-    if not updates:
-        raise HTTPException(status_code=422, detail="No fields to update")
-    result = await db["ntc_known_contaminants"].update_one(
-        {"taxon_id": taxon_id}, {"$set": updates}
-    )
-    if result.matched_count == 0:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Taxon {taxon_id} not found in known contaminants list",
-        )
-    invalidate_contaminant_cache()
-    await bump_cache_version(db)
-    await log_audit_event(
-        db,
-        action="ntc_contaminant_update",
-        actor=current_user["username"],
-        resource_type="ntc_contaminant",
-        resource_id=str(taxon_id),
-        outcome="success",
-    )
-    return {"updated": True, "taxon_id": taxon_id}
-
-
-@router.delete(
-    "/contaminants/{taxon_id}",
-    summary="Remove a taxon from the NTC known contaminants list",
-)
-async def remove_ntc_contaminant(
-    taxon_id: int,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(require_role("admin")),
-) -> dict:
-    result = await db["ntc_known_contaminants"].delete_one({"taxon_id": taxon_id})
-    if result.deleted_count == 0:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Taxon {taxon_id} not found in known contaminants list",
-        )
-    invalidate_contaminant_cache()
-    await bump_cache_version(db)
-    await log_audit_event(
-        db,
-        action="ntc_contaminant_remove",
-        actor=current_user["username"],
-        resource_type="ntc_contaminant",
-        resource_id=str(taxon_id),
-        outcome="success",
-    )
-    return {"deleted": True, "taxon_id": taxon_id}
-
-
-# ---------------------------------------------------------------------------
 # Contaminant alerts — which cases have NTCs containing known contaminants
 # ---------------------------------------------------------------------------
 
@@ -371,8 +96,8 @@ async def get_contaminant_alerts(
             if stored_version == current_version:
                 return cached_result
 
-        contaminants = await fetch_capped(
-            db["ntc_known_contaminants"].find(), "ntc_known_contaminants"
+        contaminants = await taxon_lists.list_entries(
+            db, NTC_KNOWN_CONTAMINANTS, model=ContaminantEntry
         )
         if not contaminants:
             result: dict = {"alerts": [], "contaminant_case_ids": []}
@@ -383,11 +108,11 @@ async def get_contaminant_alerts(
 
         cutoff = (date.today() - timedelta(days=window_days)).isoformat()
 
-        # Build a lookup: taxon_id -> contaminant doc
-        contaminant_map = {c["taxon_id"]: c for c in contaminants}
+        # Build a lookup: taxon_id -> contaminant entry
+        contaminant_map = {c.taxon_id: c for c in contaminants}
 
         # taxon_id -> list of affected NTC occurrences
-        hits: dict[int, list[dict]] = {c["taxon_id"]: [] for c in contaminants}
+        hits: dict[int, list[dict]] = {c.taxon_id: [] for c in contaminants}
 
         # Stream NTC sample docs so the full profile arrays are never all
         # resident at once. We iterate profiles in Python rather than using
@@ -424,7 +149,7 @@ async def get_contaminant_alerts(
                     tid = entry.get("taxon_id")
                     if tid not in contaminant_map:
                         continue
-                    min_r = contaminant_map[tid]["min_reads"]
+                    min_r = contaminant_map[tid].min_reads
                     if entry.get("abundance", 0) > min_r:
                         hits[tid].append(
                             {
@@ -459,7 +184,7 @@ async def get_contaminant_alerts(
         alerts = []
         all_case_ids: set[str] = set()
         for contaminant in contaminants:
-            tid = contaminant["taxon_id"]
+            tid = contaminant.taxon_id
             taxon_groups = hit_groups.get(tid)
             if not taxon_groups:
                 continue
@@ -473,9 +198,9 @@ async def get_contaminant_alerts(
             alerts.append(
                 {
                     "taxon_id": tid,
-                    "taxon_name": contaminant["taxon_name"],
-                    "superkingdom": contaminant.get("superkingdom"),
-                    "min_reads": contaminant["min_reads"],
+                    "taxon_name": contaminant.taxon_name,
+                    "superkingdom": contaminant.superkingdom,
+                    "min_reads": contaminant.min_reads,
                     "control_count": len(controls),
                     "case_count": len(case_ids),
                     "occurrences": [
@@ -619,10 +344,7 @@ async def _compute_ntc_trends(
     """Run the NTC trend aggregations and assemble the result dict."""
     cutoff = (date.today() - timedelta(days=window_days)).isoformat()
 
-    ignore_docs = await fetch_capped(
-        db["ntc_ignorelist"].find({}, {"taxon_id": 1}), "ntc_ignorelist"
-    )
-    ignored_ids: frozenset[int] = frozenset(d["taxon_id"] for d in ignore_docs)
+    ignored_ids = await taxon_lists.taxon_ids(db, NTC_IGNORELIST)
     excluded_ids: list[int] = list(HOST_TAXON_IDS | ignored_ids)
 
     base_query: dict = {

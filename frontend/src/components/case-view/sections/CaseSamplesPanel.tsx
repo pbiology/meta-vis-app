@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { PathogenItem, Sample } from "../../../api/types";
+import type { TaxonListEntry, Sample } from "../../../api/types";
 import Badge from "../../Badge";
 import DataWarning from "../../DataWarning";
 import SampleDeltaBadge from "./SampleDeltaBadge";
@@ -86,7 +86,7 @@ function controlCell(sample: Sample) {
 
 interface CaseSamplesPanelProps {
   samples: Sample[];
-  pathogenMap: Record<number, PathogenItem>;
+  pathogenMap: Record<number, TaxonListEntry>;
   onSelectSample: (sampleId: string) => void;
 }
 

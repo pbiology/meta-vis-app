@@ -13,7 +13,7 @@ function contaminant(id: number, name: string, extra: Record<string, unknown> = 
     taxon_name: name,
     superkingdom: "Bacteria",
     min_reads: 5,
-    notes: null,
+    reason: null,
     added_by: "tester",
     added_at: "2026-04-20",
     ...extra,
@@ -23,7 +23,7 @@ function contaminant(id: number, name: string, extra: Record<string, unknown> = 
 describe("NtcContaminantsPanel", () => {
   it("renders rows returned by the API", async () => {
     server.use(
-      http.get(`${API}/ntc/contaminants`, () =>
+      http.get(`${API}/taxon-lists/ntc_known_contaminants/entries`, () =>
         HttpResponse.json([contaminant(1, "Cutibacterium-acnes")])
       )
     );
@@ -36,7 +36,12 @@ describe("NtcContaminantsPanel", () => {
   });
 
   it("renders an inline error when the contaminants endpoint 500s", async () => {
-    server.use(http.get(`${API}/ntc/contaminants`, () => new HttpResponse(null, { status: 500 })));
+    server.use(
+      http.get(
+        `${API}/taxon-lists/ntc_known_contaminants/entries`,
+        () => new HttpResponse(null, { status: 500 })
+      )
+    );
     renderWithProviders(<NtcContaminantsPanel canEdit canDelete />);
     expect(await screen.findByText(/failed to load known contaminants/i)).toBeInTheDocument();
   });

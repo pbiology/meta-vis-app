@@ -1,5 +1,5 @@
 import client from "./client";
-import type { IgnorelistItem, Outbreak, OutbreaksResponse, PathogenItem } from "./types";
+import type { Outbreak, OutbreaksResponse } from "./types";
 
 interface RawConfigResult {
   config_name?: string;
@@ -50,61 +50,4 @@ export async function getOutbreaks(
     window_days: data.window_days,
     outbreaks: data.outbreaks ?? [],
   };
-}
-
-export async function getIgnorelist(superkingdom: string | null = null): Promise<IgnorelistItem[]> {
-  const params = superkingdom ? { superkingdom } : {};
-  const res = await client.get<IgnorelistItem[]>("/alerts/ignorelist", { params });
-  return res.data;
-}
-
-export async function addToIgnorelist(
-  taxonId: number,
-  taxonName: string,
-  superkingdom = "Viruses",
-  reason: string | null = null
-): Promise<IgnorelistItem> {
-  const res = await client.post<IgnorelistItem>("/alerts/ignorelist", {
-    taxon_id: taxonId,
-    taxon_name: taxonName,
-    superkingdom,
-    reason,
-  });
-  return res.data;
-}
-
-export async function removeFromIgnorelist(taxonId: number): Promise<void> {
-  await client.delete(`/alerts/ignorelist/${taxonId}`);
-}
-
-export async function updateIgnorelistNote(
-  taxonId: number,
-  reason: string | null
-): Promise<IgnorelistItem> {
-  const res = await client.patch<IgnorelistItem>(`/alerts/ignorelist/${taxonId}`, { reason });
-  return res.data;
-}
-
-export async function getPathogens(): Promise<PathogenItem[]> {
-  const res = await client.get<PathogenItem[]>("/alerts/pathogens");
-  return res.data;
-}
-
-export async function addToPathogens(
-  taxonId: number,
-  taxonName: string,
-  superkingdom = "Viruses",
-  notes: string | null = null
-): Promise<PathogenItem> {
-  const res = await client.post<PathogenItem>("/alerts/pathogens", {
-    taxon_id: taxonId,
-    taxon_name: taxonName,
-    superkingdom,
-    reason: notes,
-  });
-  return res.data;
-}
-
-export async function removeFromPathogens(taxonId: number): Promise<void> {
-  await client.delete(`/alerts/pathogens/${taxonId}`);
 }

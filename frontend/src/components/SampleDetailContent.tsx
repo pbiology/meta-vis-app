@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTaxonListEntries } from "../hooks/queries/useTaxonLists";
+import { TAXON_LIST_IDS } from "../lib/taxonLists";
 import MetavalDetailsContent from "./MetavalDetailsContent";
 import TaxonDetailContent from "./TaxonDetailContent";
 import Badge, { type BadgeType } from "./Badge";
@@ -7,7 +9,7 @@ import { useReportBuilder } from "../context/ReportBuilderContext";
 import { useAuth } from "../context/AuthContext";
 import { useNtcProfiles, useSample, useSampleProfile } from "../hooks/queries/useSamples";
 import { useMetavalForSample } from "../hooks/queries/useMetaval";
-import { useOutbreaks, usePathogens } from "../hooks/queries/useAlerts";
+import { useOutbreaks } from "../hooks/queries/useAlerts";
 import type { SampleProfile } from "../api/types";
 import SampleQcSection from "./sample-detail/SampleQcSection";
 import ClassifierMetricsSection from "./sample-detail/ClassifierMetricsSection";
@@ -108,7 +110,9 @@ export default function SampleDetailContent({
   });
   const { data: ntcData, isError: ntcError } = useNtcProfiles(sampleId, { enabled: !!sample });
   const { data: outbreakData, isError: outbreakError } = useOutbreaks(14);
-  const { data: pathogenList = [], isError: pathogenError } = usePathogens();
+  const { data: pathogenList = [], isError: pathogenError } = useTaxonListEntries(
+    TAXON_LIST_IDS.knownPathogens
+  );
 
   const ntcProfiles = ntcData?.profiles ?? [];
   const contaminantConfig = ntcData?.contaminant_config ?? null;

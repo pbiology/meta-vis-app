@@ -1,11 +1,12 @@
 import { useState } from "react";
 import {
-  useAddToNtcIgnorelist,
-  useNtcIgnorelist,
-  useRemoveFromNtcIgnorelist,
-  useUpdateNtcIgnorelistNote,
-} from "../../hooks/queries/useNtc";
-import type { IgnorelistItem } from "../../api/types";
+  useAddTaxonListEntry,
+  useRemoveTaxonListEntry,
+  useTaxonListEntries,
+  useUpdateTaxonListEntry,
+} from "../../hooks/queries/useTaxonLists";
+import type { TaxonListEntry } from "../../api/types";
+import { TAXON_LIST_IDS } from "../../lib/taxonLists";
 import AddTaxonModal from "../AddTaxonModal";
 import RemoveTaxonModal from "./RemoveTaxonModal";
 import {
@@ -16,6 +17,8 @@ import {
   NtcTaxonCells,
 } from "./NtcListChrome";
 
+const LIST_ID = TAXON_LIST_IDS.ntcIgnorelist;
+
 interface NtcIgnoreListPanelProps {
   canEdit: boolean;
   canDelete: boolean;
@@ -25,13 +28,13 @@ export default function NtcIgnoreListPanel({
   canEdit,
   canDelete,
 }: Readonly<NtcIgnoreListPanelProps>) {
-  const ignorelistQ = useNtcIgnorelist();
-  const addMutation = useAddToNtcIgnorelist();
-  const updateNoteMutation = useUpdateNtcIgnorelistNote();
-  const removeMutation = useRemoveFromNtcIgnorelist();
+  const ignorelistQ = useTaxonListEntries(LIST_ID);
+  const addMutation = useAddTaxonListEntry(LIST_ID);
+  const updateNoteMutation = useUpdateTaxonListEntry(LIST_ID);
+  const removeMutation = useRemoveTaxonListEntry(LIST_ID);
 
   const [addOpen, setAddOpen] = useState(false);
-  const [removeTarget, setRemoveTarget] = useState<IgnorelistItem | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<TaxonListEntry | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
 
@@ -39,7 +42,10 @@ export default function NtcIgnoreListPanel({
 
   async function saveEdit(taxonId: number) {
     try {
-      await updateNoteMutation.mutateAsync({ taxonId, reason: editText.trim() || null });
+      await updateNoteMutation.mutateAsync({
+        taxonId,
+        changes: { reason: editText.trim() || null },
+      });
       setEditingId(null);
     } catch {
       alert("Failed to save note.");
@@ -179,13 +185,8 @@ export default function NtcIgnoreListPanel({
         <AddTaxonModal
           title="Add to NTC ignorelist"
           showMinReads={false}
-          onAdd={async (id, name, sk, notes) => {
-            await addMutation.mutateAsync({
-              taxonId: id,
-              taxonName: name,
-              superkingdom: sk ?? "",
-              reason: notes,
-            });
+          onAdd={async (taxonId, reason) => {
+            await addMutation.mutateAsync({ taxonId, reason });
           }}
           onClose={() => setAddOpen(false)}
         />

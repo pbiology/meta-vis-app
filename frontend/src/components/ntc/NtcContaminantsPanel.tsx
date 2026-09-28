@@ -1,11 +1,12 @@
 import { useState } from "react";
 import {
-  useAddNtcContaminant,
-  useNtcContaminants,
-  useRemoveNtcContaminant,
-  useUpdateNtcContaminant,
-} from "../../hooks/queries/useNtc";
-import type { NtcContaminantItem } from "../../api/types";
+  useAddTaxonListEntry,
+  useRemoveTaxonListEntry,
+  useTaxonListEntries,
+  useUpdateTaxonListEntry,
+} from "../../hooks/queries/useTaxonLists";
+import type { TaxonListEntry } from "../../api/types";
+import { TAXON_LIST_IDS } from "../../lib/taxonLists";
 import AddTaxonModal from "../AddTaxonModal";
 import RemoveTaxonModal from "./RemoveTaxonModal";
 import {
@@ -16,6 +17,8 @@ import {
   NtcTaxonCells,
 } from "./NtcListChrome";
 
+const LIST_ID = TAXON_LIST_IDS.ntcKnownContaminants;
+
 interface NtcContaminantsPanelProps {
   canEdit: boolean;
   canDelete: boolean;
@@ -25,13 +28,13 @@ export default function NtcContaminantsPanel({
   canEdit,
   canDelete,
 }: Readonly<NtcContaminantsPanelProps>) {
-  const contaminantsQ = useNtcContaminants();
-  const addMutation = useAddNtcContaminant();
-  const updateMutation = useUpdateNtcContaminant();
-  const removeMutation = useRemoveNtcContaminant();
+  const contaminantsQ = useTaxonListEntries(LIST_ID);
+  const addMutation = useAddTaxonListEntry(LIST_ID);
+  const updateMutation = useUpdateTaxonListEntry(LIST_ID);
+  const removeMutation = useRemoveTaxonListEntry(LIST_ID);
 
   const [addOpen, setAddOpen] = useState(false);
-  const [removeTarget, setRemoveTarget] = useState<NtcContaminantItem | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<TaxonListEntry | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editMinReads, setEditMinReads] = useState(3);
 
@@ -39,7 +42,7 @@ export default function NtcContaminantsPanel({
 
   async function saveMinReads(taxonId: number) {
     try {
-      await updateMutation.mutateAsync({ taxonId, fields: { minReads: editMinReads } });
+      await updateMutation.mutateAsync({ taxonId, changes: { minReads: editMinReads } });
       setEditingId(null);
     } catch {
       alert("Failed to update threshold.");
@@ -128,7 +131,7 @@ export default function NtcContaminantsPanel({
                       <EditPencilButton
                         onClick={() => {
                           setEditingId(item.taxon_id);
-                          setEditMinReads(item.min_reads);
+                          setEditMinReads(item.min_reads ?? 3);
                         }}
                       />
                     )}
@@ -136,7 +139,7 @@ export default function NtcContaminantsPanel({
                 )}
               </td>
               <td className="px-4 py-3 text-xs text-gray-500 min-w-40">
-                {item.notes ?? <span className="text-gray-300">—</span>}
+                {item.reason ?? <span className="text-gray-300">—</span>}
               </td>
               <td className="px-4 py-3 text-xs text-gray-500">{item.added_by}</td>
               <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
@@ -181,14 +184,8 @@ export default function NtcContaminantsPanel({
         <AddTaxonModal
           title="Add known contaminant"
           showMinReads={true}
-          onAdd={async (id, name, sk, notes, minReads) => {
-            await addMutation.mutateAsync({
-              taxonId: id,
-              taxonName: name,
-              superkingdom: sk ?? "",
-              minReads,
-              notes,
-            });
+          onAdd={async (taxonId, reason, minReads) => {
+            await addMutation.mutateAsync({ taxonId, reason, minReads });
           }}
           onClose={() => setAddOpen(false)}
         />

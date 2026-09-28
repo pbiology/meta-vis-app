@@ -1,10 +1,10 @@
-import type { PathogenItem, SampleProfile, SampleProfileEntry } from "../../api/types";
+import type { TaxonListEntry, SampleProfile, SampleProfileEntry } from "../../api/types";
 import DataWarning from "../DataWarning";
 
 interface PathogenTableRowProps {
   t: SampleProfileEntry;
   classifiers: SampleProfile[];
-  pathogenMap: Record<string | number, PathogenItem>;
+  pathogenMap: Record<string | number, TaxonListEntry>;
 }
 
 function PathogenTableRow({ t, classifiers, pathogenMap }: Readonly<PathogenTableRowProps>) {
@@ -36,7 +36,7 @@ interface SampleKnownPathogensSectionProps {
   pathogenError: boolean;
   pathogenIds: Set<number>;
   classifiers: SampleProfile[];
-  pathogenMap: Record<string | number, PathogenItem>;
+  pathogenMap: Record<string | number, TaxonListEntry>;
 }
 
 export default function SampleKnownPathogensSection({

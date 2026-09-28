@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
-import { useAddToIgnorelist, useIgnorelist, useOutbreaks } from "../hooks/queries/useAlerts";
+import { useOutbreaks } from "../hooks/queries/useAlerts";
+import { useAddTaxonListEntry, useTaxonListEntries } from "../hooks/queries/useTaxonLists";
+import { TAXON_LIST_IDS } from "../lib/taxonLists";
 import { useAuth } from "../context/AuthContext";
 import { multiAnalysisFilter } from "../lib/analysisPreference";
 import type { Outbreak } from "../api/types";
@@ -17,8 +19,8 @@ export default function Alerts() {
 
   const analysisTypes = multiAnalysisFilter(visibleAnalysis);
   const outbreaksQ = useOutbreaks(windowDays, analysisTypes);
-  const ignorelistQ = useIgnorelist();
-  const addToIgnoreMutation = useAddToIgnorelist();
+  const ignorelistQ = useTaxonListEntries(TAXON_LIST_IDS.outbreakIgnorelist);
+  const addToIgnoreMutation = useAddTaxonListEntry(TAXON_LIST_IDS.outbreakIgnorelist);
 
   const data = outbreaksQ.data ?? null;
   const ignorelist = ignorelistQ.data ?? [];
@@ -38,12 +40,7 @@ export default function Alerts() {
 
   async function handleIgnore(outbreak: Outbreak) {
     try {
-      const superkingdom = outbreak.superkingdoms?.[0] || "Viruses";
-      await addToIgnoreMutation.mutateAsync({
-        taxonId: outbreak.taxon_id,
-        taxonName: outbreak.taxon_name,
-        superkingdom,
-      });
+      await addToIgnoreMutation.mutateAsync({ taxonId: outbreak.taxon_id });
     } catch {
       alert("Failed to add taxon to ignorelist.");
     }

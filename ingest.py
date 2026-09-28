@@ -88,6 +88,7 @@ from typing import Any, NoReturn
 from urllib.parse import quote, urlsplit
 
 import requests
+from urllib3.exceptions import ProtocolError
 
 # Auto-load a `.env` next to this script so KC URL / realm / credentials can
 # be set once instead of passed on every invocation. python-dotenv is part of
@@ -120,10 +121,18 @@ METAVAL_DIR = "metaval"
 # timeout: the server ingests the whole bundle before responding, which can
 # take minutes, and giving up client-side would not stop the server-side
 # ingest — a retry would then create a duplicate analysis version.
+#
+# urllib3 also applies the *connect* value as the socket timeout while sending
+# the request body, so for the upload it bounds how long any single send may
+# block — not just connecting. At 10 s, one brief pause in the server reading a
+# 1 GiB bundle aborted the upload. The upload gets a longer value; an
+# unreachable host is still caught in 10 s by the login and case check that
+# always run first.
 CONNECT_TIMEOUT_S = 10
 READ_TIMEOUT_S = 60
+UPLOAD_SEND_TIMEOUT_S = 120
 REQUEST_TIMEOUT = (CONNECT_TIMEOUT_S, READ_TIMEOUT_S)
-UPLOAD_TIMEOUT = (CONNECT_TIMEOUT_S, None)
+UPLOAD_TIMEOUT = (UPLOAD_SEND_TIMEOUT_S, None)
 INGEST_PATH_PREFIX = "/api/v1/ingest/"
 
 
@@ -1169,28 +1178,43 @@ def _print_result(
         _fail(f"Ingest failed ({resp.status_code}): {resp.text}")
 
 
-def _root_cause(exc: BaseException) -> BaseException:
+def _cause_chain(exc: BaseException) -> list[BaseException]:
     """Follow requests → urllib3 → socket wrapping down to the original error.
 
     requests wraps urllib3's MaxRetryError, whose ``reason`` wraps a
     NewConnectionError, whose ``__cause__`` is the OSError that actually says
-    what went wrong (e.g. "[Errno 113] No route to host").
+    what went wrong (e.g. "[Errno 113] No route to host"). Returns every link,
+    outermost first.
     """
+    chain: list[BaseException] = []
     seen: set[int] = set()
-    current = exc
-    while id(current) not in seen:
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
         seen.add(id(current))
+        chain.append(current)
         reason = getattr(current, "reason", None)
         wrapped = next((a for a in current.args if isinstance(a, BaseException)), None)
-        nxt = (
+        current = (
             reason
             if isinstance(reason, BaseException)
             else wrapped or current.__cause__ or current.__context__
         )
-        if nxt is None:
-            break
-        current = nxt
-    return current
+    return chain
+
+
+def _root_cause(exc: BaseException) -> BaseException:
+    return _cause_chain(exc)[-1]
+
+
+def _connection_was_established(exc: BaseException) -> bool:
+    """Whether the request failed *after* the connection was open.
+
+    urllib3 reports a connection that broke mid-request — the server stopped
+    reading, reset or closed it — as ``ProtocolError("Connection aborted.")``,
+    and one that never opened as ``NewConnectionError``. requests raises
+    ``ConnectionError`` for both, so only the chain tells them apart.
+    """
+    return any(isinstance(link, ProtocolError) for link in _cause_chain(exc))
 
 
 def _fail(message: str) -> NoReturn:
@@ -1223,6 +1247,21 @@ def _exit_on_request_error(exc: requests.exceptions.RequestException) -> NoRetur
     elif isinstance(exc, requests.exceptions.ProxyError):
         summary = f"proxy refused the connection to {host}"
         hint = "Check the HTTPS_PROXY / NO_PROXY environment variables."
+    elif isinstance(
+        exc, requests.exceptions.ConnectionError
+    ) and _connection_was_established(exc):
+        # The host was reachable — a network/VPN hint would send the reader
+        # the wrong way.
+        summary = f"connection to {host} broke during the request"
+        stalled = (
+            "The server stopped reading the request and the send timed out. "
+            if isinstance(_root_cause(exc), TimeoutError)
+            else "The server closed the connection. "
+        )
+        hint = (
+            stalled + "It may be overloaded, restarting or out of disk; "
+            "check the backend logs."
+        )
     elif isinstance(exc, requests.exceptions.ConnectionError):
         summary = f"cannot reach {host}"
         hint = (

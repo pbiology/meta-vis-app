@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTaxonListEntries } from "../hooks/queries/useTaxonLists";
+import { TAXON_LIST_IDS } from "../lib/taxonLists";
 import {
   useAddCaseNote,
   useCase,
@@ -8,7 +10,7 @@ import {
   useUnreviewCase,
   useUpdateCaseReport,
 } from "../hooks/queries/useCases";
-import { useOutbreaks, usePathogens } from "../hooks/queries/useAlerts";
+import { useOutbreaks } from "../hooks/queries/useAlerts";
 import { useNtcContaminantCaseIds } from "../hooks/queries/useNtc";
 import type { Case, CaseNote } from "../api/types";
 import { flattenCaseDetail } from "../api/types";
@@ -37,7 +39,7 @@ export default function CaseView() {
 
   const caseQ = useCase(caseId, version);
   const samplesQ = useCaseSamples(caseId, null, version);
-  const pathogensQ = usePathogens();
+  const pathogensQ = useTaxonListEntries(TAXON_LIST_IDS.knownPathogens);
   const outbreaksQ = useOutbreaks(14);
   const ntcCaseIdsQ = useNtcContaminantCaseIds();
 

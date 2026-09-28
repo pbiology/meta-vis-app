@@ -2,17 +2,15 @@
 
 import asyncio
 from datetime import datetime, date, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
-from pydantic import BaseModel
-from typing import Optional
 
-from app.audit import log_audit_event
-from app.cache import get_cache_version, bump_cache_version
+from app.cache import get_cache_version
 from app.database import get_db
-from app.db_utils import fetch_capped
-from app.auth.utils import get_current_user, require_role
+from app.auth.utils import get_current_user
 from app.config import settings
+from app.taxon_lists import store as taxon_lists
+from app.taxon_lists.kinds import OUTBREAK_IGNORELIST
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
@@ -24,147 +22,6 @@ _cache_lock = asyncio.Lock()
 # TTL is a safety net for rolling-window staleness (cases aging in/out of window).
 # Primary invalidation is the shared db_version counter.
 CACHE_TTL_SECONDS = 3600
-
-
-# ============================================================================
-# Models
-# ============================================================================
-
-
-class IgnorePayload(BaseModel):
-    taxon_id: int
-    taxon_name: str
-    superkingdom: str = "Viruses"  # Default to Viruses, can be overridden
-    reason: Optional[str] = None
-
-
-class IgnoreNotePayload(BaseModel):
-    reason: Optional[str] = None
-
-
-# ============================================================================
-# Ignorelist Endpoints (Updated with Superkingdom Filter)
-# ============================================================================
-
-
-@router.get("/ignorelist", summary="List ignored taxa")
-async def get_ignorelist(
-    superkingdom: Optional[str] = Query(
-        None, description="Filter by superkingdom (e.g., 'Viruses' or 'Bacteria')"
-    ),
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(get_current_user),
-):
-    """Get ignored taxa, optionally filtered by superkingdom."""
-    query = {}
-    if superkingdom:
-        query["superkingdom"] = superkingdom
-
-    docs = await fetch_capped(
-        db["outbreak_ignorelist"].find(query).sort("added_at", -1),
-        "outbreak_ignorelist",
-    )
-    for doc in docs:
-        doc["_id"] = str(doc["_id"])
-    return docs
-
-
-@router.post("/ignorelist", summary="Add a taxon to the outbreak ignorelist")
-async def add_to_ignorelist(
-    payload: IgnorePayload,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(require_role("writer", "admin")),
-):
-    """Add a taxon to ignorelist (writer or admin)."""
-    existing = await db["outbreak_ignorelist"].find_one({"taxon_id": payload.taxon_id})
-    if existing:
-        raise HTTPException(
-            status_code=409, detail=f"Taxon {payload.taxon_id} is already ignored"
-        )
-
-    doc = {
-        "taxon_id": payload.taxon_id,
-        "taxon_name": payload.taxon_name,
-        "superkingdom": payload.superkingdom,
-        "reason": payload.reason,
-        "added_by": current_user["username"],
-        "added_at": datetime.now(timezone.utc),
-    }
-    result = await db["outbreak_ignorelist"].insert_one(doc)
-    _cache.clear()
-    await bump_cache_version(db)
-    doc["_id"] = str(result.inserted_id)
-    await log_audit_event(
-        db,
-        action="ignorelist_add",
-        actor=current_user["username"],
-        resource_type="ignorelist_entry",
-        resource_id=str(payload.taxon_id),
-        outcome="success",
-    )
-    return doc
-
-
-@router.delete(
-    "/ignorelist/{taxon_id}", summary="Remove a taxon from the outbreak ignorelist"
-)
-async def remove_from_ignorelist(
-    taxon_id: int,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(require_role("admin")),
-):
-    """Remove a taxon from ignorelist (admin only)."""
-    result = await db["outbreak_ignorelist"].delete_one({"taxon_id": taxon_id})
-    _cache.clear()
-    await bump_cache_version(db)
-
-    if result.deleted_count == 0:
-        raise HTTPException(
-            status_code=404, detail=f"Taxon {taxon_id} not found in ignorelist"
-        )
-
-    await log_audit_event(
-        db,
-        action="ignorelist_remove",
-        actor=current_user["username"],
-        resource_type="ignorelist_entry",
-        resource_id=str(taxon_id),
-        outcome="success",
-    )
-    return {"deleted": True, "taxon_id": taxon_id}
-
-
-@router.patch(
-    "/ignorelist/{taxon_id}", summary="Update the reason/notes for an ignored taxon"
-)
-async def update_ignorelist_note(
-    taxon_id: int,
-    payload: IgnoreNotePayload,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(require_role("writer", "admin")),
-):
-    """Update reason for ignored taxon (writer or admin)."""
-    result = await db["outbreak_ignorelist"].update_one(
-        {"taxon_id": taxon_id},
-        {"$set": {"reason": payload.reason}},
-    )
-    _cache.clear()
-    await bump_cache_version(db)
-
-    if result.matched_count == 0:
-        raise HTTPException(
-            status_code=404, detail=f"Taxon {taxon_id} not found in ignorelist"
-        )
-
-    await log_audit_event(
-        db,
-        action="ignorelist_update",
-        actor=current_user["username"],
-        resource_type="ignorelist_entry",
-        resource_id=str(taxon_id),
-        outcome="success",
-    )
-    return {"updated": True, "taxon_id": taxon_id}
 
 
 # ============================================================================
@@ -250,11 +107,7 @@ async def _compute_outbreaks_for_config(
     This is fast because outbreak_taxa is a pre-computed small array,
     not the full profiles array which would require expensive unwinding.
     """
-    # Load ignorelist
-    ignored_docs = await fetch_capped(
-        db["outbreak_ignorelist"].find({}), "outbreak_ignorelist"
-    )
-    ignored_ids = {doc["taxon_id"] for doc in ignored_docs}
+    ignored_ids = await taxon_lists.taxon_ids(db, OUTBREAK_IGNORELIST)
 
     # Only fetch analyses within 2× the window.
     # Stream the cursor instead of materializing the full list so that
@@ -384,78 +237,3 @@ async def _compute_outbreaks_for_config(
         "superkingdoms": config["superkingdoms"],
         "outbreaks": outbreaks,
     }
-
-
-# ============================================================================
-# Known Pathogens Endpoints
-# ============================================================================
-
-
-@router.get("/pathogens", summary="List known pathogens")
-async def get_pathogens(
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    _user: dict = Depends(get_current_user),
-):
-    docs = await fetch_capped(
-        db["known_pathogens"].find().sort("added_at", -1), "known_pathogens"
-    )
-    for doc in docs:
-        doc["_id"] = str(doc["_id"])
-    return docs
-
-
-@router.post("/pathogens", summary="Add a taxon to the known pathogens list")
-async def add_pathogen(
-    payload: IgnorePayload,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(require_role("writer", "admin")),
-):
-    existing = await db["known_pathogens"].find_one({"taxon_id": payload.taxon_id})
-    if existing:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Taxon {payload.taxon_id} is already on the pathogens list",
-        )
-    doc = {
-        "taxon_id": payload.taxon_id,
-        "taxon_name": payload.taxon_name,
-        "superkingdom": payload.superkingdom,
-        "notes": payload.reason,
-        "added_by": current_user["username"],
-        "added_at": datetime.now(timezone.utc),
-    }
-    result = await db["known_pathogens"].insert_one(doc)
-    doc["_id"] = str(result.inserted_id)
-    await log_audit_event(
-        db,
-        action="pathogen_add",
-        actor=current_user["username"],
-        resource_type="pathogen_entry",
-        resource_id=str(payload.taxon_id),
-        outcome="success",
-    )
-    return doc
-
-
-@router.delete(
-    "/pathogens/{taxon_id}", summary="Remove a taxon from the known pathogens list"
-)
-async def remove_pathogen(
-    taxon_id: int,
-    db: AsyncIOMotorDatabase = Depends(get_db),
-    current_user: dict = Depends(require_role("writer", "admin")),
-):
-    result = await db["known_pathogens"].delete_one({"taxon_id": taxon_id})
-    if result.deleted_count == 0:
-        raise HTTPException(
-            status_code=404, detail=f"Taxon {taxon_id} not found in pathogens list"
-        )
-    await log_audit_event(
-        db,
-        action="pathogen_remove",
-        actor=current_user["username"],
-        resource_type="pathogen_entry",
-        resource_id=str(taxon_id),
-        outcome="success",
-    )
-    return {"deleted": True, "taxon_id": taxon_id}
