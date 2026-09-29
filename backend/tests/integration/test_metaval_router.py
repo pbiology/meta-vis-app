@@ -108,6 +108,44 @@ class TestListMetavalForSample:
         assert resp.status_code == 200
         assert resp.json() == []
 
+    async def test_returns_summary_without_blast_rows(self, client, fake_db, fake_blob):
+        oid, sample_oid = await insert_metaval(
+            fake_db, fake_blob, taxon_name="taxid_2886042_Shigella-virus-Moo19"
+        )
+        data = client.get(f"/api/v1/metaval/sample/{sample_oid}").json()
+        assert data == [
+            {
+                "_id": str(oid),
+                "sample_id": str(sample_oid),
+                "classifier": "kraken2",
+                "taxon_id": 2886042,
+                "taxon_name": "taxid_2886042_Shigella-virus-Moo19",
+                "display_name": "Shigella virus Moo19",
+            }
+        ]
+
+    async def test_returns_every_result_without_cap(self, client, fake_db, fake_blob):
+        sample_oid = ObjectId()
+        for i in range(201):
+            await insert_metaval(
+                fake_db,
+                fake_blob,
+                sample_id=str(sample_oid),
+                taxon_name=f"taxon-{i}",
+                with_reads=False,
+                with_igv=False,
+            )
+        data = client.get(f"/api/v1/metaval/sample/{sample_oid}").json()
+        assert len(data) == 201
+
+    async def test_invalid_stored_document_fails_loudly(self, app, fake_db, fake_blob):
+        _, sample_oid = await insert_metaval(fake_db, fake_blob)
+        await fake_db["metaval_results"].update_many({}, {"$unset": {"classifier": ""}})
+        resp = TestClient(app, raise_server_exceptions=False).get(
+            f"/api/v1/metaval/sample/{sample_oid}"
+        )
+        assert resp.status_code == 500
+
 
 # ---------------------------------------------------------------------------
 # GET /metaval/{metaval_id}
@@ -145,6 +183,24 @@ class TestGetMetaval:
     async def test_invalid_id_returns_422(self, client, fake_db):
         resp = client.get("/api/v1/metaval/not-an-objectid")
         assert resp.status_code == 422
+
+    async def test_verification_data_hides_blob_keys(self, client, fake_db, fake_blob):
+        oid, _ = await insert_metaval(fake_db, fake_blob, with_reads=True)
+        vd = client.get(f"/api/v1/metaval/{oid}").json()["verification_data"]
+        assert "read_1_key" not in vd
+        assert "blob_key" not in vd
+
+    async def test_invalid_verification_type_fails_loudly(
+        self, app, fake_db, fake_blob
+    ):
+        oid, _ = await insert_metaval(fake_db, fake_blob)
+        await fake_db["metaval_results"].update_one(
+            {"_id": oid}, {"$set": {"verification_data.type": "assembly"}}
+        )
+        resp = TestClient(app, raise_server_exceptions=False).get(
+            f"/api/v1/metaval/{oid}"
+        )
+        assert resp.status_code == 500
 
 
 # ---------------------------------------------------------------------------

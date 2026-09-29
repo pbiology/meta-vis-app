@@ -179,9 +179,12 @@ async def _ensure_indexes():
     await db["blobs"].create_index("key", unique=True)
 
     # metaval_results — fast lookup by the analysis that produced them; case_id
-    # stays indexed on its own for the cascade in delete_case.
+    # stays indexed on its own for the cascade in delete_case. sample_id needs
+    # its own index: the per-sample list filters on it alone, which the
+    # compound index (analysis_id first) cannot serve.
     await db["metaval_results"].create_index([("analysis_id", 1), ("sample_id", 1)])
     await db["metaval_results"].create_index("case_id")
+    await db["metaval_results"].create_index("sample_id")
 
     # taxon_lists — one doc per curated list; list_id is what entries reference
     await db["taxon_lists"].create_index("list_id", unique=True)
