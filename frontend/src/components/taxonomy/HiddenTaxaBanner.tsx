@@ -51,9 +51,9 @@ export default function HiddenTaxaBanner({
       <span className="flex-1">
         {hiddenCount} {hiddenCount === 1 ? "taxon" : "taxa"} hidden by {listNames.join(", ")}.
         {protectedCount > 0 &&
-          ` ${protectedCount} known ${
-            protectedCount === 1 ? "pathogen" : "pathogens"
-          } on these lists kept visible.`}
+          ` ${protectedCount} ${
+            protectedCount === 1 ? "taxon" : "taxa"
+          } on these lists kept visible (known pathogens and metaval results are never hidden).`}
       </span>
       {hiddenCount > 0 && (
         <button onClick={onShowAll} className="text-blue-600 hover:text-blue-800">

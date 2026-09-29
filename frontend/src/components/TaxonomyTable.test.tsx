@@ -5,7 +5,7 @@ import TaxonomyTable from "./TaxonomyTable";
 import { http, HttpResponse } from "msw";
 import { renderWithProviders } from "../test/utils";
 import { server } from "../test/server";
-import { entry, taxprofilerProfile, tranaProfile } from "../test/fixtures/samples";
+import { entry, metavalSummary, taxprofilerProfile, tranaProfile } from "../test/fixtures/samples";
 import type { SampleProfile } from "../api/types";
 
 const API = "*/api/v1";
@@ -15,6 +15,7 @@ const baseProps = {
   outbreakTaxonIds: new Set<number>(),
   ntcProfiles: [],
   metavalResults: [],
+  onSelectMetaval: () => {},
 };
 
 function nonHostBodyRows() {
@@ -93,6 +94,61 @@ describe("TaxonomyTable — bug regression coverage", () => {
       expect(nonHostBodyRows().length, `case: ${name}`).toBeGreaterThan(0);
       unmount();
     }
+  });
+});
+
+describe("TaxonomyTable — metaval", () => {
+  it("opens a metaval result from its row's pill", async () => {
+    const onSelectMetaval = vi.fn();
+    const profile = taxprofilerProfile();
+    renderWithProviders(
+      <TaxonomyTable
+        {...baseProps}
+        profile={profile}
+        metavalResults={[metavalSummary()]}
+        onSelectMetaval={onSelectMetaval}
+      />,
+      { sessionStorage: ALL_KINGDOMS }
+    );
+
+    const hivRow = screen.getByText("HIV-1").closest("tr")!;
+    await userEvent.click(within(hivRow).getByRole("button", { name: "metaval" }));
+    expect(onSelectMetaval).toHaveBeenCalledWith("mv-hiv");
+  });
+
+  it("only marks results from the table's own classifier", () => {
+    const profile = taxprofilerProfile("kraken2");
+    renderWithProviders(
+      <TaxonomyTable
+        {...baseProps}
+        profile={profile}
+        metavalResults={[metavalSummary({ classifier: "centrifuge" })]}
+      />,
+      { sessionStorage: ALL_KINGDOMS }
+    );
+    expect(screen.queryByRole("button", { name: "metaval" })).not.toBeInTheDocument();
+  });
+
+  it("'Metaval only' keeps just the examined taxa, most reads first", async () => {
+    const profile = taxprofilerProfile();
+    renderWithProviders(
+      <TaxonomyTable
+        {...baseProps}
+        profile={profile}
+        metavalResults={[
+          metavalSummary(),
+          metavalSummary({ _id: "mv-ecoli", taxon_id: 562, taxon_name: "Escherichia-coli" }),
+        ]}
+      />,
+      { sessionStorage: ALL_KINGDOMS }
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /metaval only/i }));
+
+    const rows = nonHostBodyRows();
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent("Escherichia coli");
+    expect(rows[1]).toHaveTextContent("HIV-1");
   });
 });
 
@@ -285,9 +341,20 @@ describe("TaxonomyTable — display filters", () => {
       { sessionStorage: ALL_KINGDOMS }
     );
 
-    expect(
-      await screen.findByText(/1 known pathogen on these lists kept visible/)
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/1 taxon on these lists kept visible/)).toBeInTheDocument();
+    expect(screen.getByText("HIV-1")).toBeInTheDocument();
+    expect(screen.queryByText("Escherichia coli")).not.toBeInTheDocument();
+  });
+
+  it("never hides a taxon metaval examined", async () => {
+    activate([562, 11676]);
+    const profile = taxprofilerProfile();
+    renderWithProviders(
+      <TaxonomyTable {...baseProps} profile={profile} metavalResults={[metavalSummary()]} />,
+      { sessionStorage: ALL_KINGDOMS }
+    );
+
+    expect(await screen.findByText(/1 taxon on these lists kept visible/)).toBeInTheDocument();
     expect(screen.getByText("HIV-1")).toBeInTheDocument();
     expect(screen.queryByText("Escherichia coli")).not.toBeInTheDocument();
   });
@@ -347,9 +414,7 @@ describe("TaxonomyTable — retired NCBI ids", () => {
       { sessionStorage: ALL_KINGDOMS }
     );
 
-    expect(
-      await screen.findByText(/1 known pathogen on these lists kept visible/)
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/1 taxon on these lists kept visible/)).toBeInTheDocument();
     const row = screen.getByText("HIV-1").closest("tr") as HTMLElement;
     expect(within(row).getByText("pathogen")).toBeInTheDocument();
   });

@@ -4,7 +4,6 @@ import TaxonDetailContent from "./TaxonDetailContent";
 import MetavalVerificationDataSection from "./metaval/MetavalVerificationDataSection";
 import MetavalBlastResultsSection from "./metaval/MetavalBlastResultsSection";
 import MetavalCandidateOrganismsSection from "./metaval/MetavalCandidateOrganismsSection";
-import type { BlastResults, CandidateOrganism } from "./metaval/types";
 
 export interface MetavalDetailsContentProps {
   metavalId: string;
@@ -35,13 +34,14 @@ export default function MetavalDetailsContent({
     );
   }
 
-  const taxonName = result.taxon_name as string | undefined;
-  const taxonLabel = taxonName?.replace(/^taxid_\d+_/, "").replace(/-/g, " ") ?? "—";
-  const sampleName = result.sample_name as string | undefined;
-  const classifier = result.classifier as string | undefined;
-  const taxonId = result.taxon_id as number | undefined;
-  const blast = result.blast as BlastResults | undefined;
-  const organisms = result.organisms as CandidateOrganism[] | undefined;
+  const {
+    display_name: taxonLabel,
+    sample_name: sampleName,
+    classifier,
+    taxon_id: taxonId,
+    blast,
+    organisms,
+  } = result;
 
   return (
     <div className="flex flex-col h-full">
@@ -67,7 +67,7 @@ export default function MetavalDetailsContent({
         <span className="text-xs text-gray-400">{classifier}</span>
         <span className="text-gray-200">/</span>
         <h1 className="text-sm font-medium text-gray-900 italic">{taxonLabel}</h1>
-        {taxonId && (
+        {taxonId != null && (
           <a
             href={`https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=${taxonId}`}
             target="_blank"

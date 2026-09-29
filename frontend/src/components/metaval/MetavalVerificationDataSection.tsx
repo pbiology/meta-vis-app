@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { useSubmitBlast } from "../../hooks/queries/useMetaval";
 import { axiosErrorDetail } from "../../utils/axiosError";
-import type { MetavalResult } from "../../api/types";
+import type { MetavalDetail, MetavalVerificationData } from "../../api/types";
 import BlastModal, { type BlastStatus } from "./BlastModal";
-import type { VerificationData } from "./types";
 
-const TYPE_LABEL: Record<string, string> = {
+const TYPE_LABEL: Record<MetavalVerificationData["type"], string> = {
   scaffolds: "Scaffolds",
   contigs: "Contigs",
   raw_reads: "Raw reads",
@@ -19,11 +18,10 @@ interface BlastState {
 
 interface MetavalVerificationDataSectionProps {
   metavalId: string;
-  result: MetavalResult | null;
+  result: MetavalDetail;
 }
 
-function sequenceCountLabel(vd: VerificationData): string {
-  if (vd.count == null) return "—";
+function sequenceCountLabel(vd: MetavalVerificationData): string {
   if (vd.type === "raw_reads") {
     const fc = vd.file_count ?? 1;
     return `${vd.count.toLocaleString()} × ${fc} (${fc > 1 ? "paired-end" : "single-end"})`;
@@ -42,7 +40,7 @@ export default function MetavalVerificationDataSection({
   });
   const submitBlast = useSubmitBlast();
 
-  const vd = (result?.verification_data ?? {}) as VerificationData;
+  const vd = result.verification_data;
   const closeBlast = () => setBlastState((s) => ({ ...s, open: false }));
 
   const handleBlastClick = () => {
@@ -72,56 +70,44 @@ export default function MetavalVerificationDataSection({
           </p>
         </div>
 
-        {vd.type ? (
-          <table className="w-full text-left">
-            <thead>
-              <tr>
-                {["Type", "Sequences", "Avg length", "Data availability", ""].map((h) => (
-                  <th
-                    key={h}
-                    className="px-5 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100"
+        <table className="w-full text-left">
+          <thead>
+            <tr>
+              {["Type", "Sequences", "Avg length", "Data availability", ""].map((h) => (
+                <th
+                  key={h}
+                  className="px-5 py-2.5 text-xs font-medium text-gray-400 border-b border-gray-100"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td className="px-5 py-2.5 text-xs text-gray-600">{TYPE_LABEL[vd.type]}</td>
+              <td className="px-5 py-2.5 text-xs text-gray-500 tabular-nums">
+                {sequenceCountLabel(vd)}
+              </td>
+              <td className="px-5 py-2.5 text-xs text-gray-500 tabular-nums">
+                {`${vd.avg_length} bp`}
+              </td>
+              <td className="px-5 py-2.5 text-xs text-gray-400">
+                {vd.available ? "Available" : <span className="text-gray-300">Not available</span>}
+              </td>
+              <td className="px-5 py-2.5 text-right">
+                {vd.available && (
+                  <button
+                    onClick={handleBlastClick}
+                    className="text-xs px-3 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
                   >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td className="px-5 py-2.5 text-xs text-gray-600">
-                  {TYPE_LABEL[vd.type] ?? vd.type}
-                </td>
-                <td className="px-5 py-2.5 text-xs text-gray-500 tabular-nums">
-                  {sequenceCountLabel(vd)}
-                </td>
-                <td className="px-5 py-2.5 text-xs text-gray-500 tabular-nums">
-                  {vd.avg_length == null ? "—" : `${vd.avg_length} bp`}
-                </td>
-                <td className="px-5 py-2.5 text-xs text-gray-400">
-                  {vd.available ? (
-                    "Available"
-                  ) : (
-                    <span className="text-gray-300">Not available</span>
-                  )}
-                </td>
-                <td className="px-5 py-2.5 text-right">
-                  {vd.available && (
-                    <button
-                      onClick={handleBlastClick}
-                      className="text-xs px-3 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
-                    >
-                      BLAST
-                    </button>
-                  )}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        ) : (
-          <p className="px-5 py-8 text-xs text-gray-300 text-center">
-            No verification data was ingested for this taxon.
-          </p>
-        )}
+                    BLAST
+                  </button>
+                )}
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </section>
     </>
   );

@@ -292,7 +292,8 @@ lists, created and renamed by writers and deleted by admins through
 their taxonomy table; deleting a list removes it from every user's
 preferences in the same transaction. Filtering happens only in the
 frontend (``utils/taxonFilters.ts``), after read totals are computed,
-and never hides a known pathogen — no backend query reads these lists.
+and never hides a known pathogen or a taxon metaval examined — no
+backend query reads these lists.
 
 ``POST /taxon-lists/{list_id}/entries/bulk`` adds up to 75,000 taxa.
 Classification — add, already on the list, or rejected and why — is

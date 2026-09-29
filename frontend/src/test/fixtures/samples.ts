@@ -1,4 +1,4 @@
-import type { SampleProfile, SampleProfileEntry } from "../../api/types";
+import type { MetavalSummary, SampleProfile, SampleProfileEntry } from "../../api/types";
 
 export function entry(
   taxon_id: number,
@@ -38,5 +38,19 @@ export function tranaProfile(): SampleProfile {
       entry(11320, "Influenza A virus", "Viruses", 0.3),
       entry(562, "Escherichia coli", "Bacteria", 0.05),
     ],
+  };
+}
+
+// One metaval list-endpoint entry; defaults to HIV-1 under kraken2, which has a
+// row in taxprofilerProfile().
+export function metavalSummary(overrides: Partial<MetavalSummary> = {}): MetavalSummary {
+  return {
+    _id: "mv-hiv",
+    sample_id: "sample-1",
+    classifier: "kraken2",
+    taxon_id: 11676,
+    taxon_name: "taxid_11676_HIV-1",
+    display_name: "HIV 1",
+    ...overrides,
   };
 }

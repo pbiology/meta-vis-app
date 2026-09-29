@@ -12,6 +12,7 @@ from bson.errors import InvalidId
 
 from app.database import get_db
 from app.auth.utils import get_current_user
+from app.models.metaval import MetavalDetailResponse, MetavalSummary
 
 router = APIRouter(prefix="/metaval", tags=["metaval"])
 logger = logging.getLogger(__name__)
@@ -25,29 +26,33 @@ def _oid(id_str: str) -> ObjectId:
         raise HTTPException(status_code=422, detail=f"Invalid id: '{id_str}'")
 
 
-def _serialise(doc: dict) -> dict:
-    # Every ObjectId has to be stringified: one left raw fails JSON encoding
-    # for the whole response, which the UI surfaces as "metaval results may be
-    # missing" rather than as the serialisation error it is.
+def _stringify_ids(doc: dict) -> dict:
+    # ObjectIds become str so the response models validate them as such.
     doc["_id"] = str(doc["_id"])
-    if doc.get("sample_id"):
+    if doc.get("sample_id") is not None:
         doc["sample_id"] = str(doc["sample_id"])
-    if doc.get("analysis_id"):
-        doc["analysis_id"] = str(doc["analysis_id"])
-    # Strip internal storage fields from organism list
-    for org in doc.get("organisms", []):
-        org.pop("igv_html", None)
-        org.pop("igv_key", None)
-    # Expose verification_data without internal blob keys
-    vd = doc.get("verification_data", {})
+    return doc
+
+
+def _with_verification_availability(doc: dict) -> dict:
+    # Blob keys stay internal; the UI only needs to know whether the stored
+    # sequences exist and can be sent to BLAST.
+    vd = doc.get("verification_data") or {}
     doc["verification_data"] = {
-        "type": vd.get("type"),
-        "count": vd.get("count"),
-        "avg_length": vd.get("avg_length"),
-        "file_count": vd.get("file_count", 1),
+        **vd,
         "available": bool(vd.get("blob_key") or vd.get("read_1_key")),
     }
     return doc
+
+
+# Only what MetavalSummary needs: BLAST rows are the bulk of each document.
+_SUMMARY_PROJECTION = {
+    "_id": 1,
+    "sample_id": 1,
+    "classifier": 1,
+    "taxon_id": 1,
+    "taxon_name": 1,
+}
 
 
 @router.get("/sample/{sample_id}", summary="List metaval results for a sample")
@@ -55,13 +60,20 @@ async def list_metaval_for_sample(
     sample_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
-):
+) -> list[dict]:
+    # No length cap: results are per sample, so the list is naturally bounded,
+    # and a cap would drop results without telling anyone.
     docs = (
         await db["metaval_results"]
-        .find({"sample_id": _oid(sample_id)})
-        .to_list(length=200)
+        .find({"sample_id": _oid(sample_id)}, _SUMMARY_PROJECTION)
+        .to_list(length=None)
     )
-    return [_serialise(d) for d in docs]
+    return [
+        MetavalSummary.model_validate(_stringify_ids(d)).model_dump(
+            mode="json", by_alias=True
+        )
+        for d in docs
+    ]
 
 
 @router.get("/{metaval_id}", summary="Get a single metaval result")
@@ -69,11 +81,14 @@ async def get_metaval(
     metaval_id: str,
     db: AsyncIOMotorDatabase = Depends(get_db),
     _user: dict = Depends(get_current_user),
-):
+) -> dict:
     doc = await db["metaval_results"].find_one({"_id": _oid(metaval_id)})
     if not doc:
         raise HTTPException(status_code=404, detail="Metaval result not found")
-    return _serialise(doc)
+    doc = _with_verification_availability(_stringify_ids(doc))
+    return MetavalDetailResponse.model_validate(doc).model_dump(
+        mode="json", by_alias=True
+    )
 
 
 @router.post("/{metaval_id}/blast", summary="Submit verification data to NCBI BLAST")

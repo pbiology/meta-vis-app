@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { BlastHitRow, BlastResults } from "./types";
+import type { BlastHitRow, MetavalBlast } from "../../api/types";
 
 interface BlastTableProps {
   rows: BlastHitRow[];
@@ -134,7 +134,7 @@ function BlastTable({ rows, program, onSelectTaxon }: Readonly<BlastTableProps>)
 }
 
 interface MetavalBlastResultsSectionProps {
-  blast: BlastResults | undefined;
+  blast: MetavalBlast;
   onSelectTaxon: (id: string) => void;
 }
 
@@ -147,8 +147,8 @@ export default function MetavalBlastResultsSection({
       <div className="px-5 py-3.5 border-b border-gray-100">
         <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">BLAST results</p>
       </div>
-      <BlastTable rows={blast?.blastn ?? []} program="BLASTn" onSelectTaxon={onSelectTaxon} />
-      <BlastTable rows={blast?.blastx ?? []} program="BLASTx" onSelectTaxon={onSelectTaxon} />
+      <BlastTable rows={blast.blastn} program="BLASTn" onSelectTaxon={onSelectTaxon} />
+      <BlastTable rows={blast.blastx} program="BLASTx" onSelectTaxon={onSelectTaxon} />
     </section>
   );
 }
