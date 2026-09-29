@@ -4,12 +4,20 @@
 # stores per-user app preferences and is keyed by the OIDC `sub` claim
 # (stable across username/email changes).
 
-from fastapi import APIRouter, Depends
+import logging
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pymongo import ReturnDocument
 
 from app.database import get_db
 from app.auth.utils import get_current_user
+from app.taxon_lists import store as taxon_lists
+from app.taxon_lists.kinds import TaxonListKind
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -43,27 +51,61 @@ VALID_KINGDOMS: frozenset[str] = frozenset(
 VALID_ANALYSIS_TYPES: frozenset[str] = frozenset({"shotgun", "amplicon"})
 
 
+# Both checks pass None through: in UserPreferencesUpdate a null is rejected by
+# its model validator, which runs after these.
+def _check_kingdoms(v: Optional[list[str]]) -> Optional[list[str]]:
+    if v is None:
+        return v
+    invalid = set(v) - VALID_KINGDOMS
+    if invalid:
+        raise ValueError(f"Invalid kingdoms: {invalid}")
+    return v
+
+
+def _check_analysis_types(v: Optional[list[str]]) -> Optional[list[str]]:
+    if v is None:
+        return v
+    invalid = set(v) - VALID_ANALYSIS_TYPES
+    if invalid:
+        raise ValueError(f"Invalid analysis types: {invalid}")
+    if not v:
+        raise ValueError("At least one analysis type must be visible")
+    return v
+
+
 class UserPreferences(BaseModel):
     preferred_kingdoms: list[str] = ["Viruses"]
     visible_analysis_types: list[str] = ["shotgun", "amplicon"]
+    # list_ids of the display-filter taxon lists hiding taxa from this user's
+    # taxonomy table. Existence is checked against the DB in the PATCH handler.
+    active_display_filters: list[str] = []
 
-    @field_validator("preferred_kingdoms")
-    @classmethod
-    def kingdoms_must_be_valid(cls, v: list[str]) -> list[str]:
-        invalid = set(v) - VALID_KINGDOMS
-        if invalid:
-            raise ValueError(f"Invalid kingdoms: {invalid}")
-        return v
+    _kingdoms = field_validator("preferred_kingdoms")(_check_kingdoms)
+    _analysis_types = field_validator("visible_analysis_types")(_check_analysis_types)
 
-    @field_validator("visible_analysis_types")
-    @classmethod
-    def analysis_types_must_be_valid(cls, v: list[str]) -> list[str]:
-        invalid = set(v) - VALID_ANALYSIS_TYPES
-        if invalid:
-            raise ValueError(f"Invalid analysis types: {invalid}")
-        if not v:
-            raise ValueError("At least one analysis type must be visible")
-        return v
+
+class UserPreferencesUpdate(BaseModel):
+    """Partial update: only the fields sent are changed.
+
+    PATCH used to replace the stored preferences with a full model, so a
+    client sending one field silently reset the others to their defaults.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    preferred_kingdoms: Optional[list[str]] = None
+    visible_analysis_types: Optional[list[str]] = None
+    active_display_filters: Optional[list[str]] = None
+
+    _kingdoms = field_validator("preferred_kingdoms")(_check_kingdoms)
+    _analysis_types = field_validator("visible_analysis_types")(_check_analysis_types)
+
+    @model_validator(mode="after")
+    def _no_nulls(self) -> "UserPreferencesUpdate":
+        nulled = [f for f in self.model_fields_set if getattr(self, f) is None]
+        if nulled:
+            raise ValueError(f"{', '.join(sorted(nulled))} cannot be null")
+        return self
 
 
 async def _count_reviews(db: AsyncIOMotorDatabase, username: str) -> int:
@@ -97,24 +139,64 @@ async def get_my_preferences(
     current_user: dict = Depends(get_current_user),
 ) -> UserPreferences:
     doc = await db["users"].find_one({"sub": current_user["sub"]}, {"preferences": 1})
-    prefs: dict = (doc or {}).get("preferences") or {}
-    return UserPreferences(**prefs)
+    prefs = UserPreferences(**((doc or {}).get("preferences") or {}))
+    return await _without_missing_filters(db, prefs, current_user["sub"])
 
 
 @router.patch("/me/preferences", summary="Update current user's preferences")
 async def update_my_preferences(
-    body: UserPreferences,
+    body: UserPreferencesUpdate,
     db: AsyncIOMotorDatabase = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ) -> UserPreferences:
-    await db["users"].update_one(
+    changes = body.model_dump(exclude_unset=True)
+    if "active_display_filters" in changes:
+        # Order-preserving de-duplication.
+        requested = list(dict.fromkeys(changes["active_display_filters"]))
+        found = await taxon_lists.existing_list_ids(
+            db, requested, TaxonListKind.DISPLAY_FILTER
+        )
+        unknown = [list_id for list_id in requested if list_id not in found]
+        if unknown:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Not display-filter lists: {', '.join(unknown)}",
+            )
+        changes["active_display_filters"] = requested
+
+    doc = await db["users"].find_one_and_update(
         {"sub": current_user["sub"]},
         {
             "$set": {
-                "preferences": body.model_dump(),
+                **{f"preferences.{field}": value for field, value in changes.items()},
                 "username": current_user["username"],
             }
         },
         upsert=True,
+        return_document=ReturnDocument.AFTER,
     )
-    return body
+    return UserPreferences(**(doc.get("preferences") or {}))
+
+
+async def _without_missing_filters(
+    db: AsyncIOMotorDatabase, prefs: UserPreferences, sub: str
+) -> UserPreferences:
+    """Drop active filters whose list no longer exists.
+
+    Deleting a list removes it from every user's preferences, so this only
+    catches drift. Dropping is the safe direction: it shows more taxa, never
+    fewer.
+    """
+    active = prefs.active_display_filters
+    found = await taxon_lists.existing_list_ids(
+        db, active, TaxonListKind.DISPLAY_FILTER
+    )
+    missing = [list_id for list_id in active if list_id not in found]
+    if not missing:
+        return prefs
+    logger.warning(
+        "User %s has unknown active display filters %s; ignoring them", sub, missing
+    )
+    return prefs.model_copy(
+        update={"active_display_filters": [i for i in active if i in found]}
+    )
