@@ -108,10 +108,16 @@ async def get_contaminant_alerts(
 
         cutoff = (date.today() - timedelta(days=window_days)).isoformat()
 
-        # Build a lookup: taxon_id -> contaminant entry
+        # Lookup: reported taxon_id -> contaminant entry. Retired ids NCBI merged
+        # into a contaminant map to that same entry, so an NTC classified with
+        # an older database still alerts, under the current taxon.
         contaminant_map = {c.taxon_id: c for c in contaminants}
+        aliases = await taxon_lists.merged_aliases(db, set(contaminant_map))
+        for current_id, old_ids in aliases.items():
+            for old_id in old_ids:
+                contaminant_map.setdefault(old_id, contaminant_map[current_id])
 
-        # taxon_id -> list of affected NTC occurrences
+        # current contaminant taxon_id -> list of affected NTC occurrences
         hits: dict[int, list[dict]] = {c.taxon_id: [] for c in contaminants}
 
         # Stream NTC sample docs so the full profile arrays are never all
@@ -149,9 +155,9 @@ async def get_contaminant_alerts(
                     tid = entry.get("taxon_id")
                     if tid not in contaminant_map:
                         continue
-                    min_r = contaminant_map[tid].min_reads
-                    if entry.get("abundance", 0) > min_r:
-                        hits[tid].append(
+                    contaminant = contaminant_map[tid]
+                    if entry.get("abundance", 0) > contaminant.min_reads:
+                        hits[contaminant.taxon_id].append(
                             {
                                 "case_id": doc["case_id"],
                                 "sample_id": doc["sample_id"],
