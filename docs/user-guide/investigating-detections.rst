@@ -39,12 +39,12 @@ Hide lists
    Display filters match the exact taxon id (hiding a genus does not
    hide its species) and are display only: **Total classified**,
    **Non-host reads** and every percentage still count the hidden taxa,
-   and reports and alerts are unaffected. **Known pathogens are never
-   hidden**, even when on an active list.
+   and reports and alerts are unaffected. **Known pathogens and taxa
+   metaval examined are never hidden**, even when on an active list.
 
    Whenever a filter hides anything, a banner above the table says how
-   many taxa and by which lists, and how many known pathogens it kept
-   visible. **Show all** pauses the filters for that table without
+   many taxa and by which lists, and how many known pathogens and metaval
+   results it kept visible. **Show all** pauses the filters for that table without
    changing your preference. If a list cannot be loaded, the table
    shows everything and says so — it never filters on part of a list.
 
@@ -217,17 +217,26 @@ Metaval validation
 `metaval <https://github.com/genomic-medicine-sweden/metaval>`_ runs on
 top of taxonomic profiling and produces per-organism read-level
 evidence: an IGV coverage plot against a reference genome and a BLASTN
-hit table. When metaval results are included at ingest, organisms it
-has examined get a coloured pill in the taxonomy table.
+hit table. Metaval results are shown in the taxonomy table itself:
+every organism metaval examined with the active classifier gets a green
+**metaval** pill, and clicking it opens the **Metaval Details** view for
+that organism. **Metaval only** narrows the table to those organisms;
+like every other row they are sorted by read count, most reads first.
 
-Pill states:
+A line above the table states metaval's status for the active
+classifier:
 
-- **Verified** — both IGV coverage and a BLASTN match are present.
-- **IGV only** — coverage available, no BLASTN result.
-- **BLAST only** — BLASTN match available, no IGV.
-- (no pill) — metaval did not examine this taxon.
+- *not run for this analysis* — no metaval output was ingested with
+  this analysis.
+- *no taxa examined for <classifier>* — metaval ran, but examined no
+  organism from this classifier.
+- *N taxa examined for <classifier>* — the pills in the table.
 
-Clicking the pill opens the **Metaval Details** page for the organism.
+A metaval result is never left out silently. When one has no row in the
+table — its taxon could not be resolved from older metaval output, or
+the taxon is a host or unclassified row the table never lists — an
+amber warning under the status line names it, with a link to its
+details.
 
 IGV coverage
    An embedded igv.js viewer showing read pile-up against the reference.
@@ -242,9 +251,9 @@ The interpretation of these is a clinical judgement and not something
 the app tries to make for you — but evenness of coverage and identity
 percentage are the two numbers most reviewers anchor on.
 
-If a case has no metaval pills at all on any organism, the metaval
-directory was not passed at ingest. Re-ingest with ``--metaval-igv``
-(see :doc:`loading-data`).
+If the status line says metaval was *not run* but it was, the metaval
+directory was not passed at ingest. Re-ingest with ``--metaval`` (see
+:doc:`loading-data`).
 
 BV-BRC enrichments
 ==================
