@@ -284,6 +284,64 @@ resolved server-side — ``taxa_retired`` first, then ``taxa`` (ingest
 placeholders count) — never taken from the client. All kinds share one
 API under ``/taxon-lists/{list_id}/entries``.
 
+**Display filters** are the one *user-creatable* kind: any number of
+lists, created and renamed by writers and deleted by admins through
+``POST/PATCH/DELETE /taxon-lists``, with server-generated ids
+(``df-<hex>``) so a rename never changes the reference. Each user's
+``preferences.active_display_filters`` names the lists hiding taxa from
+their taxonomy table; deleting a list removes it from every user's
+preferences in the same transaction. Filtering happens only in the
+frontend (``utils/taxonFilters.ts``), after read totals are computed,
+and never hides a known pathogen — no backend query reads these lists.
+
+``POST /taxon-lists/{list_id}/entries/bulk`` adds up to 75,000 taxa.
+Classification — add, already on the list, or rejected and why — is
+the pure ``rules.classify_taxa``, shared with the single add, over a
+fixed number of batched lookups (``store.resolve_taxa``,
+``existing_taxon_ids``, ``kinds_by_taxon``) whatever the batch size.
+A merged id is replaced by the id NCBI merged it into (one extra
+batched lookup resolves the replacements), which is then checked like
+any requested id; it is rejected only if that replacement is itself
+unknown. Replacements are reported in ``replaced`` and audited.
+``dry_run`` returns that report for a preview: the taxa to add are
+counted with a named sample of 100, while skipped and rejected ids are
+listed in full as bare ids with a reason code. A real run is
+all-or-nothing in one transaction (about 19 MB at the cap — fine on
+MongoDB 4.2+) and answers 422 with a fresh report if anything would be
+rejected. With ``MONGODB_USE_TRANSACTIONS=false`` a failure part-way
+through can leave part of a batch written.
+
+**Merge-aware matching.** Lists store current NCBI ids, but a sample
+classified with an older database reports ids NCBI has since merged
+(about 1 in 120 distinct taxa in practice). Wherever a list is used for
+matching, each id also matches the retired ids merged into it:
+``store.taxon_ids`` returns both (outbreak, NTC trends,
+``pathogen_cases``, the display filter's ``taxon-ids``), contaminant
+alerts key their lookup by the aliases and file hits under the current
+taxon, and entry responses carry ``merged_ids`` so the frontend's
+``lib/taxonLists.entriesById`` builds its lookups the same way. The
+aliases come from ``store.merged_aliases``: one query on the partial
+index ``taxa_retired.merged_into`` (``status: "merged"`` only), costing
+milliseconds and scaling with list size, not case count. One hop
+suffices — ``merged.dmp`` maps every old id straight to a current one.
+The index is defined once in ``app/taxonomy_indexes.py`` and applied
+both at startup and by ``load_taxonomy.py`` to its staging collection,
+since the rename that swaps it in replaces the collection's indexes;
+the loader then bumps the cache version. Deleted ids have no current
+equivalent and are not matched.
+
+Lists can hold tens of thousands of taxa, so entries are never read
+through ``fetch_capped``: the store reads them in full, and a truncated
+ignorelist or filter can no longer happen silently. The API serves them
+two ways — ``GET /taxon-lists/{id}/taxon-ids`` (every id, uncapped; the
+display filter uses it) and ``GET /taxon-lists/{id}/entries`` paginated
+with ``offset``/``limit`` (max 10,000) and ``q`` search. Views that need
+a whole list at once (``useAllTaxonListEntries``) request one full page
+and fail loudly when ``total`` exceeds it rather than show part of the
+list.
+
+``PATCH /users/me/preferences`` merges: only the fields sent change.
+
 Blob storage
 ============
 

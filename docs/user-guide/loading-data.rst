@@ -312,6 +312,9 @@ What happens:
    (see :doc:`investigating-detections`).
 4. Replaces ``taxa_retired`` with NCBI's merged and deleted ids (~880 000),
    so profiles carrying ids from an older taxonomy snapshot still resolve.
+   Taxon lists (ignorelists, known pathogens, contaminants, display
+   filters) match through it too, so the loader clears the analytics
+   caches afterwards: outbreak and NTC results pick up new merges at once.
 5. Takes 10–20 minutes depending on disk and network.
 
 Safe to re-run — existing entries are updated; clinical notes on

@@ -28,6 +28,56 @@ Rank filter
    *All / Genus / Species / Family / Order / Class / Phylum / No rank /
    Serotype*. Filters can be combined.
 
+Hide lists
+   Hides the taxa on the display-filter lists you tick — shared lists
+   such as *Skin flora* or *Kit contaminants*, curated under Sidebar →
+   **Display filters**. Your choice is saved to your preferences and
+   applies to every taxonomy table; other users choose their own. The
+   same choice is available under Sidebar → **Preferences** → *Hidden
+   taxa (display filters)*.
+
+   Display filters match the exact taxon id (hiding a genus does not
+   hide its species) and are display only: **Total classified**,
+   **Non-host reads** and every percentage still count the hidden taxa,
+   and reports and alerts are unaffected. **Known pathogens are never
+   hidden**, even when on an active list.
+
+   Whenever a filter hides anything, a banner above the table says how
+   many taxa and by which lists, and how many known pathogens it kept
+   visible. **Show all** pauses the filters for that table without
+   changing your preference. If a list cannot be loaded, the table
+   shows everything and says so — it never filters on part of a list.
+
+   To fill a list quickly, open it under **Display filters** and use
+   **+ Add many**: paste NCBI taxon ids separated by commas, spaces or
+   new lines (up to 75,000 at a time) and press **Check**. The preview
+   accounts for every value — how many taxa will be added (the first
+   100 by name), ids already on the list, and rejected ones grouped by
+   reason: not a number, not in the taxonomy, deleted from NCBI, or on a
+   conflicting list. **Copy rejected ids** copies them for fixing
+   elsewhere.
+
+   An id NCBI has *merged* into another taxon is not rejected: the
+   current id is added in its place, and the preview lists each
+   replacement (``1912894 → 28116``). Several old ids merged into one
+   taxon add it once. **Add** then adds exactly the
+   taxa counted as *to add*; if the list changed in the meantime,
+   nothing is added and the preview is refreshed.
+
+   Every list also matches the retired ids NCBI merged into its taxa. A
+   classifier database built on an older taxonomy still reports those
+   (``1912894`` rather than ``28116``), so a display filter hides them, a
+   known pathogen is flagged under them, and the ignorelists and
+   contaminant alerts apply to them too. The list page shows them under
+   each entry as *also matches*. Ids NCBI has deleted have no current
+   taxon and are not matched.
+
+   Every id must exist in Meta-vis's taxonomy reference: load the full
+   NCBI dump with ``load_taxonomy.py`` first, or most of a large list
+   will be rejected as *not in the taxonomy*. Lists of any size are
+   applied in full; the list page shows 100 taxa at a time, with search
+   by name or taxon id.
+
 Switching classifier tabs swaps the underlying profile while keeping
 your filters. Use this to spot-check consistency — an organism present
 across classifiers at similar abundance is a stronger signal than one

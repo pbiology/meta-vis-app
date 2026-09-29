@@ -139,8 +139,13 @@ Adding by NCBI taxon id:
 The stored name and kingdom come from Meta-vis's own taxonomy
 reference, not from the lookup. A taxon id that is not in it — never
 seen in an ingested sample and not loaded by ``load_taxonomy.py`` — is
-rejected, as is an id NCBI has merged (the error names the id to use
-instead) or deleted.
+rejected, as is an id NCBI has deleted. An id NCBI has merged into
+another taxon is added as that current id instead.
+
+Each list also matches the retired ids NCBI merged into its taxa, so an
+NTC classified with an older database — reporting an old id — is still
+excluded from the trends or alerted on as a known contaminant, under the
+current taxon and with its threshold.
 
 Inline edit: hover the *Reason* or *Alert threshold* cell, click the
 pencil, edit, Enter to save.

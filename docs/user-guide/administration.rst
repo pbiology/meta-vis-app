@@ -40,11 +40,19 @@ Role capability matrix
      - ✗
      - ✓
      - ✓
-   * - Add to ignorelists / known pathogens / known contaminants
+   * - Add to ignorelists / known pathogens / known contaminants / display filters
      - ✗
      - ✓
      - ✓
-   * - Remove from ignorelists / known pathogens / known contaminants
+   * - Create / rename display-filter lists
+     - ✗
+     - ✓
+     - ✓
+   * - Delete display-filter lists
+     - ✗
+     - ✗
+     - ✓
+   * - Remove from ignorelists / known pathogens / known contaminants / display filters
      - ✗
      - ✗
      - ✓
@@ -148,12 +156,20 @@ What is audited
 **Data ingestion**
    ``ingest`` — success or failure.
 
-**Taxon lists** (outbreak ignorelist, known pathogens, NTC ignorelist, NTC known contaminants)
-   ``taxon_list_entry_add``, ``taxon_list_entry_update``,
-   ``taxon_list_entry_remove``. ``resource_type`` is
+**Taxon lists** (outbreak ignorelist, known pathogens, NTC ignorelist, NTC known contaminants, display filters)
+   Entries: ``taxon_list_entry_add``, ``taxon_list_entry_update``,
+   ``taxon_list_entry_remove``. A bulk add is one
+   ``taxon_list_entry_bulk_add`` event against the list
+   (``resource_type`` ``taxon_list``), recording every added and skipped
+   id. ``resource_type`` is
    ``taxon_list_entry`` and ``resource_id`` is ``<list_id>:<taxon_id>``
    (e.g. ``ntc_ignorelist:1743``); ``detail`` carries the list id, its
    kind, and the fields added or changed.
+
+   Display-filter lists themselves: ``taxon_list_create``,
+   ``taxon_list_update``, ``taxon_list_delete``, with ``resource_type``
+   ``taxon_list`` and ``resource_id`` the list id. A delete records how
+   many entries went with the list.
 
 Event structure
 ---------------
@@ -226,7 +242,7 @@ resource_id)``, so the queries below stay fast as the log grows.
 
    // Deletions in the past 30 days
    db.audit_log.find({
-     action: { $in: ["delete_case", "taxon_list_entry_remove"] },
+     action: { $in: ["delete_case", "taxon_list_entry_remove", "taxon_list_delete"] },
      timestamp: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
    }).sort({ timestamp: -1 })
 
