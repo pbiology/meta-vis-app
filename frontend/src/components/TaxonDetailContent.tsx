@@ -1,6 +1,6 @@
 import { useTaxon } from "../hooks/queries/useTaxa";
-import { useTaxonListEntries } from "../hooks/queries/useTaxonLists";
-import { TAXON_LIST_IDS } from "../lib/taxonLists";
+import { useAllTaxonListEntries } from "../hooks/queries/useTaxonLists";
+import { TAXON_LIST_IDS, entriesById } from "../lib/taxonLists";
 import { useAuth } from "../context/AuthContext";
 import { useReportBuilder } from "../context/ReportBuilderContext";
 import LineageRow from "./taxon-detail/LineageRow";
@@ -39,7 +39,7 @@ export default function TaxonDetailContent({
   const taxonQ = useTaxon(Number(taxonId));
   const taxon = taxonQ.data as TaxonDoc | undefined;
 
-  const { data: pathogenList = [] } = useTaxonListEntries(TAXON_LIST_IDS.knownPathogens);
+  const { data: pathogenList = [] } = useAllTaxonListEntries(TAXON_LIST_IDS.knownPathogens);
 
   const canEdit = role === "writer" || role === "admin";
 
@@ -63,7 +63,8 @@ export default function TaxonDetailContent({
   }
 
   const nameColour = (taxon.superkingdom && KINGDOM_COLOURS[taxon.superkingdom]) ?? "text-gray-900";
-  const pathogen = pathogenList.find((p) => p.taxon_id === Number(taxonId));
+  // A retired id (from an older classifier database) finds its current taxon's entry.
+  const pathogen = entriesById(pathogenList)[Number(taxonId)];
 
   return (
     <div className="flex flex-col h-full">

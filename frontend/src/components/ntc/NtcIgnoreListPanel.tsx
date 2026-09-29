@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
   useAddTaxonListEntry,
   useRemoveTaxonListEntry,
-  useTaxonListEntries,
+  useAllTaxonListEntries,
   useUpdateTaxonListEntry,
 } from "../../hooks/queries/useTaxonLists";
 import type { TaxonListEntry } from "../../api/types";
@@ -28,7 +28,7 @@ export default function NtcIgnoreListPanel({
   canEdit,
   canDelete,
 }: Readonly<NtcIgnoreListPanelProps>) {
-  const ignorelistQ = useTaxonListEntries(LIST_ID);
+  const ignorelistQ = useAllTaxonListEntries(LIST_ID);
   const addMutation = useAddTaxonListEntry(LIST_ID);
   const updateNoteMutation = useUpdateTaxonListEntry(LIST_ID);
   const removeMutation = useRemoveTaxonListEntry(LIST_ID);

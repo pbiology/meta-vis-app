@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   useRemoveTaxonListEntry,
-  useTaxonListEntries,
+  useAllTaxonListEntries,
   useUpdateTaxonListEntry,
 } from "../hooks/queries/useTaxonLists";
 import { useAuth } from "../context/AuthContext";
@@ -18,7 +18,7 @@ export default function IgnoreList() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState("");
 
-  const ignorelistQ = useTaxonListEntries(LIST_ID, filter);
+  const ignorelistQ = useAllTaxonListEntries(LIST_ID, filter);
   const removeMutation = useRemoveTaxonListEntry(LIST_ID);
   const updateNoteMutation = useUpdateTaxonListEntry(LIST_ID);
 

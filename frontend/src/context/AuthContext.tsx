@@ -6,6 +6,7 @@ import type { AuthContextValue, Role, UserPreferences } from "../api/types";
 const DEFAULT_PREFERENCES: UserPreferences = {
   preferred_kingdoms: ["Viruses"],
   visible_analysis_types: ["shotgun", "amplicon"],
+  active_display_filters: [],
 };
 
 const ROLE_PRIORITY: Role[] = ["admin", "writer", "reader"];

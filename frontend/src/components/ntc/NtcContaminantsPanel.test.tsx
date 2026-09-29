@@ -3,6 +3,7 @@ import { http, HttpResponse } from "msw";
 import { screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "../../test/utils";
 import { server } from "../../test/server";
+import { entryPage } from "../../test/handlers";
 import NtcContaminantsPanel from "./NtcContaminantsPanel";
 
 const API = "*/api/v1";
@@ -24,7 +25,7 @@ describe("NtcContaminantsPanel", () => {
   it("renders rows returned by the API", async () => {
     server.use(
       http.get(`${API}/taxon-lists/ntc_known_contaminants/entries`, () =>
-        HttpResponse.json([contaminant(1, "Cutibacterium-acnes")])
+        HttpResponse.json(entryPage([contaminant(1, "Cutibacterium-acnes")]))
       )
     );
 

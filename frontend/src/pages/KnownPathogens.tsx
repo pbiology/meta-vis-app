@@ -2,7 +2,7 @@ import { useState } from "react";
 import {
   useAddTaxonListEntry,
   useRemoveTaxonListEntry,
-  useTaxonListEntries,
+  useAllTaxonListEntries,
 } from "../hooks/queries/useTaxonLists";
 import { useAuth } from "../context/AuthContext";
 import type { TaxonListEntry } from "../api/types";
@@ -13,7 +13,7 @@ const LIST_ID = TAXON_LIST_IDS.knownPathogens;
 
 export default function KnownPathogens() {
   const { role } = useAuth();
-  const { data: items = [], isLoading, isError } = useTaxonListEntries(LIST_ID);
+  const { data: items = [], isLoading, isError } = useAllTaxonListEntries(LIST_ID);
   const addMutation = useAddTaxonListEntry(LIST_ID);
   const removeMutation = useRemoveTaxonListEntry(LIST_ID);
   const [removeTarget, setRemoveTarget] = useState<TaxonListEntry | null>(null);
