@@ -60,32 +60,20 @@ function tooltip(delta: SampleReadDelta): string {
     : `${from} → ${to}${change}`;
 }
 
-/**
- * Fixed footprint, kept even when there is no badge to show.
- *
- * The samples table uses automatic layout, so content decides column widths:
- * without a reserved slot, a re-sequenced case's table and a first-run case's
- * table size their columns differently and stop lining up when you move
- * between cases. Wide enough for the longest label ("no top-up") and the
- * largest plausible delta ("▲ +999.9M"); anything longer merely widens the
- * column, as it did before.
- */
-const SLOT = "inline-flex shrink-0 w-[4.75rem]";
-
 interface SampleDeltaBadgeProps {
   delta?: SampleReadDelta;
 }
 
+// Sits in its own table column, shown only when the analysis has deltas, so
+// no width is reserved here for a missing badge.
 export default function SampleDeltaBadge({ delta }: Readonly<SampleDeltaBadgeProps>) {
-  if (!delta) return <span className={SLOT} aria-hidden="true" />;
+  if (!delta) return null;
   return (
-    <span className={SLOT}>
-      <span
-        title={tooltip(delta)}
-        className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${STYLES[delta.status]}`}
-      >
-        {label(delta)}
-      </span>
+    <span
+      title={tooltip(delta)}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium whitespace-nowrap ${STYLES[delta.status]}`}
+    >
+      {label(delta)}
     </span>
   );
 }

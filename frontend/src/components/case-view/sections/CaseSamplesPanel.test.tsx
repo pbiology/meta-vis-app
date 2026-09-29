@@ -253,3 +253,88 @@ describe("negative control column", () => {
     expect(cells[3]).toHaveTextContent("—");
   });
 });
+
+describe("QC columns", () => {
+  const taxprofilerQc = {
+    fastp: {
+      total_reads_before_filtering: 1_000_000,
+      passed_filter_reads: 812_000,
+      q30_rate: 0.921,
+    },
+    bowtie2: { overall_alignment_rate: 38, aligned_none: 503_440 },
+  };
+
+  it("shows fastp and bowtie2 metrics for a taxprofiler analysis", () => {
+    renderPanel([sample({ sample_id: "S1", taxprofiler: taxprofilerQc })]);
+
+    const row = within(rowFor("S1"));
+    expect(screen.getByRole("columnheader", { name: "Host" })).toHaveAttribute(
+      "title",
+      "Reads removed as host (bowtie2)"
+    );
+    expect(row.getByText("81.2%")).toBeInTheDocument();
+    expect(row.getByText("38.0%")).toBeInTheDocument();
+    expect(row.getByText("503,440")).toBeInTheDocument();
+    expect(row.getByText("92.1%")).toBeInTheDocument();
+  });
+
+  it("shows NanoPlot metrics for a TRANA analysis", () => {
+    renderPanel([
+      sample({
+        sample_id: "S1",
+        trana: {
+          nanoplot_processed: {
+            number_of_reads: 4_000,
+            mean_read_quality: 14.2,
+            read_length_n50: 1_500,
+          },
+        },
+      }),
+    ]);
+
+    const row = within(rowFor("S1"));
+    expect(screen.getByRole("columnheader", { name: "Mean Q" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Host" })).not.toBeInTheDocument();
+    expect(row.getByText("4,000")).toBeInTheDocument();
+    expect(row.getByText("14.2")).toBeInTheDocument();
+    expect(row.getByText("1,500")).toBeInTheDocument();
+  });
+
+  it("shows dashes for a sample without QC in a taxprofiler analysis", () => {
+    renderPanel([
+      sample({ sample_id: "S1", taxprofiler: taxprofilerQc }),
+      sample({ sample_id: "S2", sample_source: "blood" }),
+    ]);
+
+    const cells = within(rowFor("S2")).getAllByRole("cell");
+    expect(cells.slice(-4).map((c) => c.textContent)).toEqual(["—", "—", "—", "—"]);
+  });
+
+  it("adds no QC columns when no sample carries QC", () => {
+    renderPanel([sample({ sample_id: "S1" })]);
+
+    expect(screen.getAllByRole("columnheader")).toHaveLength(6);
+  });
+});
+
+describe("vs previous run column", () => {
+  it("is absent on a first run, where no sample has a delta", () => {
+    renderPanel([sample({ sample_id: "S1" })]);
+
+    expect(screen.queryByRole("columnheader", { name: "vs previous run" })).not.toBeInTheDocument();
+  });
+
+  it("holds the badge in its own cell, next to the read count", () => {
+    renderPanel([
+      sample({ sample_id: "S1", read_delta: delta({ status: "unchanged" }) }),
+      sample({ sample_id: "S2" }),
+    ]);
+
+    expect(screen.getByRole("columnheader", { name: "vs previous run" })).toBeInTheDocument();
+    const cells = within(rowFor("S1")).getAllByRole("cell");
+    expect(cells[5]).toHaveTextContent(/^1,000,000$/);
+    expect(cells[6]).toHaveTextContent("no top-up");
+    // A row without a delta still gets its (empty) cell, so columns line up.
+    expect(within(rowFor("S2")).getAllByRole("cell")).toHaveLength(7);
+  });
+});

@@ -12,10 +12,9 @@ import { useMetavalForSample } from "../hooks/queries/useMetaval";
 import { useOutbreaks } from "../hooks/queries/useAlerts";
 import type { SampleProfile } from "../api/types";
 import SampleQcSection from "./sample-detail/SampleQcSection";
-import ClassifierMetricsSection from "./sample-detail/ClassifierMetricsSection";
 import SampleKnownPathogensSection from "./sample-detail/SampleKnownPathogensSection";
 import SampleTaxonomySection from "./sample-detail/SampleTaxonomySection";
-import type { TaxprofilerQc, TranaQc } from "./sample-detail/types";
+import { sampleQc } from "../utils/sampleQc";
 
 function useReportSelection(sampleId: string) {
   const { selectedFor, addTaxon, removeTaxon } = useReportBuilder();
@@ -173,11 +172,8 @@ export default function SampleDetailContent({
     );
   }
 
-  const trana = sample?.trana as TranaQc | undefined;
-  const isTrana = Boolean(trana);
-  const qc = sample?.taxprofiler as TaxprofilerQc | undefined;
-  const fp = qc?.fastp;
-  const bt = qc?.bowtie2;
+  const isTrana = Boolean(sample?.trana);
+  const qc = sample?.taxprofiler;
   const classifiers: SampleProfile[] = profile?.profiles ?? [];
   const sampleType = (sample?.sample_type as string | undefined) ?? "sample";
   const auxWarning = auxDataWarningMessage(Boolean(outbreakError), Boolean(ntcError));
@@ -209,9 +205,7 @@ export default function SampleDetailContent({
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-6">
-        <SampleQcSection isTrana={isTrana} trana={trana} fp={fp} bt={bt} />
-
-        {!isTrana && <ClassifierMetricsSection classifiers={classifiers} qc={qc} />}
+        <SampleQcSection qc={sampleQc(sample)} />
 
         {!isTrana && metavalError && (
           <DataWarning message="Failed to load metaval data — metaval results may be missing." />
