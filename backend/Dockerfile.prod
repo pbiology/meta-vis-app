@@ -45,6 +45,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN groupadd --system --gid 1001 app \
     && useradd --system --uid 1001 --gid app --home-dir /app --shell /sbin/nologin app
 
+# The base image's pip is never used at runtime (deps come from the uv-built
+# venv), but its vendored msgpack/setuptools carry CVEs. Remove it.
+RUN python -m pip uninstall --yes pip
+
 WORKDIR /app
 
 COPY --from=builder /opt/venv /opt/venv
