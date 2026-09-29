@@ -41,6 +41,9 @@ from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from pymongo import UpdateOne
 
+from app.cache import bump_cache_version
+from app.taxonomy_indexes import ensure_retired_indexes
+
 load_dotenv(Path(__file__).parent / ".env")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -304,13 +307,18 @@ async def _replace_retired(db: AsyncIOMotorDatabase, docs: list[dict]) -> None:
     """
     staging = db[RETIRED_STAGING_COLLECTION]
     await staging.drop()
-    await staging.create_index("taxon_id", unique=True)
+    # The rename below replaces the live collection and its indexes: the
+    # staging copy must carry every index the app relies on.
+    await ensure_retired_indexes(staging)
     for batch_start in range(0, len(docs), BATCH_SIZE):
         await staging.insert_many(
             docs[batch_start : batch_start + BATCH_SIZE], ordered=False
         )
     await staging.rename(RETIRED_COLLECTION, dropTarget=True)
     log.info("Replaced %s with %d documents", RETIRED_COLLECTION, len(docs))
+    # Taxon lists match retired ids through this collection, so cached
+    # analytics (outbreak, NTC) must recompute with the new merges.
+    await bump_cache_version(db)
 
 
 async def load_taxonomy(dump_dir: Path, dry_run: bool) -> None:
