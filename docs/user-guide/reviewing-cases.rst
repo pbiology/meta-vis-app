@@ -66,9 +66,11 @@ has since been superseded does not sit in the pending queue forever.
 Case detail
 ===========
 
-Top of the page: case id, order date, sample summary, review status
-toggle, notes. Notes are editable by writers and admins; multiple notes
-are supported and timestamped per author.
+The top bar holds the case id, the review status and, for writers and
+admins, the **Mark reviewed** button. The sidebar on the left switches
+between the case's sections (see `Case sections`_). Notes live under
+**Comments**; they are editable by writers and admins, and each note is
+timestamped per author.
 
 Notes belong to the **case**, not to a single run, so they are visible and
 writable from every analysis of that case and survive re-sequencing.
@@ -90,6 +92,50 @@ run's data should not silently enter another run's report — and anything
 that no longer applies (a sample or taxon absent from the new run) is
 dropped and listed.
 
+Case sections
+-------------
+
+**Overview**
+   The case summary (order date, reviewer, ticket, status, sample count,
+   analysis type, platform, pipeline) with any warning pills, the samples
+   table, the two most recent comments, and known-pathogen hits across
+   the case's samples.
+
+**Samples**
+   The samples table, then the classifier results (see `Classifier
+   results`_). Click a sample row, here or on the overview, to open its
+   sample page (see `Sample detail`_).
+
+**MultiQC**
+   The run's MultiQC report, embedded and downloadable. Only shown when a
+   report was uploaded with the run.
+
+**Report**
+   The report draft for this analysis.
+
+**Comments**
+   All notes on the case.
+
+**Provenance**
+   Pipeline name, version, and per-tool versions from the
+   ``pipeline_info`` files captured at ingest.
+
+Sample QC columns
+-----------------
+
+The samples table puts each sample's QC side by side with its negative
+controls. Hover a column header to see which tool the number comes from.
+
+- **taxprofiler:** **Passed** (share of raw reads passing fastp),
+  **Host** (reads removed as host by bowtie2), **Non-host reads** and
+  **Q30**.
+- **TRANA:** **Passed** (reads left after processing), **Mean Q** and
+  **N50**, from NanoPlot.
+
+**Host** here is the host-removal rate *before* classification. It is not
+the same number as the per-classifier human share on the sample page,
+which divides human reads by what the classifier processed.
+
 .. _which-samples-were-topped-up:
 
 Which samples were topped up
@@ -97,9 +143,10 @@ Which samples were topped up
 
 A case is often delivered twice on purpose: a partial dataset first, so
 analysis can start sooner, then a top-up for any sample that had not
-reached the agreed data amount. From the second analysis onwards, the
-**Total reads** column in the samples table says how each sample compares
-to the most recent earlier run it appeared in:
+reached the agreed data amount. From the second analysis onwards, a
+**vs previous run** column next to **Total reads** in the samples table
+says how each sample compares to the most recent earlier run it appeared
+in:
 
 ``▲ +5.2M``
    Topped up — this sample gained data since that run.
@@ -119,7 +166,7 @@ to the most recent earlier run it appeared in:
    Shown rather than assumed unchanged.
 
 Hover any marker for the exact before/after counts. A case's first
-analysis has nothing to compare against, so it carries no markers at all.
+analysis has nothing to compare against, so the column is not shown.
 
 Negative controls
 -----------------
@@ -132,39 +179,33 @@ the affected sample pages repeat it. Without a control the taxonomy table
 shows no NTC column and flags no contaminants, which otherwise looks
 identical to a run whose control came back clean.
 
-Below, a tabbed view:
+Classifier results
+------------------
 
-**QC tables**
-   Per-classifier quality metrics, one table per classifier. Columns
-   include read counts, unclassified %, host removal %, species count,
-   genera count, top taxa.
+Below the samples table in the **Samples** section, one tab per
+classifier. Each tab shows the classifier's database, a table with one
+row per sample, and below it an interactive Krona plot for a quick sense
+of what dominates each sample.
 
-   **Host** is the share of everything the classifier processed —
-   classified plus unclassified reads — that landed on *Homo sapiens*.
-   The percentages beside **Top taxa** use a different denominator: the
-   non-host classified reads, matching the taxonomy table. See
-   :doc:`investigating-detections`.
+For taxprofiler the table columns are **Unclassified**, **Host**,
+**Species**, **Genera**, **Positive control** and **Top taxa**. For TRANA
+they are **Reads (raw)** and **Top taxa**, under the heading *Taxonomic
+profile*.
 
-   .. note::
+**Host** is the share of everything the classifier processed —
+classified plus unclassified reads — that landed on *Homo sapiens*. The
+percentages beside **Top taxa** use a different denominator: the
+non-host classified reads, matching the taxonomy table. See
+:doc:`investigating-detections`.
 
-      The **Host** figure was previously divided by host plus
-      unclassified reads, which left out the rest of the run and
-      overstated host content, often by a wide margin. It now divides by
-      all processed reads, so the column reads lower than it used to for
-      the same data. Figures quoted in reports written before this
-      change do not compare like for like.
+.. note::
 
-**Krona**
-   Interactive Krona plot, per classifier. Useful for a quick visual
-   sense of what dominates each sample.
-
-**Taxonomy**
-   The searchable taxonomy table — your main investigation surface.
-   Covered in :doc:`investigating-detections`.
-
-**Provenance**
-   Pipeline name, version, and per-tool versions from the
-   ``pipeline_info`` files captured at ingest.
+   The **Host** figure was previously divided by host plus unclassified
+   reads, which left out the rest of the run and overstated host
+   content, often by a wide margin. It now divides by all processed
+   reads, so the column reads lower than it used to for the same data.
+   Figures quoted in reports written before this change do not compare
+   like for like.
 
 Sample detail
 =============
@@ -172,9 +213,10 @@ Sample detail
 Click a sample name from the case to open the sample page. You get:
 
 - Sample metadata (id, type, nucleic acid, subject id).
-- Read counts and quality metrics.
-- One tab per classifier, each with that classifier's QC summary and a
-  taxonomy table for the sample.
+- A one-line QC summary. **Details** opens the full set, including raw
+  read count and Q20. To compare QC across samples, use the QC columns of
+  the case's samples table instead.
+- One tab per classifier, each with a taxonomy table for the sample.
 
 Subjects
 ========

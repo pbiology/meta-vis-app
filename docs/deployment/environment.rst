@@ -167,21 +167,21 @@ container's environment and overrides the baked-in values with them.
 ``VITE_API_PROXY_TARGET`` is dev-only and is *not* covered by the
 runtime override.
 
-====================================  ==========  ==============================================================
-Variable                              Required    Description
-====================================  ==========  ==============================================================
-``VITE_OIDC_AUTHORITY``               yes         Keycloak realm URL the SPA authenticates against.
-``VITE_OIDC_CLIENT_ID``               yes         SPA client ID. Default ``meta-vis-frontend``.
-``VITE_OIDC_REDIRECT_URI``            yes         OIDC callback URL. ``<frontend-origin>/auth/callback``.
-``VITE_OIDC_POST_LOGOUT_REDIRECT_URI``  yes       Where to land after logout. Usually the SPA root.
-``VITE_OIDC_ROLE_CLIENT``             opt         KC client whose client-roles drive UI authz. Defaults to
-                                                  ``VITE_OIDC_CLIENT_ID``. Build-time only — the runtime
-                                                  override script forwards the four ``VITE_OIDC_*`` keys
-                                                  above but not this one.
-``VITE_API_PROXY_TARGET``             dev only    Where ``npm run dev`` proxies ``/api/*`` calls. Compose
-                                                  overrides this to ``http://backend:8000``. Production
-                                                  builds ignore it — the prod nginx config does API proxying.
-====================================  ==========  ==============================================================
+======================================  ==========  ==============================================================
+Variable                                Required    Description
+======================================  ==========  ==============================================================
+``VITE_OIDC_AUTHORITY``                 yes         Keycloak realm URL the SPA authenticates against.
+``VITE_OIDC_CLIENT_ID``                 yes         SPA client ID. Default ``meta-vis-frontend``.
+``VITE_OIDC_REDIRECT_URI``              yes         OIDC callback URL. ``<frontend-origin>/auth/callback``.
+``VITE_OIDC_POST_LOGOUT_REDIRECT_URI``  yes         Where to land after logout. Usually the SPA root.
+``VITE_OIDC_ROLE_CLIENT``               opt         KC client whose client-roles drive UI authz. Defaults to
+                                                    ``VITE_OIDC_CLIENT_ID``. Build-time only — the runtime
+                                                    override script forwards the four ``VITE_OIDC_*`` keys
+                                                    above but not this one.
+``VITE_API_PROXY_TARGET``               dev only    Where ``npm run dev`` proxies ``/api/*`` calls. Compose
+                                                    overrides this to ``http://backend:8000``. Production
+                                                    builds ignore it — the prod nginx config does API proxying.
+======================================  ==========  ==============================================================
 
 Generating secrets
 ==================

@@ -1,93 +1,83 @@
-import { MetricStrip } from "../MetricStrip";
+import { useState } from "react";
+import { MetricStrip, type Metric } from "../MetricStrip";
 import { fmt, fmtPct } from "../../utils/format";
-import type { Bowtie2Stats, FastpStats, TranaQc } from "./types";
+import type { SampleQcSummary } from "../../utils/sampleQc";
 
 interface SampleQcSectionProps {
-  isTrana: boolean;
-  trana?: TranaQc;
-  fp?: FastpStats;
-  bt?: Bowtie2Stats;
+  qc: SampleQcSummary | null;
 }
 
-export default function SampleQcSection({
-  isTrana,
-  trana,
-  fp,
-  bt,
-}: Readonly<SampleQcSectionProps>) {
+function summaryParts(qc: SampleQcSummary): string[] {
+  if (qc.pipeline === "trana") {
+    return [
+      `${fmt(qc.passedReads)} passed`,
+      `mean Q ${fmt(qc.meanQuality, 1)}`,
+      `N50 ${fmt(qc.n50)} bp`,
+    ];
+  }
+  return [
+    `${fmtPct(qc.passedPct)} passed`,
+    `${fmtPct(qc.hostPct)} host`,
+    `${fmt(qc.nonHostReads)} non-host`,
+    `Q30 ${fmtPct(qc.q30Pct)}`,
+  ];
+}
+
+function detailMetrics(qc: SampleQcSummary): Metric[] {
+  const raw = { label: "Total reads", value: fmt(qc.rawReads), sub: "raw input" };
+  if (qc.pipeline === "trana") {
+    return [
+      raw,
+      { label: "Passed filter", value: fmt(qc.passedReads), sub: "after processing" },
+      { label: "Mean read length", value: fmt(qc.meanLength), sub: "bp" },
+      { label: "Mean quality", value: fmt(qc.meanQuality, 1), sub: "Q" },
+      { label: "Read N50", value: fmt(qc.n50), sub: "bp" },
+    ];
+  }
+  return [
+    raw,
+    {
+      label: "Passed filter",
+      value: fmt(qc.passedReads),
+      sub: qc.passedPct == null ? "fastp" : `${fmtPct(qc.passedPct)} of raw`,
+    },
+    { label: "Host removed", value: fmtPct(qc.hostPct), sub: "bowtie2" },
+    { label: "Non-host reads", value: fmt(qc.nonHostReads), sub: "bowtie2" },
+    { label: "Q20 rate", value: fmtPct(qc.q20Pct), sub: "fastp" },
+    { label: "Q30 rate", value: fmtPct(qc.q30Pct), sub: "fastp" },
+  ];
+}
+
+/**
+ * Sample QC as one line, with the full metrics one click away.
+ *
+ * Comparing QC across samples happens in the case's sample table; here it is
+ * context for reading the taxonomy, so it stays compact.
+ */
+export default function SampleQcSection({ qc }: Readonly<SampleQcSectionProps>) {
+  const [open, setOpen] = useState(false);
+
   return (
     <section>
-      <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">QC metrics</p>
-      {isTrana ? (
-        <MetricStrip
-          metrics={[
-            {
-              label: "Total reads",
-              value: fmt(trana?.nanoplot_unprocessed?.number_of_reads),
-              sub: "before processing",
-            },
-            {
-              label: "Passed filter",
-              value: fmt(trana?.nanoplot_processed?.number_of_reads),
-              sub: "after processing",
-            },
-            {
-              label: "Mean read length",
-              value: trana?.nanoplot_processed?.mean_read_length?.toFixed(0) ?? "—",
-              sub: "bp",
-            },
-            {
-              label: "Mean quality",
-              value: trana?.nanoplot_processed?.mean_read_quality?.toFixed(1) ?? "—",
-              sub: "Q",
-            },
-            {
-              label: "Read N50",
-              value: fmt(trana?.nanoplot_processed?.read_length_n50),
-              sub: "bp",
-            },
-          ]}
-        />
-      ) : (
-        <MetricStrip
-          metrics={[
-            {
-              label: "Total reads",
-              value: fp ? fmt(fp.total_reads_before_filtering) : "—",
-              sub: "before filtering",
-            },
-            {
-              label: "Passed filter",
-              value: fp ? fmt(fp.passed_filter_reads) : "—",
-              sub:
-                fp?.passed_filter_reads != null && fp.total_reads_before_filtering
-                  ? `${fmtPct(
-                      (fp.passed_filter_reads / fp.total_reads_before_filtering) * 100
-                    )} of raw`
-                  : "",
-            },
-            {
-              label: "Host removed",
-              value: bt ? fmtPct(bt.overall_alignment_rate) : "—",
-              sub: "bowtie2",
-            },
-            {
-              label: "Non-host reads",
-              value: bt ? fmt(bt.aligned_none) : "—",
-              sub: "bowtie2",
-            },
-            {
-              label: "Q20 rate",
-              value: fmtPct(fp?.q20_rate ? fp.q20_rate * 100 : null),
-              sub: "fastp",
-            },
-            {
-              label: "Q30 rate",
-              value: fmtPct(fp?.q30_rate ? fp.q30_rate * 100 : null),
-              sub: "fastp",
-            },
-          ]}
-        />
+      <div className="flex items-center gap-3">
+        <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">QC</p>
+        <p className="text-xs text-gray-700 font-mono flex-1">
+          {qc ? summaryParts(qc).join(" · ") : "No QC data for this sample."}
+        </p>
+        {qc && (
+          <button
+            onClick={() => setOpen((o) => !o)}
+            aria-expanded={open}
+            className="text-xs text-blue-600 hover:underline"
+          >
+            {open ? "Hide details" : "Details"}
+          </button>
+        )}
+      </div>
+      {qc && open && (
+        <div className="mt-2">
+          <MetricStrip metrics={detailMetrics(qc)} />
+        </div>
       )}
     </section>
   );

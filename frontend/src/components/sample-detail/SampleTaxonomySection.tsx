@@ -2,8 +2,7 @@ import TaxonomyTable, { type TaxonomySelection } from "../TaxonomyTable";
 import { useAppConfig } from "../../context/ConfigContext";
 import { isListedTaxon } from "../../utils/taxonFilters";
 import { metavalForClassifier, unmatchedMetaval } from "../../utils/metavalMatch";
-import type { MetavalSummary, SampleProfile } from "../../api/types";
-import type { ClassifierQcStats } from "./types";
+import type { ClassifierQcStats, MetavalSummary, SampleProfile } from "../../api/types";
 import MetavalStatus from "./MetavalStatus";
 
 interface NtcProfile {

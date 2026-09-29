@@ -159,6 +159,48 @@ export interface SampleReadDelta {
   pct_change: number | null;
 }
 
+// Pipeline QC blocks stored on a sample. Mirror the ingest models in
+// app/models/qc.py, which validate them; only the fields the UI reads are
+// listed here.
+
+export interface NanoplotStats {
+  number_of_reads?: number;
+  mean_read_length?: number;
+  mean_read_quality?: number;
+  read_length_n50?: number;
+}
+
+export interface TranaQc {
+  nanoplot_unprocessed?: NanoplotStats;
+  nanoplot_processed?: NanoplotStats;
+}
+
+export interface FastpStats {
+  total_reads_before_filtering?: number;
+  passed_filter_reads?: number;
+  q20_rate?: number;
+  q30_rate?: number;
+}
+
+export interface Bowtie2Stats {
+  overall_alignment_rate?: number;
+  aligned_none?: number;
+}
+
+export interface ClassifierQcStats {
+  unclassified_reads?: number;
+  classified_reads?: number;
+  total_reads?: number;
+  queries_aligned?: number;
+  [key: string]: unknown;
+}
+
+export interface TaxprofilerQc {
+  fastp?: FastpStats;
+  bowtie2?: Bowtie2Stats;
+  classifiers?: Record<string, ClassifierQcStats | undefined>;
+}
+
 export interface Sample {
   _id?: string;
   sample_id: string;
@@ -178,6 +220,9 @@ export interface Sample {
   // declared at ingest. [] means it was explicitly ingested without one, which
   // the UI must announce; null on a negative control, which has none.
   negative_control_sample_ids?: string[] | null;
+  // Written by the pipeline that produced the sample.
+  taxprofiler?: TaxprofilerQc;
+  trana?: TranaQc;
   [key: string]: unknown;
 }
 
