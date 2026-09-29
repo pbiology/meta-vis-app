@@ -1,13 +1,13 @@
 import client from "./client";
-import type { MetavalResult } from "./types";
+import type { MetavalDetail, MetavalSummary } from "./types";
 
-export async function getMetavalForSample(sampleId: string): Promise<MetavalResult[]> {
-  const res = await client.get<MetavalResult[]>(`/metaval/sample/${sampleId}`);
+export async function getMetavalForSample(sampleId: string): Promise<MetavalSummary[]> {
+  const res = await client.get<MetavalSummary[]>(`/metaval/sample/${sampleId}`);
   return res.data;
 }
 
-export async function getMetavalResult(metavalId: string): Promise<MetavalResult> {
-  const res = await client.get<MetavalResult>(`/metaval/${metavalId}`);
+export async function getMetavalResult(metavalId: string): Promise<MetavalDetail> {
+  const res = await client.get<MetavalDetail>(`/metaval/${metavalId}`);
   return res.data;
 }
 

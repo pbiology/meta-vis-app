@@ -5,11 +5,12 @@ import { useAppConfig } from "../context/ConfigContext";
 import KingdomBadge from "./KingdomBadge";
 import { fmt, fmtPct } from "../utils/format";
 import { readTotals } from "../utils/readTotals";
-import { applyDisplayFilters } from "../utils/taxonFilters";
+import { applyDisplayFilters, isListedTaxon } from "../utils/taxonFilters";
+import { metavalByTaxon, metavalForClassifier } from "../utils/metavalMatch";
 import DisplayFilterMenu from "./taxonomy/DisplayFilterMenu";
 import HiddenTaxaBanner from "./taxonomy/HiddenTaxaBanner";
 import { useDisplayFilters } from "./taxonomy/useDisplayFilters";
-import type { SampleProfile, SampleProfileEntry } from "../api/types";
+import type { MetavalSummary, SampleProfile, SampleProfileEntry } from "../api/types";
 
 const SESSION_KEY = "taxonomy-filters";
 
@@ -35,12 +36,6 @@ function saveFilters(patch: Partial<TaxFilters>) {
   } catch {
     // sessionStorage unavailable — silently skip
   }
-}
-
-export interface MetavalResultRef {
-  _id: string;
-  taxon_id: number;
-  classifier: string;
 }
 
 export interface NtcProfileForClassifier {
@@ -71,7 +66,8 @@ interface TaxonomyTableProps {
   profile: SampleProfile;
   allProfiles?: SampleProfile[];
   clfQc?: ClfQc | null;
-  metavalResults: MetavalResultRef[];
+  // All classifiers' results; the table picks out its own classifier's.
+  metavalResults: MetavalSummary[];
   sampleId: string;
   outbreakTaxonIds: Set<number>;
   ntcProfiles: NtcProfileForClassifier[];
@@ -83,6 +79,8 @@ interface TaxonomyTableProps {
   // When provided, taxon-name clicks call this instead of navigating, so the
   // taxon detail can be rendered inline (used inside CaseView).
   onSelectTaxon?: (taxonId: number) => void;
+  // Opens a metaval result inline, in place of the sample view.
+  onSelectMetaval: (metavalId: string) => void;
 }
 
 type SortCol = "name" | "rank" | "superkingdom" | "abundance" | "ntc" | "concordance";
@@ -138,6 +136,7 @@ export default function TaxonomyTable({
   isNtc = false,
   selection,
   onSelectTaxon,
+  onSelectMetaval,
 }: TaxonomyTableProps) {
   const { sessionKingdoms, setSessionKingdoms } = useAuth();
   const { hostTaxonIds } = useAppConfig();
@@ -178,32 +177,29 @@ export default function TaxonomyTable({
   const showNtcColumn = !isNtc;
   const hasNtc = showNtcColumn && ntcForClassifier.length > 0;
 
-  const tableEntries = allEntries.filter(
-    (t) =>
-      !hostTaxonIds.has(t.taxon_id) &&
-      t.name !== "unclassified" &&
-      !t.name?.startsWith("unclassified ")
-  );
+  const tableEntries = allEntries.filter((t) => isListedTaxon(t, hostTaxonIds));
+  const metavalByTaxonId = metavalByTaxon(metavalForClassifier(metavalResults, profile.classifier));
 
   const filtered = tableEntries.filter((t) => {
     if (taxSearch && !t.name?.toLowerCase().includes(taxSearch.toLowerCase())) return false;
     if (taxKingdoms.length > 0 && !taxKingdoms.includes(t.superkingdom ?? "")) return false;
-    if (
-      metavalOnly &&
-      metavalResults.length > 0 &&
-      !metavalResults.find((r) => r.taxon_id === t.taxon_id && r.classifier === profile.classifier)
-    )
-      return false;
+    // The length guard is load-bearing: "Metaval only" persists in
+    // sessionStorage but its toggle is hidden for a sample without metaval,
+    // so without the guard that sample would show an empty table with no way
+    // to clear the filter.
+    if (metavalOnly && metavalResults.length > 0 && !metavalByTaxonId.has(t.taxon_id)) return false;
     return true;
   });
 
   // Display filters apply last, after the read totals above are computed from
   // the full profile: hiding a taxon changes what is listed, never the totals.
-  // Known pathogens are protected and always stay visible.
+  // Known pathogens and taxa metaval examined are protected and always stay
+  // visible.
+  const protectedIds = new Set([...(pathogenIds ?? []), ...metavalByTaxonId.keys()]);
   const { visible, hiddenCount, protectedCount } = applyDisplayFilters(
     filtered,
     displayFilters.hiddenIds,
-    pathogenIds
+    protectedIds
   );
 
   const ntcSum = (taxon_id: number) =>
@@ -495,9 +491,7 @@ export default function TaxonomyTable({
               {pageEntries.map((t, i) => {
                 const pct = nonHostTotal > 0 ? (t.abundance / nonHostTotal) * 100 : 0;
                 const pctStr = pct < 0.001 ? "<0.001%" : `${pct.toFixed(3)}%`;
-                const mv = metavalResults.find(
-                  (r) => r.taxon_id === t.taxon_id && r.classifier === profile.classifier
-                );
+                const mv = metavalByTaxonId.get(t.taxon_id);
                 return (
                   <tr key={i} className="border-t border-gray-50 hover:bg-gray-50">
                     {selection && (
@@ -530,13 +524,13 @@ export default function TaxonomyTable({
                           </Link>
                         )}
                         {mv && (
-                          <Link
-                            to={`/samples/${sampleId}/metaval/${mv._id}`}
-                            onClick={(e) => e.stopPropagation()}
+                          <button
+                            type="button"
+                            onClick={() => onSelectMetaval(mv._id)}
                             className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-green-50 text-green-700 hover:bg-green-100 transition-colors"
                           >
                             <span className="underline">metaval</span>
-                          </Link>
+                          </button>
                         )}
                         {pathogenIds?.has(t.taxon_id) && (
                           <span className="flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs bg-red-50 text-red-600 font-medium">

@@ -13,7 +13,6 @@ import { useOutbreaks } from "../hooks/queries/useAlerts";
 import type { SampleProfile } from "../api/types";
 import SampleQcSection from "./sample-detail/SampleQcSection";
 import ClassifierMetricsSection from "./sample-detail/ClassifierMetricsSection";
-import SampleMetavalSection from "./sample-detail/SampleMetavalSection";
 import SampleKnownPathogensSection from "./sample-detail/SampleKnownPathogensSection";
 import SampleTaxonomySection from "./sample-detail/SampleTaxonomySection";
 import type { TaxprofilerQc, TranaQc } from "./sample-detail/types";
@@ -217,16 +216,6 @@ export default function SampleDetailContent({
         {!isTrana && metavalError && (
           <DataWarning message="Failed to load metaval data — metaval results may be missing." />
         )}
-        {!isTrana && (
-          <SampleMetavalSection
-            classifiers={classifiers}
-            metavalResults={metavalResults}
-            hasMetavalAnalysis={!!sample?.has_metaval}
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
-            onSelectMetaval={setActiveMetavalId}
-          />
-        )}
 
         <SampleKnownPathogensSection
           pathogenError={pathogenError}
@@ -242,6 +231,8 @@ export default function SampleDetailContent({
           classifiers={classifiers}
           qc={qc}
           metavalResults={metavalResults}
+          hasMetavalAnalysis={!!sample?.has_metaval}
+          metavalLoadFailed={metavalError}
           sampleId={sampleId}
           outbreakTaxonIds={outbreakTaxonIds}
           ntcProfiles={ntcProfiles}
@@ -253,6 +244,7 @@ export default function SampleDetailContent({
           activeTab={activeTab}
           onTabChange={setActiveTab}
           onSelectTaxon={setActiveTaxonId}
+          onSelectMetaval={setActiveMetavalId}
         />
       </div>
     </div>

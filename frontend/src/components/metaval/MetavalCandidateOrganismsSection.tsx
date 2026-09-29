@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
 import { useIgvUrl } from "../../hooks/queries/useMetaval";
-import type { CandidateOrganism } from "./types";
+import type { MetavalOrganism } from "../../api/types";
 
 interface MetavalCandidateOrganismsSectionProps {
   metavalId: string;
-  organisms: CandidateOrganism[] | undefined;
+  organisms: MetavalOrganism[];
 }
 
 export default function MetavalCandidateOrganismsSection({
   metavalId,
   organisms,
 }: Readonly<MetavalCandidateOrganismsSectionProps>) {
-  const [selected, setSelected] = useState<CandidateOrganism | null>(null);
+  const [selected, setSelected] = useState<MetavalOrganism | null>(null);
   const tooLarge = selected?.igv_too_large ?? false;
   const igvQ = useIgvUrl(metavalId, selected?.organism_name ?? "", {
     enabled: Boolean(selected) && !tooLarge,
@@ -23,7 +23,7 @@ export default function MetavalCandidateOrganismsSection({
     return () => URL.revokeObjectURL(igvQ.data);
   }, [igvQ.data]);
 
-  if (!organisms || organisms.length === 0) {
+  if (organisms.length === 0) {
     return (
       <section className="bg-white border border-gray-100 rounded-xl">
         <div className="px-5 py-3.5 border-b border-gray-100">

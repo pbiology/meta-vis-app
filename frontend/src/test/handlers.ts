@@ -147,15 +147,25 @@ export const defaultHandlers = [
 
   // metaval
   http.get(`${API}/metaval/sample/:sampleId`, () => HttpResponse.json([])),
-  // taxon_name / sample_name / classifier are always present on a real result
-  // and are what the detail page puts in its header.
+  // Full MetavalDetail shape, as the backend's response model guarantees.
   http.get(`${API}/metaval/:metavalId`, ({ params }) =>
     HttpResponse.json({
       _id: params.metavalId,
       sample_id: "s1",
       sample_name: "S1",
       classifier: "kraken2",
-      taxon_name: "Test taxon",
+      taxon_id: null,
+      taxon_name: "Test-taxon",
+      display_name: "Test taxon",
+      organisms: [],
+      blast: { blastn: [], blastx: [] },
+      verification_data: {
+        type: "contigs",
+        count: 1,
+        avg_length: 500,
+        file_count: null,
+        available: false,
+      },
     })
   ),
 

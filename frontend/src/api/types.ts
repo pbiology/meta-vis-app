@@ -480,18 +480,65 @@ export interface AuthContextValue {
 
 // Metaval
 
-export interface BlastHit {
-  [key: string]: unknown;
-}
+// Mirrors backend app/models/metaval.py (MetavalSummary, MetavalDetailResponse).
 
-export interface MetavalResult {
+/** GET /metaval/sample/:id — one entry per (classifier, taxon) metaval examined. */
+export interface MetavalSummary {
   _id: string;
   sample_id: string;
+  classifier: string;
+  // null for old-format metaval output whose taxon could not be resolved;
+  // such a result has no row in the taxonomy table.
+  taxon_id: number | null;
+  taxon_name: string;
+  display_name: string;
+}
+
+export interface MetavalOrganism {
+  organism_name: string;
+  igv_file_size_bytes: number;
+  igv_too_large: boolean;
+}
+
+export interface MetavalVerificationData {
+  type: "scaffolds" | "contigs" | "raw_reads";
+  count: number;
+  avg_length: number;
+  file_count: number | null;
+  available: boolean;
+}
+
+// BLAST summary rows are read verbatim from metaval's TSV output, so every
+// value is a string and the column set varies across pipeline versions —
+// hence all-optional.
+export interface BlastHitRow {
+  qseqid?: string;
+  ssciname?: string;
+  staxid?: string;
   organism_name?: string;
-  verification_data?: Record<string, unknown>;
-  blastn?: BlastHit[];
-  blastx?: BlastHit[];
-  [key: string]: unknown;
+  median_pident?: string;
+  median_length?: string;
+  median_bitscore?: string;
+  count?: string;
+}
+
+export interface MetavalBlast {
+  blastn: BlastHitRow[];
+  blastx: BlastHitRow[];
+}
+
+/** GET /metaval/:id */
+export interface MetavalDetail {
+  _id: string;
+  sample_id: string | null;
+  sample_name: string;
+  classifier: string;
+  taxon_id: number | null;
+  taxon_name: string;
+  display_name: string;
+  organisms: MetavalOrganism[];
+  blast: MetavalBlast;
+  verification_data: MetavalVerificationData;
 }
 
 // Taxa detail payloads — permissive; pages narrow per-field.

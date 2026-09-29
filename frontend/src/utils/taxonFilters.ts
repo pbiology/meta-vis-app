@@ -13,8 +13,25 @@ export interface DisplayFilterResult<T> {
 }
 
 /**
+ * Whether a profile entry gets a row in the taxonomy table at all: host taxa
+ * and unclassified bins never do. Shared with the metaval "no matching row"
+ * check (utils/metavalMatch.ts) so the two cannot disagree.
+ */
+export function isListedTaxon(
+  entry: { taxon_id: number; name: string },
+  hostTaxonIds: ReadonlySet<number>
+): boolean {
+  return (
+    !hostTaxonIds.has(entry.taxon_id) &&
+    entry.name !== "unclassified" &&
+    !entry.name?.startsWith("unclassified ")
+  );
+}
+
+/**
  * Remove entries whose `taxon_id` is in `hiddenIds`, except those in
- * `protectedIds` (known pathogens), which are always kept visible.
+ * `protectedIds` (known pathogens, metaval results), which are always kept
+ * visible.
  * Exact id matching: a filtered genus does not hide its species.
  */
 export function applyDisplayFilters<T extends { taxon_id: number }>(
