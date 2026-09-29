@@ -26,8 +26,9 @@ RUN npm run build -- --mode "${VITE_MODE}"
 # default — which matches our nginx.conf and the compose port mapping
 # (SonarQube docker:S6471). Stock `nginx` would run as root.
 # alpine-slim: only nginx + busybox (no perl/njs/image codecs), which keeps the
-# CVE surface small. Pinned by digest for reproducible builds; bump deliberately.
-FROM nginxinc/nginx-unprivileged:1.30-alpine-slim@sha256:e28dcf0a161ddcbf228c7364b4a14f9bad4763ae8f5317c437b896afa3df4b84
+# CVE surface small. Tag-pinned to the 1.30 line, so a rebuild picks up patch
+# releases and Alpine security fixes.
+FROM nginxinc/nginx-unprivileged:1.30-alpine-slim
 
 # Replace the stock default server block with ours.
 COPY nginx.conf /etc/nginx/conf.d/default.conf
