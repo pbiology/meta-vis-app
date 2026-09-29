@@ -635,3 +635,84 @@ class TestSharedControlAlerts:
         assert alerts[0]["control_count"] == 2
         assert alerts[1]["control_count"] == 1
         assert alerts[1]["case_count"] == 5
+
+
+# ---------------------------------------------------------------------------
+# Retired NCBI ids: an NTC classified with an older database reports the id
+# NCBI has since merged. The lists hold the current id and must still match.
+# ---------------------------------------------------------------------------
+
+CURRENT_ID = 329
+OLD_ID = 1912894
+
+
+async def _merge_old_into_current(db) -> None:
+    await db["taxa_retired"].insert_one(
+        {"taxon_id": OLD_ID, "status": "merged", "merged_into": CURRENT_ID}
+    )
+
+
+class TestRetiredIds:
+    async def test_contaminant_reported_under_old_id_alerts_as_current(self, fake_db):
+        await _merge_old_into_current(fake_db)
+        await seed_list_entries(
+            fake_db,
+            NTC_KNOWN_CONTAMINANTS,
+            {
+                "taxon_id": CURRENT_ID,
+                "taxon_name": "Ralstonia pickettii",
+                "superkingdom": "Bacteria",
+                "min_reads": 5,
+            },
+        )
+        await fake_db["samples"].insert_one(
+            make_ntc_doc(
+                "NTC-1", "case-1", DAY_1, profile=[make_taxon(OLD_ID, "Old name", 10)]
+            )
+        )
+
+        data = (
+            TestClient(make_app(fake_db)).get("/api/v1/ntc/contaminant-alerts").json()
+        )
+
+        assert [a["taxon_id"] for a in data["alerts"]] == [CURRENT_ID]
+        assert data["alerts"][0]["min_reads"] == 5
+        assert data["contaminant_case_ids"] == ["case-1"]
+
+    async def test_old_id_below_the_current_threshold_does_not_alert(self, fake_db):
+        await _merge_old_into_current(fake_db)
+        await seed_list_entries(
+            fake_db,
+            NTC_KNOWN_CONTAMINANTS,
+            {"taxon_id": CURRENT_ID, "taxon_name": "R", "min_reads": 50},
+        )
+        await fake_db["samples"].insert_one(
+            make_ntc_doc(
+                "NTC-1", "case-1", DAY_1, profile=[make_taxon(OLD_ID, "Old name", 10)]
+            )
+        )
+
+        data = (
+            TestClient(make_app(fake_db)).get("/api/v1/ntc/contaminant-alerts").json()
+        )
+
+        assert data["alerts"] == []
+
+    async def test_ignored_taxon_under_old_id_is_excluded_from_trends(self, fake_db):
+        await _merge_old_into_current(fake_db)
+        await seed_list_entries(
+            fake_db, NTC_IGNORELIST, {"taxon_id": CURRENT_ID, "taxon_name": "R"}
+        )
+        old = make_taxon(OLD_ID, "Old name", 20)
+        await fake_db["samples"].insert_many(
+            [
+                make_ntc_doc("NTC-1", "case-1", DAY_1, profile=[old]),
+                make_ntc_doc("NTC-2", "case-2", DAY_2, profile=[old]),
+            ]
+        )
+
+        resp = TestClient(make_app(fake_db)).get(
+            "/api/v1/ntc/trends?nucleic_acid=DNA&min_reads=3&min_control_pct=0.1"
+        )
+
+        assert OLD_ID not in [t["taxon_id"] for t in resp.json()["recurring_taxa"]]

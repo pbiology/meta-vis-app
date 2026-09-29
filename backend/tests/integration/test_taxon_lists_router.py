@@ -2,6 +2,9 @@
 #
 # The generic taxon-list API, exercised against each system list.
 
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -179,11 +182,21 @@ class TestAddEntry:
         )
         assert resp.status_code == 422
 
-    async def test_merged_taxon_points_at_its_replacement(self, db):
+    async def test_merged_taxon_is_added_as_its_current_id(self, db):
         resp = client_for(db).post(
             entries_url(KNOWN_PATHOGENS), json={"taxon_id": MERGED}
         )
-        assert resp.status_code == 422
+        assert resp.status_code == 201
+        assert resp.json()["taxon_id"] == RALSTONIA
+        assert resp.json()["taxon_name"] == "Ralstonia pickettii"
+        event = await db["audit_log"].find_one({"action": "taxon_list_entry_add"})
+        assert event["detail"]["replaced_merged_id"] == MERGED
+
+    async def test_merged_taxon_whose_current_id_is_on_the_list_is_409(self, db):
+        client = client_for(db)
+        client.post(entries_url(KNOWN_PATHOGENS), json={"taxon_id": RALSTONIA})
+        resp = client.post(entries_url(KNOWN_PATHOGENS), json={"taxon_id": MERGED})
+        assert resp.status_code == 409
         assert str(RALSTONIA) in resp.json()["detail"]
 
     async def test_deleted_taxon_is_422(self, db):
@@ -220,7 +233,7 @@ class TestListEntries:
         resp = client.get(
             entries_url(OUTBREAK_IGNORELIST), params={"superkingdom": "Viruses"}
         )
-        assert [row["taxon_id"] for row in resp.json()] == [HIV]
+        assert [row["taxon_id"] for row in resp.json()["items"]] == [HIV]
 
 
 class TestUpdateEntry:
@@ -292,3 +305,331 @@ class TestRemoveEntry:
     async def test_missing_entry_is_404(self, db):
         resp = client_for(db).delete(f"{entries_url(KNOWN_PATHOGENS)}/{HIV}")
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# User-created lists (display filters)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _no_transactions(monkeypatch):
+    # mongomock has no sessions: run list deletes without a transaction, the
+    # same path a standalone mongod takes.
+    import app.taxon_lists.service as service_module
+
+    monkeypatch.setattr(
+        service_module, "maybe_transaction", _no_transaction, raising=True
+    )
+    monkeypatch.setattr(service_module, "get_client", lambda: None)
+
+
+@asynccontextmanager
+async def _no_transaction(_client):
+    yield None
+
+
+def create_filter(db, name: str = "Skin flora", role: str = "writer") -> dict:
+    resp = client_for(db, role).post(
+        "/api/v1/taxon-lists", json={"kind": "display_filter", "name": name}
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+class TestCreateList:
+    async def test_writer_creates_a_display_filter(self, db):
+        created = create_filter(db)
+        assert created["list_id"].startswith("df-")
+        assert created["system"] is False
+        assert created["created_by"] == "testuser"
+        assert await db["audit_log"].find_one({"action": "taxon_list_create"})
+
+    async def test_reader_cannot_create(self, db):
+        resp = client_for(db, "reader").post(
+            "/api/v1/taxon-lists", json={"kind": "display_filter", "name": "x"}
+        )
+        assert resp.status_code == 403
+
+    async def test_system_kinds_cannot_be_created(self, db):
+        resp = client_for(db).post(
+            "/api/v1/taxon-lists", json={"kind": "known_pathogens", "name": "Mine"}
+        )
+        assert resp.status_code == 422
+
+    async def test_blank_name_is_rejected(self, db):
+        resp = client_for(db).post(
+            "/api/v1/taxon-lists", json={"kind": "display_filter", "name": ""}
+        )
+        assert resp.status_code == 422
+
+    async def test_overview_includes_entry_counts(self, db):
+        list_id = create_filter(db)["list_id"]
+        client_for(db).post(entries_url(list_id), json={"taxon_id": HIV})
+
+        resp = client_for(db, "reader").get(
+            "/api/v1/taxon-lists", params={"kind": "display_filter"}
+        )
+
+        assert [(r["list_id"], r["entry_count"]) for r in resp.json()] == [(list_id, 1)]
+
+
+class TestUpdateList:
+    async def test_writer_renames(self, db):
+        list_id = create_filter(db)["list_id"]
+        resp = client_for(db, "writer").patch(
+            f"/api/v1/taxon-lists/{list_id}", json={"name": "Skin commensals"}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["name"] == "Skin commensals"
+        assert resp.json()["list_id"] == list_id
+
+    async def test_system_list_cannot_be_renamed(self, db):
+        resp = client_for(db).patch(
+            f"/api/v1/taxon-lists/{KNOWN_PATHOGENS}", json={"name": "x"}
+        )
+        assert resp.status_code == 403
+
+    async def test_null_name_is_rejected(self, db):
+        list_id = create_filter(db)["list_id"]
+        resp = client_for(db).patch(
+            f"/api/v1/taxon-lists/{list_id}", json={"name": None}
+        )
+        assert resp.status_code == 422
+
+
+class TestDeleteList:
+    async def test_admin_deletes_list_entries_and_active_preferences(self, db):
+        list_id = create_filter(db)["list_id"]
+        client_for(db).post(entries_url(list_id), json={"taxon_id": HIV})
+        await db["users"].insert_one(
+            {
+                "sub": "sub-bob",
+                "preferences": {"active_display_filters": [list_id, "df-other"]},
+            }
+        )
+
+        resp = client_for(db, "admin").delete(f"/api/v1/taxon-lists/{list_id}")
+
+        assert resp.status_code == 204
+        assert await db["taxon_lists"].find_one({"list_id": list_id}) is None
+        assert await db["taxon_list_entries"].count_documents({"list_id": list_id}) == 0
+        bob = await db["users"].find_one({"sub": "sub-bob"})
+        assert bob["preferences"]["active_display_filters"] == ["df-other"]
+        event = await db["audit_log"].find_one({"action": "taxon_list_delete"})
+        assert event["detail"]["removed_entries"] == 1
+
+    async def test_writer_cannot_delete(self, db):
+        list_id = create_filter(db)["list_id"]
+        resp = client_for(db, "writer").delete(f"/api/v1/taxon-lists/{list_id}")
+        assert resp.status_code == 403
+
+    async def test_system_list_cannot_be_deleted(self, db):
+        resp = client_for(db).delete(f"/api/v1/taxon-lists/{KNOWN_PATHOGENS}")
+        assert resp.status_code == 403
+        assert await db["taxon_lists"].find_one({"list_id": KNOWN_PATHOGENS})
+
+
+class TestDisplayFilterEntries:
+    async def test_entries_do_not_bump_the_analytics_cache(self, db):
+        list_id = create_filter(db)["list_id"]
+        client_for(db).post(entries_url(list_id), json={"taxon_id": HIV})
+        assert await cache_version(db) == 0
+
+    async def test_display_filter_and_ntc_ignore_do_not_conflict(self, db):
+        list_id = create_filter(db)["list_id"]
+        client = client_for(db)
+        client.post(entries_url(NTC_IGNORELIST), json={"taxon_id": RALSTONIA})
+        resp = client.post(entries_url(list_id), json={"taxon_id": RALSTONIA})
+        assert resp.status_code == 201
+
+
+class TestBulkAdd:
+    def _bulk(self, db, list_id, role="writer", **body):
+        return client_for(db, role).post(f"{entries_url(list_id)}/bulk", json=body)
+
+    async def test_dry_run_reports_every_id_and_writes_nothing(self, db):
+        list_id = create_filter(db)["list_id"]
+        client_for(db).post(entries_url(list_id), json={"taxon_id": HIV})
+
+        resp = self._bulk(
+            db,
+            list_id,
+            taxon_ids=[RALSTONIA, HIV, MERGED, DELETED, 123456],
+            dry_run=True,
+        )
+
+        assert resp.status_code == 200
+        report = resp.json()
+        # MERGED was merged into RALSTONIA, also in the paste: one entry.
+        assert report["to_add_count"] == 1
+        assert report["to_add_sample"][0]["taxon_name"] == "Ralstonia pickettii"
+        assert report["already_on_list"] == [HIV]
+        assert report["replaced"] == [{"taxon_id": MERGED, "merged_into": RALSTONIA}]
+        assert {r["taxon_id"]: r["reason"] for r in report["rejected"]} == {
+            DELETED: "deleted",
+            123456: "not_in_taxonomy",
+        }
+        assert report["added"] == 0
+        assert await db["taxon_list_entries"].count_documents({"list_id": list_id}) == 1
+
+    async def test_real_run_adds_all_valid_taxa_with_the_reason(self, db):
+        list_id = create_filter(db)["list_id"]
+
+        resp = self._bulk(db, list_id, taxon_ids=[RALSTONIA, HIV], reason="Skin")
+
+        assert resp.status_code == 200
+        assert resp.json()["added"] == 2
+        entries = (
+            await db["taxon_list_entries"].find({"list_id": list_id}).to_list(None)
+        )
+        assert sorted(e["taxon_id"] for e in entries) == [RALSTONIA, HIV]
+        assert {e["reason"] for e in entries} == {"Skin"}
+
+    async def test_already_on_list_is_skipped_not_an_error(self, db):
+        list_id = create_filter(db)["list_id"]
+        client_for(db).post(entries_url(list_id), json={"taxon_id": HIV})
+
+        resp = self._bulk(db, list_id, taxon_ids=[HIV, RALSTONIA])
+
+        assert resp.status_code == 200
+        assert resp.json()["added"] == 1
+
+    async def test_any_rejection_on_a_real_run_adds_nothing(self, db):
+        list_id = create_filter(db)["list_id"]
+
+        resp = self._bulk(db, list_id, taxon_ids=[RALSTONIA, 123456])
+
+        assert resp.status_code == 422
+        detail = resp.json()["detail"]
+        assert [r["taxon_id"] for r in detail["report"]["rejected"]] == [123456]
+        assert await db["taxon_list_entries"].count_documents({"list_id": list_id}) == 0
+
+    async def test_one_audit_event_and_one_cache_bump_per_batch(self, db):
+        self._bulk(db, OUTBREAK_IGNORELIST, taxon_ids=[RALSTONIA, HIV])
+
+        events = (
+            await db["audit_log"]
+            .find({"action": {"$regex": "^taxon_list_entry"}})
+            .to_list(None)
+        )
+        assert [e["action"] for e in events] == ["taxon_list_entry_bulk_add"]
+        assert events[0]["detail"]["taxon_ids"] == [RALSTONIA, HIV]
+        assert await cache_version(db) == 1
+
+    async def test_contaminant_defaults_apply_to_every_entry(self, db):
+        self._bulk(db, NTC_KNOWN_CONTAMINANTS, taxon_ids=[RALSTONIA, HIV], min_reads=7)
+        entries = (
+            await db["taxon_list_entries"]
+            .find({"list_id": NTC_KNOWN_CONTAMINANTS})
+            .to_list(None)
+        )
+        assert {e["min_reads"] for e in entries} == {7}
+
+    async def test_reader_cannot_bulk_add(self, db):
+        list_id = create_filter(db)["list_id"]
+        resp = self._bulk(db, list_id, role="reader", taxon_ids=[HIV])
+        assert resp.status_code == 403
+
+    async def test_batch_size_is_capped(self, db):
+        list_id = create_filter(db)["list_id"]
+        resp = self._bulk(db, list_id, taxon_ids=list(range(1, 75_002)))
+        assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Large lists — nothing is silently capped
+# ---------------------------------------------------------------------------
+
+
+async def _seed_large_list(db, list_id: str, n: int) -> None:
+    await db["taxon_list_entries"].insert_many(
+        [
+            {
+                "list_id": list_id,
+                "taxon_id": i,
+                "taxon_name": f"Taxon {i}",
+                "added_by": "test",
+                "added_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+            }
+            for i in range(1, n + 1)
+        ]
+    )
+
+
+class TestBulkReplacement:
+    async def test_merged_ids_are_added_as_current_and_audited(self, db):
+        list_id = create_filter(db)["list_id"]
+
+        resp = TestBulkAdd()._bulk(db, list_id, taxon_ids=[MERGED, HIV])
+
+        assert resp.status_code == 200
+        entries = await db["taxon_list_entries"].distinct(
+            "taxon_id", {"list_id": list_id}
+        )
+        assert sorted(entries) == [RALSTONIA, HIV]
+        event = await db["audit_log"].find_one({"action": "taxon_list_entry_bulk_add"})
+        assert event["detail"]["replaced"] == [[MERGED, RALSTONIA]]
+
+
+class TestLargeLists:
+    async def test_taxon_ids_endpoint_returns_every_id_past_the_old_cap(self, db):
+        await _seed_large_list(db, KNOWN_PATHOGENS, 12_000)
+        resp = client_for(db, "reader").get(
+            f"/api/v1/taxon-lists/{KNOWN_PATHOGENS}/taxon-ids"
+        )
+        body = resp.json()
+        assert body["count"] == 12_000
+        assert len(body["taxon_ids"]) == 12_000
+
+    async def test_store_reads_are_uncapped(self, db):
+        from app.models.taxon_list import TaxonListEntry
+        from app.taxon_lists import store
+
+        await _seed_large_list(db, NTC_IGNORELIST, 12_000)
+        assert len(await store.taxon_ids(db, NTC_IGNORELIST)) == 12_000
+        entries = await store.list_entries(db, NTC_IGNORELIST, model=TaxonListEntry)
+        assert len(entries) == 12_000
+
+    async def test_entries_are_paged_with_a_total(self, db):
+        await _seed_large_list(db, KNOWN_PATHOGENS, 250)
+        resp = client_for(db).get(
+            entries_url(KNOWN_PATHOGENS), params={"offset": 200, "limit": 100}
+        )
+        body = resp.json()
+        assert body["total"] == 250
+        assert len(body["items"]) == 50
+        # Same added_at throughout: taxon_id breaks the tie deterministically.
+        assert body["items"][0]["taxon_id"] == 201
+
+    async def test_search_matches_name_or_exact_id(self, db):
+        await _seed_large_list(db, KNOWN_PATHOGENS, 30)
+        client = client_for(db)
+
+        by_name = client.get(entries_url(KNOWN_PATHOGENS), params={"q": "taxon 2"})
+        by_id = client.get(entries_url(KNOWN_PATHOGENS), params={"q": "7"})
+
+        assert by_name.json()["total"] == 11  # 2, 20–29
+        # A number matches the exact id and any name containing it.
+        assert [e["taxon_id"] for e in by_id.json()["items"]] == [7, 17, 27]
+
+    async def test_page_size_is_bounded(self, db):
+        resp = client_for(db).get(
+            entries_url(KNOWN_PATHOGENS), params={"limit": 10_001}
+        )
+        assert resp.status_code == 422
+
+    async def test_bulk_preview_names_a_sample_but_counts_everything(self, db):
+        list_id = create_filter(db)["list_id"]
+        await db["taxa"].insert_many(
+            [
+                {"taxon_id": 100_000 + i, "name": f"T{i}", "superkingdom": "Bacteria"}
+                for i in range(150)
+            ]
+        )
+        ids = [100_000 + i for i in range(150)]
+
+        report = TestBulkAdd()._bulk(db, list_id, taxon_ids=ids, dry_run=True).json()
+
+        assert report["to_add_count"] == 150
+        assert len(report["to_add_sample"]) == 100

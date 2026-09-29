@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useTaxonListEntries } from "../hooks/queries/useTaxonLists";
-import { TAXON_LIST_IDS } from "../lib/taxonLists";
+import { useAllTaxonListEntries } from "../hooks/queries/useTaxonLists";
+import { TAXON_LIST_IDS, entriesById, matchedIds } from "../lib/taxonLists";
 import MetavalDetailsContent from "./MetavalDetailsContent";
 import TaxonDetailContent from "./TaxonDetailContent";
 import Badge, { type BadgeType } from "./Badge";
@@ -110,7 +110,7 @@ export default function SampleDetailContent({
   });
   const { data: ntcData, isError: ntcError } = useNtcProfiles(sampleId, { enabled: !!sample });
   const { data: outbreakData, isError: outbreakError } = useOutbreaks(14);
-  const { data: pathogenList = [], isError: pathogenError } = useTaxonListEntries(
+  const { data: pathogenList = [], isError: pathogenError } = useAllTaxonListEntries(
     TAXON_LIST_IDS.knownPathogens
   );
 
@@ -121,11 +121,9 @@ export default function SampleDetailContent({
     () => new Set(outbreakData?.outbreaks?.map((o) => o.taxon_id) ?? []),
     [outbreakData]
   );
-  const pathogenIds = useMemo(() => new Set(pathogenList.map((p) => p.taxon_id)), [pathogenList]);
-  const pathogenMap = useMemo(
-    () => Object.fromEntries(pathogenList.map((p) => [p.taxon_id, p])),
-    [pathogenList]
-  );
+  // Keyed by retired ids too: an older classifier database reports those.
+  const pathogenIds = useMemo(() => matchedIds(pathogenList), [pathogenList]);
+  const pathogenMap = useMemo(() => entriesById(pathogenList), [pathogenList]);
 
   // Pick the first available classifier as the active tab; switch when the
   // profile changes (e.g. cross-sample navigation) and the prior tab no longer

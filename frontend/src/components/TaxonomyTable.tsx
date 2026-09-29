@@ -5,6 +5,10 @@ import { useAppConfig } from "../context/ConfigContext";
 import KingdomBadge from "./KingdomBadge";
 import { fmt, fmtPct } from "../utils/format";
 import { readTotals } from "../utils/readTotals";
+import { applyDisplayFilters } from "../utils/taxonFilters";
+import DisplayFilterMenu from "./taxonomy/DisplayFilterMenu";
+import HiddenTaxaBanner from "./taxonomy/HiddenTaxaBanner";
+import { useDisplayFilters } from "./taxonomy/useDisplayFilters";
 import type { SampleProfile, SampleProfileEntry } from "../api/types";
 
 const SESSION_KEY = "taxonomy-filters";
@@ -137,6 +141,7 @@ export default function TaxonomyTable({
 }: TaxonomyTableProps) {
   const { sessionKingdoms, setSessionKingdoms } = useAuth();
   const { hostTaxonIds } = useAppConfig();
+  const displayFilters = useDisplayFilters();
 
   const saved = loadFilters();
   const [taxSearch, setTaxSearch] = useState(() => saved.taxSearch ?? "");
@@ -192,6 +197,15 @@ export default function TaxonomyTable({
     return true;
   });
 
+  // Display filters apply last, after the read totals above are computed from
+  // the full profile: hiding a taxon changes what is listed, never the totals.
+  // Known pathogens are protected and always stay visible.
+  const { visible, hiddenCount, protectedCount } = applyDisplayFilters(
+    filtered,
+    displayFilters.hiddenIds,
+    pathogenIds
+  );
+
   const ntcSum = (taxon_id: number) =>
     ntcForClassifier.reduce((sum, ntc) => sum + (ntc.abundanceMap[taxon_id] ?? 0), 0);
 
@@ -205,7 +219,7 @@ export default function TaxonomyTable({
     return ntcSum(t.taxon_id) > contaminantThreshold;
   };
 
-  const sorted = [...filtered].sort((a, b) => {
+  const sorted = [...visible].sort((a, b) => {
     if (taxSort.col === "name") return taxSort.dir * a.name.localeCompare(b.name);
     if (taxSort.col === "rank") return taxSort.dir * (a.rank ?? "").localeCompare(b.rank ?? "");
     if (taxSort.col === "superkingdom")
@@ -309,7 +323,7 @@ export default function TaxonomyTable({
         </div>
         <div className="bg-gray-50 rounded-lg px-3 py-2">
           <p className="text-xs text-gray-400 mb-0.5">Organisms shown</p>
-          <p className="text-sm font-medium text-gray-700">{fmt(filtered.length)}</p>
+          <p className="text-sm font-medium text-gray-700">{fmt(visible.length)}</p>
         </div>
         <div className="bg-gray-50 rounded-lg px-3 py-2">
           <p className="text-xs text-gray-400 mb-0.5">Page</p>
@@ -395,6 +409,14 @@ export default function TaxonomyTable({
             </div>
           )}
         </div>
+        <DisplayFilterMenu
+          lists={displayFilters.lists}
+          activeIds={displayFilters.activeIds}
+          onChange={async (next) => {
+            await displayFilters.setActiveIds(next);
+            setTaxPage(0);
+          }}
+        />
         <div className="flex items-center gap-1.5 border border-gray-200 rounded-lg px-3 py-1.5 bg-white">
           <span className="text-xs text-gray-400 whitespace-nowrap">Min reads</span>
           <input
@@ -430,6 +452,16 @@ export default function TaxonomyTable({
           </button>
         )}
       </div>
+
+      <HiddenTaxaBanner
+        hiddenCount={hiddenCount}
+        protectedCount={protectedCount}
+        listNames={displayFilters.activeLists.map((l) => l.name)}
+        isError={displayFilters.isError}
+        paused={displayFilters.paused}
+        onShowAll={() => displayFilters.setPaused(true)}
+        onReapply={() => displayFilters.setPaused(false)}
+      />
 
       {pageEntries.length === 0 ? (
         <p className="text-xs text-gray-400 py-4 text-center">No organisms match your filters.</p>

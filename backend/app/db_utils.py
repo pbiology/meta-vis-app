@@ -11,8 +11,9 @@ logger = logging.getLogger(__name__)
 async def fetch_capped(cursor: Any, name: str) -> list[dict]:
     """Read a Motor cursor capped at MAX_LIST_ITEMS, warning if the cap is hit.
 
-    Use for curated reference lists (ignorelists, known_pathogens,
-    known_contaminants) where the data is expected to stay well below the cap.
+    Use only for collections expected to stay well below the cap (e.g. the
+    overview of taxon lists). Not for taxon-list *entries*: those are read in
+    full, since a list can legitimately hold tens of thousands of taxa.
     Hitting the cap is treated as a misconfiguration to surface, not a normal
     pagination boundary.
     """

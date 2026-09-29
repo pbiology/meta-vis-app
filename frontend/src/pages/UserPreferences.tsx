@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import type { UserPreferences as Preferences } from "../api/types";
+import DisplayFilterPreferences from "../components/preferences/DisplayFilterPreferences";
 
 const KINGDOMS = ["Bacteria", "Viruses", "Eukaryota", "Archaea"];
 
@@ -9,12 +11,24 @@ const ANALYSIS_TYPES: { key: string; label: string; hint: string }[] = [
 ];
 
 export default function UserPreferences() {
-  const { user, role, preferences, setPreferences } = useAuth();
-  const [selectedKingdoms, setSelectedKingdoms] = useState<string[]>(
-    preferences?.preferred_kingdoms ?? ["Viruses"]
-  );
+  const { preferences, preferencesLoaded } = useAuth();
+  // The form copies the saved preferences into local state once. Built before
+  // they load, it would start from defaults — and Save would write those back
+  // over the user's real settings.
+  if (!preferencesLoaded) {
+    return <div className="flex-1 p-8 text-xs text-gray-400">Loading…</div>;
+  }
+  return <PreferencesForm saved={preferences} />;
+}
+
+function PreferencesForm({ saved: initial }: Readonly<{ saved: Preferences }>) {
+  const { user, role, setPreferences } = useAuth();
+  const [selectedKingdoms, setSelectedKingdoms] = useState<string[]>(initial.preferred_kingdoms);
   const [selectedAnalysis, setSelectedAnalysis] = useState<string[]>(
-    preferences?.visible_analysis_types ?? ["shotgun", "amplicon"]
+    initial.visible_analysis_types
+  );
+  const [selectedFilters, setSelectedFilters] = useState<string[]>(
+    initial.active_display_filters ?? []
   );
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -30,6 +44,7 @@ export default function UserPreferences() {
       await setPreferences({
         preferred_kingdoms: selectedKingdoms,
         visible_analysis_types: selectedAnalysis,
+        active_display_filters: selectedFilters,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
@@ -50,6 +65,13 @@ export default function UserPreferences() {
   function toggleAnalysis(key: string) {
     setSelectedAnalysis((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+    setSaved(false);
+  }
+
+  function toggleFilter(listId: string) {
+    setSelectedFilters((prev) =>
+      prev.includes(listId) ? prev.filter((id) => id !== listId) : [...prev, listId]
     );
     setSaved(false);
   }
@@ -122,6 +144,8 @@ export default function UserPreferences() {
             ))}
           </div>
         </div>
+
+        <DisplayFilterPreferences selected={selectedFilters} onToggle={toggleFilter} />
 
         <div className="flex items-center gap-3">
           <button

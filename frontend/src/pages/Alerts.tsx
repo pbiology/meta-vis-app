@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useOutbreaks } from "../hooks/queries/useAlerts";
-import { useAddTaxonListEntry, useTaxonListEntries } from "../hooks/queries/useTaxonLists";
-import { TAXON_LIST_IDS } from "../lib/taxonLists";
+import { useAddTaxonListEntry, useAllTaxonListEntries } from "../hooks/queries/useTaxonLists";
+import { TAXON_LIST_IDS, matchedIds } from "../lib/taxonLists";
 import { useAuth } from "../context/AuthContext";
 import { multiAnalysisFilter } from "../lib/analysisPreference";
 import type { Outbreak } from "../api/types";
@@ -19,7 +19,7 @@ export default function Alerts() {
 
   const analysisTypes = multiAnalysisFilter(visibleAnalysis);
   const outbreaksQ = useOutbreaks(windowDays, analysisTypes);
-  const ignorelistQ = useTaxonListEntries(TAXON_LIST_IDS.outbreakIgnorelist);
+  const ignorelistQ = useAllTaxonListEntries(TAXON_LIST_IDS.outbreakIgnorelist);
   const addToIgnoreMutation = useAddTaxonListEntry(TAXON_LIST_IDS.outbreakIgnorelist);
 
   const data = outbreaksQ.data ?? null;
@@ -47,7 +47,7 @@ export default function Alerts() {
   }
 
   const outbreaks = data?.outbreaks || [];
-  const ignored = new Set(ignorelist.map((i) => i.taxon_id));
+  const ignored = matchedIds(ignorelist);
   const ignoringTaxonId = addToIgnoreMutation.isPending
     ? (addToIgnoreMutation.variables?.taxonId ?? null)
     : null;

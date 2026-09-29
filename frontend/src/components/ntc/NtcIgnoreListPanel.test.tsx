@@ -4,6 +4,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "../../test/utils";
 import { server } from "../../test/server";
+import { entryPage } from "../../test/handlers";
 import NtcIgnoreListPanel from "./NtcIgnoreListPanel";
 
 const API = "*/api/v1";
@@ -24,7 +25,7 @@ describe("NtcIgnoreListPanel", () => {
   it("renders rows returned by the API", async () => {
     server.use(
       http.get(`${API}/taxon-lists/ntc_ignorelist/entries`, () =>
-        HttpResponse.json([ignoreItem(1, "E-coli"), ignoreItem(2, "S-aureus")])
+        HttpResponse.json(entryPage([ignoreItem(1, "E-coli"), ignoreItem(2, "S-aureus")]))
       )
     );
 
@@ -50,7 +51,7 @@ describe("NtcIgnoreListPanel", () => {
     let deleted = false;
     server.use(
       http.get(`${API}/taxon-lists/ntc_ignorelist/entries`, () =>
-        HttpResponse.json([ignoreItem(42, "Foo")])
+        HttpResponse.json(entryPage([ignoreItem(42, "Foo")]))
       ),
       http.delete(`${API}/taxon-lists/ntc_ignorelist/entries/42`, () => {
         deleted = true;
@@ -65,5 +66,21 @@ describe("NtcIgnoreListPanel", () => {
     const confirmBtn = within(modal).getByRole("button", { name: "Remove" });
     await userEvent.click(confirmBtn);
     await waitFor(() => expect(deleted).toBe(true));
+  });
+
+  it("refuses to show part of a list larger than one page", async () => {
+    server.use(
+      http.get(`${API}/taxon-lists/ntc_ignorelist/entries`, () =>
+        HttpResponse.json({
+          items: [ignoreItem(1, "E-coli")],
+          total: 20_000,
+          offset: 0,
+          limit: 10_000,
+        })
+      )
+    );
+    renderWithProviders(<NtcIgnoreListPanel canEdit canDelete />);
+    expect(await screen.findByText(/failed to load ntc ignorelist/i)).toBeInTheDocument();
+    expect(screen.queryByText("E coli")).not.toBeInTheDocument();
   });
 });

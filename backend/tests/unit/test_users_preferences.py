@@ -59,13 +59,14 @@ class TestPatchMyPreferences:
             "preferred_kingdoms": ["Bacteria", "Viruses"],
             "visible_analysis_types": ["amplicon"],
         }
+        expected = {**patch_body, "active_display_filters": []}
         patch_resp = client.patch("/api/v1/users/me/preferences", json=patch_body)
         assert patch_resp.status_code == 200
-        assert patch_resp.json() == patch_body
+        assert patch_resp.json() == expected
 
         get_resp = client.get("/api/v1/users/me/preferences")
         assert get_resp.status_code == 200
-        assert get_resp.json() == patch_body
+        assert get_resp.json() == expected
 
     async def test_rejects_unknown_analysis_type(self, seeded_db):
         client = TestClient(_make_app(seeded_db))
@@ -88,3 +89,91 @@ class TestPatchMyPreferences:
             },
         )
         assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Partial updates and active display filters
+# ---------------------------------------------------------------------------
+
+
+async def _display_filter(db, list_id: str, kind: str = "display_filter") -> None:
+    await db["taxon_lists"].insert_one({"list_id": list_id, "kind": kind})
+
+
+class TestPartialUpdate:
+    async def test_patching_one_field_keeps_the_others(self, seeded_db):
+        await _display_filter(seeded_db, "df-1")
+        client = TestClient(_make_app(seeded_db))
+        client.patch(
+            "/api/v1/users/me/preferences",
+            json={
+                "preferred_kingdoms": ["Bacteria"],
+                "active_display_filters": ["df-1"],
+            },
+        )
+
+        resp = client.patch(
+            "/api/v1/users/me/preferences", json={"visible_analysis_types": ["shotgun"]}
+        )
+
+        assert resp.json() == {
+            "preferred_kingdoms": ["Bacteria"],
+            "visible_analysis_types": ["shotgun"],
+            "active_display_filters": ["df-1"],
+        }
+
+    async def test_null_is_rejected(self, seeded_db):
+        client = TestClient(_make_app(seeded_db))
+        resp = client.patch(
+            "/api/v1/users/me/preferences", json={"preferred_kingdoms": None}
+        )
+        assert resp.status_code == 422
+
+    async def test_unknown_field_is_rejected(self, seeded_db):
+        client = TestClient(_make_app(seeded_db))
+        resp = client.patch("/api/v1/users/me/preferences", json={"theme": "dark"})
+        assert resp.status_code == 422
+
+
+class TestActiveDisplayFilters:
+    async def test_existing_display_filters_are_saved_once_in_order(self, seeded_db):
+        await _display_filter(seeded_db, "df-1")
+        await _display_filter(seeded_db, "df-2")
+        client = TestClient(_make_app(seeded_db))
+
+        resp = client.patch(
+            "/api/v1/users/me/preferences",
+            json={"active_display_filters": ["df-2", "df-1", "df-2"]},
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["active_display_filters"] == ["df-2", "df-1"]
+
+    async def test_unknown_list_is_rejected(self, seeded_db):
+        client = TestClient(_make_app(seeded_db))
+        resp = client.patch(
+            "/api/v1/users/me/preferences", json={"active_display_filters": ["df-x"]}
+        )
+        assert resp.status_code == 422
+        assert "df-x" in resp.json()["detail"]
+
+    async def test_list_of_another_kind_is_rejected(self, seeded_db):
+        await _display_filter(seeded_db, "known_pathogens", kind="known_pathogens")
+        client = TestClient(_make_app(seeded_db))
+        resp = client.patch(
+            "/api/v1/users/me/preferences",
+            json={"active_display_filters": ["known_pathogens"]},
+        )
+        assert resp.status_code == 422
+
+    async def test_get_drops_filters_whose_list_is_gone(self, seeded_db):
+        await _display_filter(seeded_db, "df-1")
+        await seeded_db["users"].update_one(
+            {"sub": SUB},
+            {"$set": {"preferences": {"active_display_filters": ["df-1", "df-gone"]}}},
+        )
+        client = TestClient(_make_app(seeded_db))
+
+        resp = client.get("/api/v1/users/me/preferences")
+
+        assert resp.json()["active_display_filters"] == ["df-1"]

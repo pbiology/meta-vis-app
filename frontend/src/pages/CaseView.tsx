@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useTaxonListEntries } from "../hooks/queries/useTaxonLists";
-import { TAXON_LIST_IDS } from "../lib/taxonLists";
+import { useAllTaxonListEntries } from "../hooks/queries/useTaxonLists";
+import { TAXON_LIST_IDS, entriesById } from "../lib/taxonLists";
 import {
   useAddCaseNote,
   useCase,
@@ -39,7 +39,7 @@ export default function CaseView() {
 
   const caseQ = useCase(caseId, version);
   const samplesQ = useCaseSamples(caseId, null, version);
-  const pathogensQ = useTaxonListEntries(TAXON_LIST_IDS.knownPathogens);
+  const pathogensQ = useAllTaxonListEntries(TAXON_LIST_IDS.knownPathogens);
   const outbreaksQ = useOutbreaks(14);
   const ntcCaseIdsQ = useNtcContaminantCaseIds();
 
@@ -51,10 +51,8 @@ export default function CaseView() {
 
   const caseData = caseQ.data ?? null;
   const samples = useMemo(() => samplesQ.data ?? [], [samplesQ.data]);
-  const pathogenMap = useMemo(
-    () => Object.fromEntries((pathogensQ.data ?? []).map((p) => [p.taxon_id, p])),
-    [pathogensQ.data]
-  );
+  // Keyed by retired ids too: an older classifier database reports those.
+  const pathogenMap = useMemo(() => entriesById(pathogensQ.data ?? []), [pathogensQ.data]);
 
   const [section, setSection] = useState<CaseSection>("overview");
   const [activeSampleId, setActiveSampleId] = useState<string | null>(null);

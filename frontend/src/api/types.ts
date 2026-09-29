@@ -287,7 +287,7 @@ export interface Taxon {
 }
 
 export type TaxonListKind =
-  "outbreak_ignore" | "known_pathogens" | "ntc_ignore" | "ntc_contaminants";
+  "outbreak_ignore" | "known_pathogens" | "ntc_ignore" | "ntc_contaminants" | "display_filter";
 
 export interface TaxonList {
   list_id: string;
@@ -298,6 +298,52 @@ export interface TaxonList {
   created_by: string;
   created_at: string;
   updated_at: string;
+}
+
+/** A list as returned by the overview endpoint, with its size. */
+export interface TaxonListSummary extends TaxonList {
+  entry_count: number;
+}
+
+export interface TaxonToAdd {
+  taxon_id: number;
+  taxon_name: string;
+  superkingdom: string | null;
+}
+
+export interface RejectedTaxon {
+  taxon_id: number;
+  reason: "not_in_taxonomy" | "merged" | "deleted" | "excluded_by_list";
+  merged_into: number | null;
+}
+
+/** A requested id NCBI merged into another; the current id is used instead. */
+export interface ReplacedTaxon {
+  taxon_id: number;
+  merged_into: number;
+}
+
+/**
+ * Where every requested id went in a bulk add; each id is in exactly one
+ * group. The taxa to add are counted and only a sample is named — the ids
+ * to add are the requested ids minus `already_on_list` and `rejected`.
+ */
+export interface BulkAddReport {
+  to_add_count: number;
+  to_add_sample: TaxonToAdd[];
+  already_on_list: number[];
+  rejected: RejectedTaxon[];
+  /** Merged ids replaced by their current id; each is also counted in to_add or already_on_list. */
+  replaced: ReplacedTaxon[];
+  /** Entries written: 0 for a dry run. */
+  added: number;
+}
+
+export interface TaxonListEntryPage {
+  items: TaxonListEntry[];
+  total: number;
+  offset: number;
+  limit: number;
 }
 
 /** One taxon on one list. Name and superkingdom are resolved by the backend. */
@@ -313,6 +359,11 @@ export interface TaxonListEntry {
   added_at: string;
   updated_by: string | null;
   updated_at: string | null;
+  /**
+   * Retired NCBI ids merged into this taxon, which the list also matches.
+   * Present on entries read from a list; absent on add/update responses.
+   */
+  merged_ids?: number[];
 }
 
 export interface NtcContaminantAlert {
@@ -410,6 +461,8 @@ export interface PaginatedResponse<T> {
 export interface UserPreferences {
   preferred_kingdoms: string[];
   visible_analysis_types: string[];
+  /** list_ids of the display-filter lists hiding taxa from the taxonomy table. */
+  active_display_filters: string[];
 }
 
 export interface AuthContextValue {

@@ -16,6 +16,9 @@ class TaxonListKind(StrEnum):
     KNOWN_PATHOGENS = "known_pathogens"
     NTC_IGNORE = "ntc_ignore"
     NTC_CONTAMINANTS = "ntc_contaminants"
+    # Taxa a user can choose to hide from the taxonomy table. Display only:
+    # never read by analytics, reports or totals.
+    DISPLAY_FILTER = "display_filter"
 
 
 @dataclass(frozen=True)
@@ -28,6 +31,9 @@ class KindSpec:
     # Whether a change alters cached analytics (outbreak alerts, NTC trends and
     # contaminant alerts), and so must bump the shared cache version.
     affects_analytics: bool = False
+    # Whether users create and delete lists of this kind. The other kinds have
+    # exactly one seeded system list each, which the analytics reference by id.
+    user_creatable: bool = False
 
 
 KIND_SPECS: Mapping[TaxonListKind, KindSpec] = MappingProxyType(
@@ -39,6 +45,7 @@ KIND_SPECS: Mapping[TaxonListKind, KindSpec] = MappingProxyType(
             extra_fields=MappingProxyType({"min_reads": 3}),
             affects_analytics=True,
         ),
+        TaxonListKind.DISPLAY_FILTER: KindSpec(user_creatable=True),
     }
 )
 
@@ -51,7 +58,8 @@ MUTUALLY_EXCLUSIVE_KINDS: frozenset[frozenset[TaxonListKind]] = frozenset(
 
 
 # ---------------------------------------------------------------------------
-# System lists — seeded at startup, one per kind, referenced by consumers.
+# System lists — seeded at startup, one per non-user-creatable kind,
+# referenced by consumers.
 # ---------------------------------------------------------------------------
 
 OUTBREAK_IGNORELIST = "outbreak_ignorelist"

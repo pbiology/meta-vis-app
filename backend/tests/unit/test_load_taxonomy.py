@@ -201,3 +201,24 @@ def test_extract_dump_includes_lineage_and_retired_files(loader, tmp_path):
     loader._extract_dump(archive, dest)
 
     assert sorted(p.name for p in dest.iterdir()) == sorted(wanted)
+
+
+async def test_replace_retired_keeps_the_merged_into_index(loader, fake_db):
+    # The rename swaps in the staging collection with its own indexes; the
+    # app's merge lookups depend on merged_into being indexed afterwards.
+    await loader._replace_retired(
+        fake_db, [{"taxon_id": 12, "status": "merged", "merged_into": 74109}]
+    )
+    indexes = await fake_db["taxa_retired"].index_information()
+    assert "merged_into_1_merged" in indexes
+    assert indexes["merged_into_1_merged"]["partialFilterExpression"] == {
+        "status": "merged"
+    }
+
+
+async def test_replace_retired_bumps_the_cache_version(loader, fake_db):
+    await loader._replace_retired(
+        fake_db, [{"taxon_id": 12, "status": "merged", "merged_into": 74109}]
+    )
+    doc = await fake_db["meta"].find_one({"_id": "cache_version"})
+    assert doc["version"] == 1

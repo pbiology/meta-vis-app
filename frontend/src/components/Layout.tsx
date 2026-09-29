@@ -190,6 +190,20 @@ export default function Layout() {
                   strokeWidth="1.3"
                   strokeLinecap="round"
                 />
+                <NavItem
+                  to="/display-filters"
+                  label="Display filters"
+                  icon={
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
+                      <path
+                        d="M2 3.5h12L9.5 9v4l-3 1.5V9L2 3.5z"
+                        stroke="currentColor"
+                        strokeWidth="1.3"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  }
+                />
               </svg>
             }
           />

@@ -11,6 +11,7 @@ from motor.motor_asyncio import (
 )
 
 from app.config import settings
+from app.taxonomy_indexes import ensure_retired_indexes
 
 logger = logging.getLogger(__name__)
 
@@ -231,8 +232,9 @@ async def _ensure_indexes():
     # $in over one analysis's profiles and filters by ancestor within that, so
     # a ~57M-entry multikey index would cost RAM and load time for nothing.
 
-    # taxa_retired — merged/deleted NCBI IDs, replaced by load_taxonomy.py
-    await db["taxa_retired"].create_index("taxon_id", unique=True)
+    # taxa_retired — merged/deleted NCBI IDs, replaced by load_taxonomy.py,
+    # which applies the same indexes to its staging copy.
+    await ensure_retired_indexes(db["taxa_retired"])
 
     # audit_log — append-only; no TTL (clinical audit logs must not auto-expire)
     await db["audit_log"].create_index([("timestamp", -1)])

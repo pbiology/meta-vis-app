@@ -46,6 +46,11 @@ function caseDetailFixture(caseId: string, version: number) {
 // /analyses/{version} — mirroring the backend, because setup.ts runs MSW with
 // `onUnhandledRequest: "error"`: a path with no handler fails the request
 // outright rather than falling through.
+/** Wrap entries as the paginated GET /taxon-lists/{id}/entries response. */
+export function entryPage<T>(items: T[]) {
+  return { items, total: items.length, offset: 0, limit: 100 };
+}
+
 export const defaultHandlers = [
   // auth + users (identity owned by Keycloak; only /me/* lives on the API)
   http.get(`${API}/auth/me`, () => HttpResponse.json({ username: "tester", role: "admin" })),
@@ -54,6 +59,7 @@ export const defaultHandlers = [
     HttpResponse.json({
       preferred_kingdoms: ["Viruses"],
       visible_analysis_types: ["shotgun", "amplicon"],
+      active_display_filters: [],
     })
   ),
   http.patch(`${API}/users/me/preferences`, async ({ request }) => {
@@ -61,6 +67,7 @@ export const defaultHandlers = [
     return HttpResponse.json({
       preferred_kingdoms: ["Viruses"],
       visible_analysis_types: ["shotgun", "amplicon"],
+      active_display_filters: [],
       ...body,
     });
   }),
@@ -180,7 +187,13 @@ export const defaultHandlers = [
 
   // taxon lists
   http.get(`${API}/taxon-lists`, () => HttpResponse.json([])),
-  http.get(`${API}/taxon-lists/:listId/entries`, () => HttpResponse.json([])),
+  http.post(`${API}/taxon-lists`, () => HttpResponse.json({}, { status: 201 })),
+  http.patch(`${API}/taxon-lists/:listId`, () => HttpResponse.json({})),
+  http.delete(`${API}/taxon-lists/:listId`, () => new HttpResponse(null, { status: 204 })),
+  http.get(`${API}/taxon-lists/:listId/entries`, () => HttpResponse.json(entryPage([]))),
+  http.get(`${API}/taxon-lists/:listId/taxon-ids`, ({ params }) =>
+    HttpResponse.json({ list_id: params.listId, count: 0, taxon_ids: [] })
+  ),
   http.post(`${API}/taxon-lists/:listId/entries`, () => HttpResponse.json({}, { status: 201 })),
   http.patch(`${API}/taxon-lists/:listId/entries/:taxonId`, () => HttpResponse.json({})),
   http.delete(
