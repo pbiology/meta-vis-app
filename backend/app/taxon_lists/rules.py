@@ -121,45 +121,66 @@ def classify_taxa(
     rejected: list[Rejection] = []
     replacements: list[Replacement] = []
     for taxon_id in dict.fromkeys(taxon_ids):
-        if taxon_id in already_on:
+        target_id, found, replacement = _current_target(taxon_id, resolved)
+        if replacement is not None:
+            replacements.append(replacement)
+        if taxon_id in already_on or target_id in already_on:
             already.append(taxon_id)
             continue
-        target_id, found = taxon_id, resolved.get(taxon_id)
-        if isinstance(found, RetiredTaxon) and found.merged_into is not None:
-            current = resolved.get(found.merged_into)
-            if isinstance(current, ResolvedTaxon):
-                replacements.append(Replacement(taxon_id, found.merged_into))
-                target_id, found = found.merged_into, current
-                if target_id in already_on:
-                    already.append(taxon_id)
-                    continue
-
-        conflicts = conflicting_kinds(kind, kinds_by_taxon.get(target_id, set()))
-        if isinstance(found, RetiredTaxon):
-            rejected.append(_retired(taxon_id, found))
-        elif found is None:
-            rejected.append(
-                Rejection(
-                    taxon_id,
-                    "not_in_taxonomy",
-                    f"Taxon {taxon_id} is not in the taxa collection. Check the ID, "
-                    "or run load_taxonomy.py to populate reference data.",
-                )
-            )
-        elif conflicts:
-            rejected.append(
-                Rejection(
-                    taxon_id,
-                    "excluded_by_list",
-                    f"Taxon {target_id} is on a list of kind "
-                    f"{', '.join(sorted(conflicts))}, which excludes {list_name!r}. "
-                    "Remove it from there first.",
-                )
-            )
+        outcome = _assess(kind, list_name, taxon_id, target_id, found, kinds_by_taxon)
+        if isinstance(outcome, Rejection):
+            rejected.append(outcome)
         elif target_id not in scheduled:
             scheduled.add(target_id)
-            to_add.append(found)
+            to_add.append(outcome)
     return Classification(to_add, already, rejected, replacements)
+
+
+def _current_target(
+    taxon_id: int, resolved: Mapping[int, ResolvedTaxon | RetiredTaxon]
+) -> tuple[int, ResolvedTaxon | RetiredTaxon | None, Optional[Replacement]]:
+    """The taxon a requested id stands for: itself, or — when NCBI merged it —
+    the current taxon it was merged into, if that one is known."""
+    found = resolved.get(taxon_id)
+    if isinstance(found, RetiredTaxon) and found.merged_into is not None:
+        current = resolved.get(found.merged_into)
+        if isinstance(current, ResolvedTaxon):
+            return (
+                found.merged_into,
+                current,
+                Replacement(taxon_id, found.merged_into),
+            )
+    return taxon_id, found, None
+
+
+def _assess(
+    kind: TaxonListKind,
+    list_name: str,
+    taxon_id: int,
+    target_id: int,
+    found: ResolvedTaxon | RetiredTaxon | None,
+    kinds_by_taxon: Mapping[int, set[TaxonListKind]],
+) -> ResolvedTaxon | Rejection:
+    """The taxon to add for *taxon_id*, or why it cannot be added."""
+    if isinstance(found, RetiredTaxon):
+        return _retired(taxon_id, found)
+    if found is None:
+        return Rejection(
+            taxon_id,
+            "not_in_taxonomy",
+            f"Taxon {taxon_id} is not in the taxa collection. Check the ID, "
+            "or run load_taxonomy.py to populate reference data.",
+        )
+    conflicts = conflicting_kinds(kind, kinds_by_taxon.get(target_id, set()))
+    if conflicts:
+        return Rejection(
+            taxon_id,
+            "excluded_by_list",
+            f"Taxon {target_id} is on a list of kind "
+            f"{', '.join(sorted(conflicts))}, which excludes {list_name!r}. "
+            "Remove it from there first.",
+        )
+    return found
 
 
 def _retired(taxon_id: int, retired: RetiredTaxon) -> Rejection:

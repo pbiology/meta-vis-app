@@ -143,7 +143,18 @@ async def get_my_preferences(
     return await _without_missing_filters(db, prefs, current_user["sub"])
 
 
-@router.patch("/me/preferences", summary="Update current user's preferences")
+@router.patch(
+    "/me/preferences",
+    summary="Update current user's preferences",
+    responses={
+        422: {
+            "description": (
+                "Invalid preferences, or active_display_filters names a list "
+                "that is not a display filter"
+            )
+        }
+    },
+)
 async def update_my_preferences(
     body: UserPreferencesUpdate,
     db: AsyncIOMotorDatabase = Depends(get_db),

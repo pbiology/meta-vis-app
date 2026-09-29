@@ -46,10 +46,8 @@ export default function HiddenTaxaBanner({
   if (hiddenCount === 0 && protectedCount === 0) return null;
 
   return (
-    <p
-      role="status"
-      className="text-xs text-blue-800 bg-blue-50 rounded-lg px-3 py-2 flex items-center gap-2"
-    >
+    // <output> is announced to screen readers when it changes, like role="status".
+    <output className="text-xs text-blue-800 bg-blue-50 rounded-lg px-3 py-2 flex items-center gap-2">
       <span className="flex-1">
         {hiddenCount} {hiddenCount === 1 ? "taxon" : "taxa"} hidden by {listNames.join(", ")}.
         {protectedCount > 0 &&
@@ -62,6 +60,6 @@ export default function HiddenTaxaBanner({
           Show all
         </button>
       )}
-    </p>
+    </output>
   );
 }

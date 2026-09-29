@@ -89,10 +89,12 @@ export default function BulkAddTaxaModal({
   const toAddCount = checked?.report.to_add_count ?? 0;
   return (
     <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
-      <div
-        role="dialog"
+      {/* `static` keeps the dialog in the centred flex wrapper: an open
+          <dialog> is otherwise absolutely positioned by the browser. */}
+      <dialog
+        open
         aria-label={`Add taxa to ${listLabel}`}
-        className="bg-white rounded-xl border border-gray-100 shadow-lg p-6 w-[36rem] max-h-[85vh] flex flex-col gap-4"
+        className="static m-0 bg-white rounded-xl border border-gray-100 shadow-lg p-6 w-[36rem] max-h-[85vh] flex flex-col gap-4"
       >
         <p className="text-sm font-medium text-gray-900">Add taxa to {listLabel}</p>
 
@@ -166,7 +168,7 @@ export default function BulkAddTaxaModal({
             </>
           )}
         </div>
-      </div>
+      </dialog>
     </div>
   );
 }
