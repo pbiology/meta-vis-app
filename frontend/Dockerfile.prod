@@ -25,13 +25,16 @@ RUN npm run build -- --mode "${VITE_MODE}"
 # nginx-unprivileged runs as non-root (UID 101) and listens on 8080 by
 # default — which matches our nginx.conf and the compose port mapping
 # (SonarQube docker:S6471). Stock `nginx` would run as root.
-FROM nginxinc/nginx-unprivileged:1.28-trixie
+# alpine-slim: only nginx + busybox (no perl/njs/image codecs), which keeps the
+# CVE surface small. Tag-pinned to the 1.30 line, so a rebuild picks up patch
+# releases and Alpine security fixes.
+FROM nginxinc/nginx-unprivileged:1.30-alpine-slim
 
 # Replace the stock default server block with ours.
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Create and set permissions on config.js so the nginx user can update itwithout needing write permission on the directory.
+# Create and set permissions on config.js so the nginx user can update it without needing write permission on the directory.
 USER root
 RUN touch /usr/share/nginx/html/config.js && chown nginx:nginx /usr/share/nginx/html/config.js
 
