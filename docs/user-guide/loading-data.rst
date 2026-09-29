@@ -78,7 +78,7 @@ taxprofiler ingest
    python ingest.py taxprofiler \
        --case-id my-case-001 \
        --multiqc /path/to/multiqc_data.json \
-       --pipeline-info /path/to/software_versions.yml \
+       --pipeline-info /path/to/nf_core_taxprofiler_software_mqc_versions.yml \
        --classifier "kraken2 db=k2_pluspf taxpasta=/path/kraken2.tsv krona=/path/kraken2.html" \
        --sample "sample_id=PE-04-28 subject_id=SUBJ-01 sex=F type=sample nucleic_acid=DNA negative_controls=NTC-DNA column_kraken2=PE-04-28_k2_pluspf" \
        --sample "sample_id=NTC-DNA type=negative_ctrl nucleic_acid=DNA column_kraken2=NTC-DNA_k2_pluspf" \
@@ -89,18 +89,28 @@ taxprofiler ingest
 ==========================  ===============================================================
 ``--case-id``               Unique case identifier
 ``--multiqc``               Path to ``multiqc_data.json``
-``--pipeline-info``         Path to ``software_versions.yml`` (or nf-core equivalent)
+``--pipeline-info``         Path to ``nf_core_*_software_mqc_versions.yml``
 ``--classifier`` (≥ 1)      One per classifier — format below
 ``--sample`` (≥ 1)          One per sample — format below
 ==========================  ===============================================================
 
 **Optional**
 
-===========================  =============================================
-``--order-date YYYY-MM-DD``  Date samples were ordered (defaults to today)
-``--metaval-igv PATH``       Path to a metaval ``igv/`` output directory
-``--quiet``                  Suppress progress output
-===========================  =============================================
+=============================================  ================================================================
+``--order-date YYYY-MM-DD``                    Date the analysis was ordered. Applies to every sample,
+                                               controls included. Left empty when omitted.
+``--ticket-id ID``                             Freshdesk ticket ID associated with the case
+``--multiqc-report PATH``                      Path to ``multiqc_report.html`` (stored in object storage)
+``--metaval PATH``                             Path to the metaval output root directory (must contain
+                                               ``igv/``)
+``--analysis-type {shotgun,amplicon}``         Analysis type (unset when omitted)
+``--sequencing-platform {illumina,nanopore}``  Sequencing platform (unset when omitted)
+=============================================  ================================================================
+
+The authentication and connection flags (``--url``, ``--username``,
+``--password``, ``--keycloak-url``, ``--realm``, ``--client-id``,
+``--client-secret``, ``--yes``) are shared by both subcommands — see
+`Authentication`_ and `Bulk ingest`_.
 
 **Classifier spec** — one per tool::
 
@@ -113,11 +123,17 @@ taxprofiler ingest
 
 **Sample spec** — one per sample::
 
-   --sample "sample_id=<id> [subject_id=<id>] [sex=<F|M|unknown>] \
+   --sample "sample_id=<id> [subject_id=<id>] [sex=<F|M|X|unknown>] \
              type=<sample|positive_ctrl|negative_ctrl> \
              nucleic_acid=<DNA|RNA> \
              [negative_controls=<id>[,<id>...]|none] \
+             [sample_source=<text>] \
              column_<classifier>=<taxpasta-column>"
+
+- ``subject_id`` — required on ``type=sample``, optional on controls
+- ``sex`` — defaults to ``unknown``
+- ``sample_source`` — free text describing the specimen source; defaults
+  to ``N/A``
 
 The ``column_<classifier>=`` mapping is mandatory because taxprofiler
 appends classifier/db suffixes to taxpasta column names, and the CLI
@@ -146,14 +162,50 @@ trana ingest
        --sample "sample_id=S1 subject_id=SUBJ-01 sex=F type=sample nucleic_acid=DNA \
                  negative_controls=NEG1 \
                  abundance_path=/path/to/S1_rel-abundance.tsv \
-                 nanoplot_path=/path/to/S1_NanoStats.txt" \
+                 nanoplot_unprocessed_path=/path/to/S1_unprocessed_NanoStats.txt \
+                 nanoplot_processed_path=/path/to/S1_processed_NanoStats.txt" \
        --sample "sample_id=NEG1 type=negative_ctrl nucleic_acid=DNA \
                  abundance_path=/path/to/NEG1_rel-abundance.tsv" \
        --password dev-admin
 
-The ``--sample`` spec carries file paths inline. ``nanoplot_path=`` is
-optional; ``abundance_path=`` is required. ``negative_controls=`` follows
-the same rules as for taxprofiler.
+**Required**
+
+==========================  ===============================================================
+``--case-id``               Unique case identifier
+``--pipeline-info``         Path to Trana ``software_versions.yml``
+``--sample`` (≥ 1)          One per sample — format below
+==========================  ===============================================================
+
+**Optional**
+
+=============================================  ================================================================
+``--order-date YYYY-MM-DD``                    Date the analysis was ordered. Applies to every sample,
+                                               controls included. Left empty when omitted.
+``--ticket-id ID``                             Freshdesk ticket ID associated with the case
+``--multiqc-report PATH``                      Path to ``multiqc_report.html`` (stored in object storage)
+``--analysis-type {shotgun,amplicon}``         Analysis type (default: ``amplicon``)
+``--sequencing-platform {illumina,nanopore}``  Sequencing platform (default: ``nanopore``)
+=============================================  ================================================================
+
+**Sample spec** — one per sample. File paths are carried inline::
+
+   --sample "sample_id=<id> [subject_id=<id>] [sex=<F|M|X|unknown>] \
+             type=<sample|positive_ctrl|negative_ctrl> \
+             nucleic_acid=<DNA|RNA> \
+             [negative_controls=<id>[,<id>...]|none] \
+             [sample_source=<text>] \
+             abundance_path=<path> \
+             [krona_path=<path>] \
+             [nanoplot_unprocessed_path=<path>] \
+             [nanoplot_processed_path=<path>]"
+
+- ``abundance_path`` — Emu relative-abundance TSV (required)
+- ``krona_path`` — optional Krona HTML
+- ``nanoplot_unprocessed_path`` / ``nanoplot_processed_path`` — optional
+  NanoPlot ``NanoStats.txt`` for the reads before and after processing
+
+``subject_id``, ``sex``, ``sample_source`` and ``negative_controls=``
+follow the same rules as for taxprofiler.
 
 .. _linking-negative-controls:
 
