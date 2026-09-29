@@ -2,9 +2,13 @@ import { describe, it, expect, vi } from "vitest";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import TaxonomyTable from "./TaxonomyTable";
+import { http, HttpResponse } from "msw";
 import { renderWithProviders } from "../test/utils";
+import { server } from "../test/server";
 import { entry, taxprofilerProfile, tranaProfile } from "../test/fixtures/samples";
 import type { SampleProfile } from "../api/types";
+
+const API = "*/api/v1";
 
 const baseProps = {
   sampleId: "sample-1",
@@ -214,5 +218,139 @@ describe("TaxonomyTable — read totals", () => {
 
     expect(cardValue("Total classified")).toBe("—");
     expect(cardValue("Non-host reads")).toBe("—");
+  });
+});
+
+describe("TaxonomyTable — display filters", () => {
+  const SKIN = {
+    list_id: "df-skin",
+    kind: "display_filter",
+    name: "Skin flora",
+    description: null,
+    system: false,
+    created_by: "tester",
+    created_at: "2026-09-28",
+    updated_at: "2026-09-28",
+    entry_count: 2,
+  };
+
+  function activate(filterTaxa: number[]) {
+    server.use(
+      http.get(`${API}/users/me/preferences`, () =>
+        HttpResponse.json({
+          preferred_kingdoms: ["Viruses"],
+          visible_analysis_types: ["shotgun", "amplicon"],
+          active_display_filters: [SKIN.list_id],
+        })
+      ),
+      http.get(`${API}/taxon-lists`, () => HttpResponse.json([SKIN])),
+      http.get(`${API}/taxon-lists/${SKIN.list_id}/taxon-ids`, () =>
+        HttpResponse.json({
+          list_id: SKIN.list_id,
+          count: filterTaxa.length,
+          taxon_ids: filterTaxa,
+        })
+      )
+    );
+  }
+
+  function tile(label: string) {
+    return screen.getByText(label).parentElement?.querySelector("p:last-child")?.textContent;
+  }
+
+  it("hides filtered taxa, says so, and leaves the totals alone", async () => {
+    activate([562]);
+    const profile = taxprofilerProfile();
+    renderWithProviders(<TaxonomyTable {...baseProps} profile={profile} />, {
+      sessionStorage: ALL_KINGDOMS,
+    });
+
+    expect(await screen.findByText(/1 taxon hidden by Skin flora/)).toBeInTheDocument();
+    expect(screen.queryByText("Escherichia coli")).not.toBeInTheDocument();
+    expect(nonHostBodyRows()).toHaveLength(3);
+    const classifiedWhileFiltered = tile("Total classified");
+
+    await userEvent.click(screen.getByRole("button", { name: "Show all" }));
+
+    expect(screen.getByText("Escherichia coli")).toBeInTheDocument();
+    expect(screen.getByText(/display filters paused/i)).toBeInTheDocument();
+    expect(tile("Total classified")).toBe(classifiedWhileFiltered);
+  });
+
+  it("never hides a known pathogen", async () => {
+    activate([562, 11676]);
+    const profile = taxprofilerProfile();
+    renderWithProviders(
+      <TaxonomyTable {...baseProps} profile={profile} pathogenIds={new Set([11676])} />,
+      { sessionStorage: ALL_KINGDOMS }
+    );
+
+    expect(
+      await screen.findByText(/1 known pathogen on these lists kept visible/)
+    ).toBeInTheDocument();
+    expect(screen.getByText("HIV-1")).toBeInTheDocument();
+    expect(screen.queryByText("Escherichia coli")).not.toBeInTheDocument();
+  });
+
+  it("shows everything with a warning when a filter list fails to load", async () => {
+    activate([562]);
+    server.use(
+      http.get(`${API}/taxon-lists/${SKIN.list_id}/taxon-ids`, () =>
+        HttpResponse.json(null, { status: 500 })
+      )
+    );
+    const profile = taxprofilerProfile();
+    renderWithProviders(<TaxonomyTable {...baseProps} profile={profile} />, {
+      sessionStorage: ALL_KINGDOMS,
+    });
+
+    expect(await screen.findByText(/display filters could not be loaded/i)).toBeInTheDocument();
+    expect(screen.getByText("Escherichia coli")).toBeInTheDocument();
+  });
+});
+
+describe("TaxonomyTable — retired NCBI ids", () => {
+  it("flags and protects a pathogen reported under an id NCBI merged into it", async () => {
+    // The profile reports 11676 as if it were a retired id merged into 99999,
+    // the pathogen list's current id.
+    const pathogenIds = new Set([99999, 11676]);
+    server.use(
+      http.get(`${API}/users/me/preferences`, () =>
+        HttpResponse.json({
+          preferred_kingdoms: ["Viruses"],
+          visible_analysis_types: ["shotgun", "amplicon"],
+          active_display_filters: ["df-x"],
+        })
+      ),
+      http.get(`${API}/taxon-lists`, () =>
+        HttpResponse.json([
+          {
+            list_id: "df-x",
+            kind: "display_filter",
+            name: "Everything viral",
+            description: null,
+            system: false,
+            created_by: "t",
+            created_at: "2026-09-29",
+            updated_at: "2026-09-29",
+            entry_count: 1,
+          },
+        ])
+      ),
+      http.get(`${API}/taxon-lists/df-x/taxon-ids`, () =>
+        HttpResponse.json({ list_id: "df-x", count: 2, taxon_ids: [99999, 11676] })
+      )
+    );
+    const profile = taxprofilerProfile();
+    renderWithProviders(
+      <TaxonomyTable {...baseProps} profile={profile} pathogenIds={pathogenIds} />,
+      { sessionStorage: ALL_KINGDOMS }
+    );
+
+    expect(
+      await screen.findByText(/1 known pathogen on these lists kept visible/)
+    ).toBeInTheDocument();
+    const row = screen.getByText("HIV-1").closest("tr") as HTMLElement;
+    expect(within(row).getByText("pathogen")).toBeInTheDocument();
   });
 });

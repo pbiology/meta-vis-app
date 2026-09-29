@@ -13,6 +13,7 @@ import MetavalDetails from "./pages/MetavalDetails";
 import Alerts from "./pages/Alerts";
 import IgnoreList from "./pages/IgnoreList";
 import KnownPathogens from "./pages/KnownPathogens";
+import DisplayFilters from "./pages/DisplayFilters";
 import Layout from "./components/Layout";
 import { ReportBuilderProvider } from "./context/ReportBuilderContext";
 import TaxonDetail from "./pages/TaxonDetail";
@@ -89,6 +90,7 @@ export default function App() {
             <Route path="alerts" element={<Alerts />} />
             <Route path="alerts/ignorelist" element={<IgnoreList />} />
             <Route path="pathogens" element={<KnownPathogens />} />
+            <Route path="display-filters" element={<DisplayFilters />} />
             <Route path="taxa/:taxonId" element={<TaxonDetail />} />
             <Route path="samples/:sampleId/taxa/:taxonId" element={<TaxonDetail />} />
             <Route path="ntc" element={<NtcTrends />} />

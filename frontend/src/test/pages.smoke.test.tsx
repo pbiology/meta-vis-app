@@ -28,6 +28,7 @@ import MetavalDetails from "../pages/MetavalDetails";
 import Alerts from "../pages/Alerts";
 import IgnoreList from "../pages/IgnoreList";
 import KnownPathogens from "../pages/KnownPathogens";
+import DisplayFilters from "../pages/DisplayFilters";
 import KnownPathogensPanel from "../components/KnownPathogensPanel";
 import TaxonDetail from "../pages/TaxonDetail";
 import NtcTrends from "../pages/NtcTrends";
@@ -107,6 +108,10 @@ describe("page smoke tests", () => {
 
   it("KnownPathogens renders", async () => {
     await expectPageRenders(<KnownPathogens />, "Known pathogens", { route: "/pathogens" });
+  });
+
+  it("DisplayFilters renders", async () => {
+    await expectPageRenders(<DisplayFilters />, "Display filters", { route: "/display-filters" });
   });
 
   it("KnownPathogensPanel renders with case taxa", async () => {
